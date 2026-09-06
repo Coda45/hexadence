@@ -14,5 +14,11 @@ indent_size = 4
 [*.gradle]
 indent_size = 2
 
+[*.{json,json5,yml,yaml}]
+indent_size = 2
+
+[*.{xml,tmx,tsx,tmj,tsj}]
+indent_size = 2
+
 [*.md]
 trim_trailing_whitespace = false
