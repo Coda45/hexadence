@@ -10,6 +10,11 @@ public class Player {
         this.y = y;
     }
 
+    public void move(float dx, float dy) {
+        x += dx;
+        y += dy;
+    }
+
     public float getX() {
         return x;
     }

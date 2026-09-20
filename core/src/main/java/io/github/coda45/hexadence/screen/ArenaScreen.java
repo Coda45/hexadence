@@ -3,10 +3,10 @@ package io.github.coda45.hexadence.screen;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 
-import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.input.PlayerInputController;
 import io.github.coda45.hexadence.render.WorldCamera;
+import io.github.coda45.hexadence.world.ArenaWorld;
 
 
 public class ArenaScreen implements Screen {
@@ -15,23 +15,23 @@ public class ArenaScreen implements Screen {
     private final SpriteBatch batch;
     private final PlayerInputController inputController;
 
-    private final Player player;
+    private final ArenaWorld world;
 
     public ArenaScreen() {
         worldCamera = new WorldCamera();
         batch = new SpriteBatch();
         inputController = new PlayerInputController();
 
-        player = new Player(0f, 0f);
+        world = new ArenaWorld();
     }
 
     @Override
     public void render(float delta) {
+
         PlayerCommand command = inputController.sample();
 
-        batch.setProjectionMatrix(
-            worldCamera.getCamera().combined
-        );
+        world.update(command, delta);
+
         // rendering here
     }
 
