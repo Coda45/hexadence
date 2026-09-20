@@ -1,37 +1,46 @@
 package io.github.coda45.hexadence.screen;
 
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 
 import io.github.coda45.hexadence.entity.Player;
+import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.input.PlayerInputController;
+import io.github.coda45.hexadence.render.WorldCamera;
 
 
 public class ArenaScreen implements Screen {
-    
-    private final OrthographicCamera camera;
+
+    private final WorldCamera worldCamera;
     private final SpriteBatch batch;
+    private final PlayerInputController inputController;
+
     private final Player player;
 
     public ArenaScreen() {
-        camera = new OrthographicCamera();
+        worldCamera = new WorldCamera();
         batch = new SpriteBatch();
+        inputController = new PlayerInputController();
 
         player = new Player(0f, 0f);
     }
 
-    @Override 
+    @Override
     public void render(float delta) {
-        // Update will go here later
-        // Render "
+        PlayerCommand command = inputController.sample();
+
+        batch.setProjectionMatrix(
+            worldCamera.getCamera().combined
+        );
+        // rendering here
     }
 
-    @Override 
+    @Override
     public void resize(int width, int height) {
-
+        worldCamera.resize(width, height);
     }
 
-    @Override 
+    @Override
     public void dispose() {
         batch.dispose();
     }
