@@ -1,17 +1,20 @@
 package io.github.coda45.hexadence;
 
-import com.badlogic.gdx.ApplicationAdapter;
+import com.badlogic.gdx.Game;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.ScreenUtils;
 
+import io.github.coda45.hexadence.screen.ArenaScreen;
+
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
-public class HexadenceGame extends ApplicationAdapter {
+public class HexadenceGame extends Game {
     private SpriteBatch batch;
     private Texture image;
 
     @Override
     public void create() {
+        setScreen(new ArenaScreen());
         batch = new SpriteBatch();
         image = new Texture("libgdx.png");
     }
