@@ -7,10 +7,16 @@ public class ArenaWorld {
 
     private static final float PLAYER_SPEED = 5f;
 
+    private final ArenaMap arenaMap;
     private final Player player;
 
     public ArenaWorld() {
-        player = new Player(0f, 0f);
+        arenaMap = new ArenaMap();
+
+        player = new Player(
+            10f,
+            10f
+        );
     }
 
     public void update(PlayerCommand command, float delta) {
@@ -23,19 +29,28 @@ public class ArenaWorld {
             moveY * moveY;
 
         if (lengthSquared > 1f) {
-            float length = (float) Math.sqrt(lengthSquared);
+            float length =
+                (float) Math.sqrt(lengthSquared);
 
             moveX /= length;
             moveY /= length;
         }
 
-        float dx = moveX * PLAYER_SPEED * delta;
-        float dy = moveY * PLAYER_SPEED * delta;
-
-        player.move(dx, dy);
+        player.move(
+            moveX * PLAYER_SPEED * delta,
+            moveY * PLAYER_SPEED * delta
+        );
     }
 
     public Player getPlayer() {
         return player;
+    }
+
+    public ArenaMap getArenaMap() {
+        return arenaMap;
+    }
+
+    public void dispose() {
+        arenaMap.dispose();
     }
 }
