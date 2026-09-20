@@ -41,7 +41,7 @@ public class WorldRenderer {
         // ----- Map -----
 
         mapRenderer.setView(worldCamera.getCamera());
-        mapRenderer.render();
+        mapRenderer.render(new int[] { 0, 1 });
 
         // ----- Entities -----
 
@@ -53,11 +53,8 @@ public class WorldRenderer {
 
         Player player = world.getPlayer();
 
-        float width =
-            playerTexture.getWidth() / ArenaMap.TILE_SIZE;
-
-        float height =
-            playerTexture.getHeight() / ArenaMap.TILE_SIZE;
+        float width = playerTexture.getWidth() / ArenaMap.TILE_SIZE;
+        float height = playerTexture.getHeight() / ArenaMap.TILE_SIZE;
 
         batch.draw(
             playerTexture,
@@ -68,6 +65,8 @@ public class WorldRenderer {
         );
 
         batch.end();
+
+        mapRenderer.render(new int[] { 2 });
     }
 
     public void dispose() {

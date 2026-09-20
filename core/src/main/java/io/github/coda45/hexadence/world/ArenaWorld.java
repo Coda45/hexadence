@@ -13,10 +13,7 @@ public class ArenaWorld {
     public ArenaWorld() {
         arenaMap = new ArenaMap();
 
-        player = new Player(
-            10f,
-            10f
-        );
+        player = new Player(10f, 10f);
     }
 
     public void update(PlayerCommand command, float delta) {

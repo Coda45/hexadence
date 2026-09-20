@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.2" name="Dungeon_decor" tilewidth="24" tileheight="24" tilecount="42" columns="7">
+<tileset version="1.10" tiledversion="1.12.2" name="dungeon_decor" tilewidth="24" tileheight="24" tilecount="42" columns="7">
  <image source="../tiles/decor.png" width="168" height="144"/>
  <tile id="0">
   <properties>

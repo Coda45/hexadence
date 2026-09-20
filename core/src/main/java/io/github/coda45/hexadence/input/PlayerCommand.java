@@ -5,6 +5,5 @@ public record PlayerCommand(
     float moveY
 ) {
 
-    public static final PlayerCommand IDLE =
-        new PlayerCommand(0f, 0f);
+    public static final PlayerCommand IDLE = new PlayerCommand(0f, 0f);
 }

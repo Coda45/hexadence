@@ -33,14 +33,16 @@ public class ArenaScreen implements Screen {
 
         world.update(command, delta);
 
-        ScreenUtils.clear(
-            0.05f,
-            0.05f,
-            0.07f,
-            1f
-        );
+        ScreenUtils.clear(0.05f, 0.05f, 0.07f, 1f);
 
         worldCamera.getViewport().apply();
+
+        worldCamera.follow(
+            world.getPlayer().getX(),
+            world.getPlayer().getY(),
+            world.getArenaMap().getWorldWidth(),
+            world.getArenaMap().getWorldHeight()
+        );
 
         renderer.render(
             world,

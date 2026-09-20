@@ -9,4 +9,12 @@ public class HexadenceGame extends Game {
     public void create() {
         setScreen(new MainMenuScreen(this));
     }
+
+    @Override
+    public void dispose() {
+        super.dispose();
+        if (getScreen() != null) {
+            getScreen().dispose();
+        }
+    }
 }
