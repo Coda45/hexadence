@@ -33,10 +33,14 @@ public class ArenaWorld {
             moveY /= length;
         }
 
-        player.move(
+        float[] resolved = arenaMap.getCollision().resolveMovement(
+            player.getX(), player.getY(),
             moveX * PLAYER_SPEED * delta,
-            moveY * PLAYER_SPEED * delta
-        );
+            moveY * PLAYER_SPEED * delta,
+            Player.HALF_WIDTH, Player.HALF_HEIGHT);
+
+        
+        player.move(resolved[0], resolved[1]);
     }
 
     public Player getPlayer() {
