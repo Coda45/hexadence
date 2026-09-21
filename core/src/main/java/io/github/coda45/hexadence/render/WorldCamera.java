@@ -7,8 +7,8 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class WorldCamera {
     // VIEW w x h measured in tiles
-    private static final float VIEW_WIDTH = 26.6667f;
-    private static final float VIEW_HEIGHT = 15f;
+    private static final float VIEW_WIDTH = 640f / 24f;
+    private static final float VIEW_HEIGHT = 360f / 24f;
 
     private final OrthographicCamera camera;
     private final FitViewport viewport;
@@ -21,25 +21,22 @@ public class WorldCamera {
             VIEW_HEIGHT,
             camera
         );
-        // Center camera using half of map w x h for now
-        camera.position.set(15f, 10f, 0f);
-        camera.update();
     }
     
     public void follow(float targetX, float targetY, float mapWidth, float mapHeight) {
-        float halfWidth = VIEW_WIDTH / 2f;
-        float halfHeight = VIEW_HEIGHT / 2f;
+        float halfViewWidth = VIEW_WIDTH / 2f;
+        float halfViewHeight = VIEW_HEIGHT / 2f;
 
         float cameraX = MathUtils.clamp(
             targetX,
-            halfWidth,
-            mapWidth - halfWidth
+            halfViewWidth,
+            mapWidth - halfViewWidth
         );
 
         float cameraY = MathUtils.clamp(
             targetY,
-            halfHeight,
-            mapHeight - halfHeight
+            halfViewHeight,
+            mapHeight - halfViewHeight
         );
 
         camera.position.set(cameraX, cameraY, 0f);
@@ -47,7 +44,8 @@ public class WorldCamera {
     }
 
     public void resize(int width, int height) {
-        viewport.update(width, height, true);
+        viewport.update(width, height, false);
+        camera.update();
     }
 
     public OrthographicCamera getCamera() {

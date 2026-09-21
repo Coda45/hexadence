@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 
 import io.github.coda45.hexadence.entity.Player;
+import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
 
@@ -13,6 +14,7 @@ public class WorldRenderer {
     private final OrthogonalTiledMapRenderer mapRenderer;
     private final SpriteBatch batch;
     private final Texture playerTexture;
+    private final Texture projectileTexture;
 
     public WorldRenderer(ArenaMap arenaMap) {
 
@@ -26,6 +28,13 @@ public class WorldRenderer {
         batch = new SpriteBatch();
 
         playerTexture = new Texture("sprites/wizard.png");
+
+        projectileTexture = new Texture("spells/ember_bolt.png");
+
+        projectileTexture.setFilter(
+            Texture.TextureFilter.Nearest,
+            Texture.TextureFilter.Nearest
+        );
 
         playerTexture.setFilter(
             Texture.TextureFilter.Nearest,
@@ -64,8 +73,26 @@ public class WorldRenderer {
             height
         );
 
+        for (Projectile projectile : world.getProjectiles()) {
+
+            float projectileWidth =
+                projectileTexture.getWidth() / ArenaMap.TILE_SIZE;
+
+            float projectileHeight =
+                projectileTexture.getHeight() / ArenaMap.TILE_SIZE;
+
+            batch.draw(
+                projectileTexture,
+                projectile.getX() - projectileWidth / 2f,
+                projectile.getY() - projectileHeight / 2f,
+                projectileWidth,
+                projectileHeight
+            );
+        }
+
         batch.end();
 
+        // Draw DecorationOverlay on top of the player
         mapRenderer.render(new int[] { 2 });
     }
 
@@ -73,5 +100,6 @@ public class WorldRenderer {
         mapRenderer.dispose();
         batch.dispose();
         playerTexture.dispose();
+        projectileTexture.dispose();
     }
 }
