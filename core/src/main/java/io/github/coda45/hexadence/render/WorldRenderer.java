@@ -9,6 +9,7 @@ import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
 
+/** Draws world state and owns drawing resources. The TiledMap stays owned by ArenaMap. */
 public class WorldRenderer {
 
     private final OrthogonalTiledMapRenderer mapRenderer;
@@ -47,12 +48,10 @@ public class WorldRenderer {
         WorldCamera worldCamera
     ) {
 
-        // ----- Map -----
+        // These indices depend on TMX order: Ground, DecorationGround, DecorationOverlay.
 
         mapRenderer.setView(worldCamera.getCamera());
         mapRenderer.render(new int[] { 0, 1 });
-
-        // ----- Entities -----
 
         batch.setProjectionMatrix(
             worldCamera.getCamera().combined
@@ -65,6 +64,7 @@ public class WorldRenderer {
         float width = playerTexture.getWidth() / ArenaMap.TILE_SIZE;
         float height = playerTexture.getHeight() / ArenaMap.TILE_SIZE;
 
+        // Anchor the wizard at its feet; projectiles below are centered on their positions.
         batch.draw(
             playerTexture,
             player.getX() - width / 2f,
@@ -92,7 +92,7 @@ public class WorldRenderer {
 
         batch.end();
 
-        // Draw DecorationOverlay on top of the player
+        // Foreground art covers both the player and projectiles.
         mapRenderer.render(new int[] { 2 });
     }
 

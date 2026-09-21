@@ -7,6 +7,7 @@ import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.input.PlayerCommand;
 
+/** Owns gameplay state and applies commands at a fixed 60 Hz rate. */
 public class ArenaWorld {
 
     private static final float PLAYER_SPEED = 5f;
@@ -23,6 +24,7 @@ public class ArenaWorld {
         player = new Player(10f, 10f);
     }
 
+    /** Advances exactly one STEP, regardless of the render frame rate. */
     public void step(PlayerCommand command) {
 
         float moveX = command.moveX();
@@ -35,6 +37,7 @@ public class ArenaWorld {
             aimX * aimX +
             aimY * aimY;
 
+        // Keep the last direction when the cursor is too close to the cast point.
         if (aimLengthSquared > 0.0001f) {
             float aimLength = (float) Math.sqrt(aimLengthSquared);
 
@@ -44,6 +47,7 @@ public class ArenaWorld {
             );
         }
 
+        // Spawn before player movement, using the aim chosen for this step.
         if (command.castPrimary()) {
 
             projectiles.add(
@@ -60,6 +64,7 @@ public class ArenaWorld {
             moveX * moveX +
             moveY * moveY;
 
+        // Cap diagonal input so it cannot move faster than a single direction.
         if (lengthSquared > 1f) {
             float length = (float) Math.sqrt(lengthSquared);
 
@@ -67,6 +72,7 @@ public class ArenaWorld {
             moveY /= length;
         }
 
+        // New shots also move this step. Projectiles have no collision or expiry yet.
         for (Projectile projectile : projectiles) {
 
             projectile.move(
@@ -85,6 +91,7 @@ public class ArenaWorld {
         player.move(resolved[0], resolved[1]);
     }
 
+    /** Returns the live list for rendering; callers should not modify it. */
     public List<Projectile> getProjectiles() {
         return projectiles;
     }

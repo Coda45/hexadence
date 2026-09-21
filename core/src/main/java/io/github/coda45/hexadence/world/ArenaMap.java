@@ -4,14 +4,16 @@ import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
 
+/** Loads the Tiled map and converts tile properties into a plain collision grid. */
 public class ArenaMap {
 
+    // Map pixels per world unit. One 24-pixel tile occupies one world unit.
     public static final float TILE_SIZE = 24f;
     private final int width;
     private final int height;
 
     private final TiledMap tiledMap;
-    private final ArenaCollision collision; //Collision map
+    private final ArenaCollision collision;
 
     public ArenaMap() {
         tiledMap = new TmxMapLoader().load("maps/dungeon_map.tmx");
@@ -54,6 +56,7 @@ public class ArenaMap {
                 boolean isBlocked = cell.getTile().getProperties()
                     .get("blocked", false, Boolean.class);
 
+                // Either layer can block a tile; a walkable tile must not clear an earlier block.
                 if (isBlocked) {
                     blocked[x][y] = true;
                 }

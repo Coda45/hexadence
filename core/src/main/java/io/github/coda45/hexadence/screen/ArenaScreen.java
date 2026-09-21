@@ -12,6 +12,7 @@ import io.github.coda45.hexadence.render.WorldRenderer;
 import io.github.coda45.hexadence.world.ArenaWorld;
 
 
+/** Coordinates input, fixed simulation steps, camera updates, and drawing. */
 public class ArenaScreen implements Screen {
 
     private final WorldCamera worldCamera;
@@ -33,10 +34,12 @@ public class ArenaScreen implements Screen {
     @Override
     public void render(float delta) {
 
+        // Drop excess time after a long stall to limit catch-up work in one frame.
         delta = Math.min(delta, 0.25f);
 
         accumulator += delta;
 
+        // Run whole 60 Hz steps and keep leftover time for the next frame.
         while (accumulator >= ArenaWorld.STEP) {
 
             PlayerCommand command =
@@ -50,6 +53,7 @@ public class ArenaScreen implements Screen {
             accumulator -= ArenaWorld.STEP;
         }
 
+        // Draw the latest completed step; positions are not interpolated between steps.
         Player player = world.getPlayer();
 
         worldCamera.follow(
@@ -90,6 +94,7 @@ public class ArenaScreen implements Screen {
     }
 
     @Override public void hide() {
+        // A replacement screen may already have installed its own processor.
         if (Gdx.input.getInputProcessor() == inputController) {
             Gdx.input.setInputProcessor(null);
         }

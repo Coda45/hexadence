@@ -1,5 +1,6 @@
 package io.github.coda45.hexadence.entity;
 
+/** A projectile's center and fixed travel direction, both in world coordinates. */
 public class Projectile {
 
     private float x;
@@ -8,6 +9,7 @@ public class Projectile {
     private final float directionX;
     private final float directionY;
 
+    /** The direction must be normalized so move(distance) travels the requested distance. */
     public Projectile(
         float x,
         float y,

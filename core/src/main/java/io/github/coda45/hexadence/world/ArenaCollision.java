@@ -1,5 +1,6 @@
 package io.github.coda45.hexadence.world;
 
+/** Tile collision in world units, backed by a nonempty rectangular grid indexed [x][y]. */
 public class ArenaCollision {
 
     private final boolean[][] blocked;
@@ -21,7 +22,10 @@ public class ArenaCollision {
         return blocked[tileX][tileY];
     }
 
+    /** Tests every tile covered by a rectangular footprint centered at (x, y). */
     public boolean overlaps(float x, float y, float halfWidth, float halfHeight){
+        // Floor also maps negative coordinates outside the arena correctly.
+        // The maximum edges are inclusive: an edge on a tile boundary includes that tile.
         int minTileX = (int) Math.floor(x - halfWidth);
         int maxTileX = (int) Math.floor(x + halfWidth);
         int minTileY = (int) Math.floor(y - halfHeight);
@@ -38,10 +42,9 @@ public class ArenaCollision {
         return false;
     }
 
-     /*
-     * Moves a footprint from (x, y) by (dx, dy), resolving X and Y separately
-     * so hitting a wall on one axis doesn't stop movement along the other
-     * (lets the player slide along walls instead of sticking to them).
+    /**
+     * Returns the final {x, y} after the same axis checks as resolveMovement.
+     * ArenaWorld uses resolveMovement instead because Player.move takes offsets.
      */
     public float[] move(float x, float y, float dx, float dy, float halfWidth, float halfHeight) {
         float newX = x;
@@ -58,12 +61,11 @@ public class ArenaCollision {
         return new float[] { newX, newY };
     }
 
-    /*
-    * Given a proposed move (dx, dy), returns how much of that move is actually
-    * allowed — resolved per axis so hitting a wall on one axis doesn't cancel
-    * movement along the other. Returns {allowedDx, allowedDy}, meant to be
-    * passed straight into Player.move().
-    */
+    /**
+     * Returns {allowedDx, allowedDy}. Each axis is accepted in full or rejected;
+     * testing Y from the accepted X position lets the player slide along walls.
+     * Only destinations are checked, so large moves can skip over blocked tiles.
+     */
     public float[] resolveMovement(float x, float y, float dx, float dy, float halfWidth, float halfHeight) {
         float allowedDx = overlaps(x + dx, y, halfWidth, halfHeight) ? 0f : dx;
         float newX = x + allowedDx;

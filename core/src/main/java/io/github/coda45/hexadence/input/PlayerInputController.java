@@ -8,9 +8,12 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 import io.github.coda45.hexadence.entity.Player;
 
+/** Converts keyboard state and mouse input into commands for the simulation. */
 public class PlayerInputController extends InputAdapter {
 
     private final Vector2 mouseWorld = new Vector2();
+    // Keep a click until the next simulation step, even if a render frame has no step.
+    // Multiple clicks before that step count as one request.
     private boolean primaryPressed;
 
     public PlayerCommand sample(
@@ -22,6 +25,7 @@ public class PlayerInputController extends InputAdapter {
         float moveY = 0f;
         boolean castPrimary = primaryPressed;
 
+        // Consume once so catch-up steps don't repeat the same shot.
         primaryPressed = false;
 
         if (Gdx.input.isKeyPressed(Input.Keys.W)) {
@@ -45,6 +49,7 @@ public class PlayerInputController extends InputAdapter {
             Gdx.input.getY()
         );
 
+        // Account for the camera and viewport before comparing mouse and player positions.
         viewport.unproject(mouseWorld);
 
         float aimX = mouseWorld.x - player.getCastX();

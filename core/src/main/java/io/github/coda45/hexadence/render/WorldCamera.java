@@ -5,8 +5,9 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
+/** Follows the player with a fixed world view; FitViewport adds bars on window resize. */
 public class WorldCamera {
-    // VIEW w x h measured in tiles
+    // A 640 x 360 reference view, converted from pixels to world units (one unit per tile).
     private static final float VIEW_WIDTH = 640f / 24f;
     private static final float VIEW_HEIGHT = 360f / 24f;
 
@@ -23,6 +24,7 @@ public class WorldCamera {
         );
     }
     
+    /** Keeps the view inside the map. Assumes the map is at least as large as the view. */
     public void follow(float targetX, float targetY, float mapWidth, float mapHeight) {
         float halfViewWidth = VIEW_WIDTH / 2f;
         float halfViewHeight = VIEW_HEIGHT / 2f;
@@ -44,6 +46,7 @@ public class WorldCamera {
     }
 
     public void resize(int width, int height) {
+        // Preserve the follow position instead of recentering on the viewport.
         viewport.update(width, height, false);
         camera.update();
     }
