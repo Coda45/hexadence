@@ -12,14 +12,14 @@ import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
 
-/** Draws world state and owns drawing resources. The TiledMap stays owned by ArenaMap. */
+// Draws world state and owns drawing resources. The TiledMap stays owned by ArenaMap.
 public class WorldRenderer {
 
     private final OrthogonalTiledMapRenderer mapRenderer;
     private final SpriteBatch batch;
     private final Texture playerTexture;
     private final Texture projectileTexture;
-    private final Texture pixelTexture; //Target dummies testing only
+    private final Texture pixelTexture;
 
     public WorldRenderer(ArenaMap arenaMap) {
 
@@ -46,13 +46,13 @@ public class WorldRenderer {
             Texture.TextureFilter.Nearest
         );
 
-        //Target dummies testing only
+        // Tint and stretch one white pixel to draw dummy bodies and health bars.
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.WHITE);
         pixmap.fill();
         pixelTexture = new Texture(pixmap);
+        // Texture has its own copy; the temporary pixel data can be released now.
         pixmap.dispose();
-        //End target dummies
     }
 
     public void render(
@@ -71,11 +71,9 @@ public class WorldRenderer {
 
         batch.begin();
 
-        //Target dummies testing only
         for (TargetDummy dummy : world.getDummies()) {
             renderDummy(dummy);
         }
-        //End target dummies
 
         Player player = world.getPlayer();
 
@@ -110,11 +108,11 @@ public class WorldRenderer {
 
         batch.end();
 
-        // Foreground art covers both the player and projectiles.
+        // Foreground art covers all entities and the dummy health bars.
         mapRenderer.render(new int[] { 2 });
     }
 
-    //Target dummies testing only
+    // Draws a square placeholder for the circular hit area; dead dummies remain gray.
     private void renderDummy(TargetDummy dummy) {
         float diameter = TargetDummy.RADIUS * 2f;
         float left = dummy.getX() - TargetDummy.RADIUS;
@@ -122,6 +120,7 @@ public class WorldRenderer {
 
         batch.setColor(dummy.isAlive() ? Color.FIREBRICK : Color.DARK_GRAY);
         batch.draw(pixelTexture, left, bottom, diameter, diameter);
+        // Batch tint carries into later draws, so reset it after drawing colored shapes.
         batch.setColor(Color.WHITE);
 
         if (dummy.isAlive()) {
@@ -139,7 +138,6 @@ public class WorldRenderer {
             batch.setColor(Color.WHITE);
         }
     }
-    //End target dummies
 
     public void dispose() {
         mapRenderer.dispose();
@@ -147,9 +145,7 @@ public class WorldRenderer {
         playerTexture.dispose();
         projectileTexture.dispose();
         
-        //Target dummies testing only
         pixelTexture.dispose();
-        //End target dummies
     }
 
     

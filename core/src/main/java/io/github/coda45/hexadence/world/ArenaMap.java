@@ -4,7 +4,7 @@ import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
 
-/** Loads the Tiled map and converts tile properties into a plain collision grid. */
+// Loads the Tiled map and converts tile properties into a plain collision grid.
 public class ArenaMap {
 
     // Map pixels per world unit. One 24-pixel tile occupies one world unit.

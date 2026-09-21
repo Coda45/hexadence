@@ -9,20 +9,22 @@ import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.input.PlayerCommand;
 
-/** Owns gameplay state and applies commands at a fixed 60 Hz rate. */
+// Owns gameplay state and applies commands at a fixed 60 Hz rate.
 public class ArenaWorld {
 
     private static final float PLAYER_SPEED = 5f;
     public static final float STEP = 1f / 60f;
     private static final float PROJECTILE_SPEED = 10f;
-    private static final float PROJECTILE_RADIUS = 0.12f; //radius and damage for testing purposes, 
-    private static final float PROJECTILE_DAMAGE = 10f; //will be change later
-    private static final float DUMMY_RESPAWN_DELAY = 2f; //2 seconds respawn
+    // Temporary combat values for the target dummy test.
+    private static final float PROJECTILE_RADIUS = 0.12f;
+    private static final float PROJECTILE_DAMAGE = 10f;
+    private static final float DUMMY_RESPAWN_DELAY = 2f;
 
     private final ArenaMap arenaMap;
     private final Player player;
     private final ArrayList<Projectile> projectiles = new ArrayList<>();
-    private final List<TargetDummy> dummies = new ArrayList<>(); // For placing test dummies.
+    private final List<TargetDummy> dummies = new ArrayList<>();
+    // A negative timer means no respawn is pending. All dummies share this timer and spawn point.
     private float dummyRespawnTimer = -1f;
     private float dummySpawnX;
     private float dummySpawnY;
@@ -32,12 +34,10 @@ public class ArenaWorld {
 
         player = new Player(10f, 10f);
 
-        //Target dummies testing only
         spawnDummy(15f, 10f);
-        //End target dummies
     }
 
-    /** Advances exactly one STEP, regardless of the render frame rate. */
+    // Advances exactly one STEP, regardless of the render frame rate.
     public void step(PlayerCommand command) {
 
         float moveX = command.moveX();
@@ -85,18 +85,26 @@ public class ArenaWorld {
             moveY /= length;
         }
 
-        // New shots also move this step. Projectiles have no collision or expiry yet.
-        for (Projectile projectile : projectiles) {
-
-            projectile.move(
-                PROJECTILE_SPEED * STEP
-            );
-        }
-
-        //Target dummies & projectile collision testing
+        // Move and remove projectiles through one iterator so list changes stay safe.
         Iterator<Projectile> projectileIterator = projectiles.iterator();
         while (projectileIterator.hasNext()) {
             Projectile projectile = projectileIterator.next();
+
+            projectile.update(PROJECTILE_SPEED * STEP, STEP);
+
+            // Expiry and walls take priority over dummy hits. Tile checks use a square footprint.
+            if (projectile.hasExpired()
+                || arenaMap.getCollision().overlaps(
+                    projectile.getX(),
+                    projectile.getY(),
+                    PROJECTILE_RADIUS,
+                    PROJECTILE_RADIUS
+                )) {
+
+                projectileIterator.remove();
+                continue;
+            }
+
             boolean hit = false;
 
             for (TargetDummy dummy : dummies) {
@@ -108,9 +116,11 @@ public class ArenaWorld {
                 float dy = projectile.getY() - dummy.getY();
                 float hitDistance = PROJECTILE_RADIUS + TargetDummy.RADIUS;
 
+                // Circle overlap using squared distance avoids a square root for every dummy.
                 if (dx * dx + dy * dy <= hitDistance * hitDistance) {
                     dummy.takeDamage(PROJECTILE_DAMAGE);
                     hit = true;
+                    // A shot damages only the first live dummy it overlaps.
                     break;
                 }
             }
@@ -119,9 +129,7 @@ public class ArenaWorld {
                 projectileIterator.remove();
             }
         }
-        //End target dummies & projectile collision testing
-
-        //Target dummies testing only - respawn after delay
+        // Dead dummies stay visible until the shared respawn timer finishes.
         boolean anyDeadDummy = false;
         for (TargetDummy dummy : dummies) {
             if (!dummy.isAlive()) {
@@ -130,6 +138,7 @@ public class ArenaWorld {
             }
         }
 
+        // Start once; restarting every step would prevent the timer from finishing.
         if (anyDeadDummy && dummyRespawnTimer < 0f) {
             dummyRespawnTimer = DUMMY_RESPAWN_DELAY;
         }
@@ -137,13 +146,13 @@ public class ArenaWorld {
         if (dummyRespawnTimer >= 0f) {
             dummyRespawnTimer -= STEP;
 
-        if (dummyRespawnTimer <= 0f) {
-            dummies.removeIf(dummy -> !dummy.isAlive());
-            spawnDummy(dummySpawnX, dummySpawnY);
-            dummyRespawnTimer = -1f;
+            if (dummyRespawnTimer <= 0f) {
+                // This test setup replaces all dead dummies with one at the last spawn point.
+                dummies.removeIf(dummy -> !dummy.isAlive());
+                spawnDummy(dummySpawnX, dummySpawnY);
+                dummyRespawnTimer = -1f;
+            }
         }
-    }
-    //End target dummies
     
         float dx = moveX * PLAYER_SPEED * STEP;
         float dy = moveY * PLAYER_SPEED * STEP;
@@ -156,7 +165,7 @@ public class ArenaWorld {
         player.move(resolved[0], resolved[1]);
     }
 
-    /** Returns the live list for rendering; callers should not modify it. */
+    // Returns the live list for rendering; callers should not modify it.
     public List<Projectile> getProjectiles() {
         return projectiles;
     }
@@ -173,15 +182,15 @@ public class ArenaWorld {
         arenaMap.dispose();
     }
 
-    //Target dummies testing only
+    // Adds a test dummy and sets the shared location used for the next respawn.
     public void spawnDummy (float x, float y) {
         dummySpawnX = x;
         dummySpawnY = y;
         dummies.add(new TargetDummy(x, y));
     }
 
+    // Returns the live list for rendering, including dead dummies awaiting respawn.
     public List<TargetDummy> getDummies() {
         return dummies;
     }
-    //End target dummies
 }

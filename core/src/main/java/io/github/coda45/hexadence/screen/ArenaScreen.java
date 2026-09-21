@@ -12,7 +12,7 @@ import io.github.coda45.hexadence.render.WorldRenderer;
 import io.github.coda45.hexadence.world.ArenaWorld;
 
 
-/** Coordinates input, fixed simulation steps, camera updates, and drawing. */
+// Coordinates input, fixed simulation steps, camera updates, and drawing.
 public class ArenaScreen implements Screen {
 
     private final WorldCamera worldCamera;

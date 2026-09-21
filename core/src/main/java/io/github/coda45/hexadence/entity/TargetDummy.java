@@ -1,5 +1,6 @@
 package io.github.coda45.hexadence.entity;
 
+// Stationary combat test target. Its position centers the circular hit area.
 public class TargetDummy {
 
     public static final float RADIUS = 0.3f;

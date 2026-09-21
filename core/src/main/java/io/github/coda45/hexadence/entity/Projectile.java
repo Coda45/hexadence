@@ -1,15 +1,18 @@
 package io.github.coda45.hexadence.entity;
 
-/** A projectile's center and fixed travel direction, both in world coordinates. */
+// Stores a projectile's world position, fixed direction, and age. ArenaWorld handles removal.
 public class Projectile {
+
+    private static final float LIFETIME_SECONDS = 2f;
 
     private float x;
     private float y;
+    private float ageSeconds;
 
     private final float directionX;
     private final float directionY;
 
-    /** The direction must be normalized so move(distance) travels the requested distance. */
+    // The direction must be normalized so each update travels the requested distance.
     public Projectile(
         float x,
         float y,
@@ -23,9 +26,15 @@ public class Projectile {
         this.directionY = directionY;
     }
 
-    public void move(float distance) {
+    // Moves by a world-unit distance and ages by simulation time, including the spawn step.
+    public void update(float distance, float deltaSeconds) {
         x += directionX * distance;
         y += directionY * distance;
+        ageSeconds += deltaSeconds;
+    }
+
+    public boolean hasExpired() {
+        return ageSeconds >= LIFETIME_SECONDS;
     }
 
     public float getX() {

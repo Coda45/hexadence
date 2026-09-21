@@ -1,6 +1,6 @@
 package io.github.coda45.hexadence.input;
 
-/**
+/*
  * Intent for one simulation step. Movement and aim may be unnormalized;
  * aim is a direction from the cast point, not a mouse position.
  * castPrimary requests a single shot, rather than holding the fire button down.

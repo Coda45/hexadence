@@ -1,9 +1,7 @@
 package io.github.coda45.hexadence.entity;
 
-/**
- * Player state in world units. (x, y) centers the collision footprint;
- * the renderer also uses it as the bottom-center of the sprite.
- */
+// Player state in world units. (x, y) centers the collision footprint;
+// the renderer also uses it as the bottom-center of the sprite.
 public class Player {
     
     private float x;
@@ -44,7 +42,7 @@ public class Player {
         return y + CAST_OFFSET_Y;
     }
 
-    /** Stores a unit direction; ArenaWorld normalizes the aim before calling this. */
+    // Stores a unit direction; ArenaWorld normalizes the aim before calling this.
     public void setAim(float aimX, float aimY) {
         this.aimX = aimX;
         this.aimY = aimY;

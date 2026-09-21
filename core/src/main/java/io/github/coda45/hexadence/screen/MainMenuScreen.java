@@ -11,7 +11,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 
 import io.github.coda45.hexadence.HexadenceGame;
 
-/** Starts the arena on Enter or a click/touch. */
+// Starts the arena on Enter or a click/touch.
 public class MainMenuScreen implements Screen {
 
     private final HexadenceGame game;
@@ -29,12 +29,6 @@ public class MainMenuScreen implements Screen {
         layout = new GlyphLayout();
     }
 
-    // @Override
-    // public void create() {
-    //     //batch = new SpriteBatch();
-    //     image = new Texture("assets/title_screen.png");
-    // }
-
     @Override
     public void render(float delta) {
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.justTouched()) {
@@ -46,8 +40,8 @@ public class MainMenuScreen implements Screen {
 
         ScreenUtils.clear(0.15f, 0.15f, 0.2f, 1f);
         batch.begin();
+        // Draw the title image at its native size in the menu's pixel coordinates.
         batch.draw(image, 0, 0);
-        //drawCentered("HEXADENCE", 220);
         drawCentered("Press ENTER or click to start", 180);
         batch.end();
     }

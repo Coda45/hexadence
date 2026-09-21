@@ -1,6 +1,6 @@
 package io.github.coda45.hexadence.world;
 
-/** Tile collision in world units, backed by a nonempty rectangular grid indexed [x][y]. */
+// Tile collision in world units, backed by a nonempty rectangular grid indexed [x][y].
 public class ArenaCollision {
 
     private final boolean[][] blocked;
@@ -22,7 +22,7 @@ public class ArenaCollision {
         return blocked[tileX][tileY];
     }
 
-    /** Tests every tile covered by a rectangular footprint centered at (x, y). */
+    // Tests every tile covered by a rectangular footprint centered at (x, y).
     public boolean overlaps(float x, float y, float halfWidth, float halfHeight){
         // Floor also maps negative coordinates outside the arena correctly.
         // The maximum edges are inclusive: an edge on a tile boundary includes that tile.
@@ -42,10 +42,8 @@ public class ArenaCollision {
         return false;
     }
 
-    /**
-     * Returns the final {x, y} after the same axis checks as resolveMovement.
-     * ArenaWorld uses resolveMovement instead because Player.move takes offsets.
-     */
+    // Returns the final {x, y} after the same axis checks as resolveMovement.
+    // ArenaWorld uses resolveMovement instead because Player.move takes offsets.
     public float[] move(float x, float y, float dx, float dy, float halfWidth, float halfHeight) {
         float newX = x;
         float newY = y;
@@ -61,7 +59,7 @@ public class ArenaCollision {
         return new float[] { newX, newY };
     }
 
-    /**
+    /*
      * Returns {allowedDx, allowedDy}. Each axis is accepted in full or rejected;
      * testing Y from the accepted X position lets the player slide along walls.
      * Only destinations are checked, so large moves can skip over blocked tiles.

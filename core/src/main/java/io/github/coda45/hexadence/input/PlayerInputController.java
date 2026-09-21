@@ -8,7 +8,7 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 import io.github.coda45.hexadence.entity.Player;
 
-/** Converts keyboard state and mouse input into commands for the simulation. */
+// Converts keyboard state and mouse input into commands for the simulation.
 public class PlayerInputController extends InputAdapter {
 
     private final Vector2 mouseWorld = new Vector2();
