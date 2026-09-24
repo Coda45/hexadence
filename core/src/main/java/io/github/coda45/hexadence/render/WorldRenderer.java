@@ -9,6 +9,7 @@ import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
+import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
 
@@ -47,10 +48,11 @@ public class WorldRenderer {
         WorldCamera worldCamera
     ) {
 
-        // These indices depend on TMX order: Ground, DecorationGround, DecorationOverlay.
+        // TMX order: Ground, DecorationGround, Walls, DecorationOverlay, Spawns.
 
         mapRenderer.setView(worldCamera.getCamera());
-        mapRenderer.render(new int[] { 0, 1 });
+        // Ground is the bottommost map layer.
+        mapRenderer.render(new int[] { 0 });
 
         batch.setProjectionMatrix(
             worldCamera.getCamera().combined
@@ -58,6 +60,19 @@ public class WorldRenderer {
 
         batch.begin();
 
+        for (Zone zone : world.getZones()) {
+            if (zone.getType() == Zone.Type.PUDDLE) {
+                renderZone(zone);
+            }
+        }
+
+        batch.end();
+
+        mapRenderer.render(new int[] { 1, 2 });
+
+        batch.begin();
+
+        // Dummies, player, projectiles, and their world-space health bars.
         for (TargetDummy dummy : world.getDummies()) {
             renderDummy(dummy);
         }
@@ -76,6 +91,8 @@ public class WorldRenderer {
             width,
             height
         );
+
+        renderPlayerHealthBar(player, height);
 
         for (Projectile projectile : world.getProjectiles()) {
             Texture projectileTexture =
@@ -99,7 +116,82 @@ public class WorldRenderer {
         batch.end();
 
         // Foreground art covers all entities and the dummy health bars.
-        mapRenderer.render(new int[] { 2 });
+        mapRenderer.render(new int[] { 3 });
+
+        batch.begin();
+
+        for (Zone zone : world.getZones()) {
+            if (zone.getType() == Zone.Type.STEAM) {
+                renderZone(zone);
+            }
+        }
+
+        batch.end();
+    }
+
+    private void renderZone(Zone zone) {
+        float diameter = zone.getRadius() * 2f;
+        float left = zone.getX() - zone.getRadius();
+        float bottom = zone.getY() - zone.getRadius();
+
+        switch (zone.getType()) {
+            case PUDDLE -> {
+                if (zone.isElectrified()) {
+                    batch.setColor(0.9f, 0.95f, 0.2f, 0.75f);
+                } else {
+                    batch.setColor(0.2f, 0.55f, 1f, 0.6f);
+                }
+            }
+            case STEAM ->
+                batch.setColor(0.8f, 0.8f, 0.8f, 0.85f);
+        }
+
+        batch.draw(
+            textures.getZoneCircle(),
+            left,
+            bottom,
+            diameter,
+            diameter
+        );
+
+        batch.setColor(Color.WHITE);
+    }
+
+    private void renderPlayerHealthBar(
+        Player player,
+        float spriteHeight
+    ) {
+        float barWidth = 1.2f;
+        float barHeight = 0.1f;
+
+        float left =
+            player.getX() - barWidth / 2f;
+
+        float bottom =
+            player.getY() + spriteHeight + 0.12f;
+
+        float healthFraction =
+            player.getHealth() / player.getMaxHealth();
+
+        batch.setColor(Color.BLACK);
+        batch.draw(
+            pixelTexture,
+            left,
+            bottom,
+            barWidth,
+            barHeight
+        );
+
+        batch.setColor(Color.LIME);
+        batch.draw(
+            pixelTexture,
+            left,
+            bottom,
+            barWidth * healthFraction,
+            barHeight
+        );
+
+        batch.setColor(Color.WHITE);
     }
 
     // Draws a square placeholder for the circular hit area; dead dummies remain gray.

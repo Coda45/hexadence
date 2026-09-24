@@ -7,6 +7,7 @@ import java.util.List;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
+import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.spell.SpellType;
 
@@ -18,26 +19,46 @@ public class ArenaWorld {
     // Temporary combat values for the target dummy test.
     private static final float PROJECTILE_RADIUS = 0.12f;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
+    private static final float DISCHARGE_DAMAGE = 20f;
 
     private final ArenaMap arenaMap;
     private final Player player;
     private final ArrayList<Projectile> projectiles = new ArrayList<>();
     private final List<TargetDummy> dummies = new ArrayList<>();
     // A negative timer means no respawn is pending. All dummies share this timer and spawn point.
-    private float dummyRespawnTimer = -1f;
-    private float dummySpawnX;
-    private float dummySpawnY;
+
+    private final List<Zone> zones = new ArrayList<>();
 
     public ArenaWorld() {
         arenaMap = new ArenaMap();
 
-        player = new Player(10f, 10f);
+        SpawnPoint playerSpawn =
+            arenaMap.getSpawnPoint("player1");
 
-        spawnDummy(15f, 10f);
+        player = new Player(
+            playerSpawn.x(),
+            playerSpawn.y()
+        );
+
+        addDummyAtSpawn("dummy1");
+        addDummyAtSpawn("dummy2");
+        addDummyAtSpawn("dummy3");
     }
 
     // Advances exactly one STEP, regardless of the render frame rate.
     public void step(PlayerCommand command) {
+
+        Iterator<Zone> zoneIterator = zones.iterator();
+
+        while (zoneIterator.hasNext()) {
+            Zone zone = zoneIterator.next();
+
+            zone.update(STEP);
+
+            if (zone.hasExpired()) {
+                zoneIterator.remove();
+            }
+        }
 
         float moveX = command.moveX();
         float moveY = command.moveY();
@@ -94,7 +115,7 @@ public class ArenaWorld {
 
             projectile.update(movementDistance);
 
-            // Walls take priority over dummy hits. Tile checks use a square footprint.
+            // Terrain takes priority over zone interactions and dummy hits.
             if (arenaMap.getCollision().overlaps(
                     projectile.getX(),
                     projectile.getY(),
@@ -102,6 +123,12 @@ public class ArenaWorld {
                     PROJECTILE_RADIUS
                 )) {
 
+                createPuddleIfWater(projectile);
+                projectileIterator.remove();
+                continue;
+            }
+
+            if (applyProjectileZoneReaction(projectile)) {
                 projectileIterator.remove();
                 continue;
             }
@@ -127,38 +154,17 @@ public class ArenaWorld {
             }
 
             if (hit) {
+                createPuddleIfWater(projectile);
                 projectileIterator.remove();
                 continue;
             }
 
             if (projectile.hasReachedMaxRange(spellType.getRange())) {
+                createPuddleIfWater(projectile);
                 projectileIterator.remove();
             }
         }
-        // Dead dummies stay visible until the shared respawn timer finishes.
-        boolean anyDeadDummy = false;
-        for (TargetDummy dummy : dummies) {
-            if (!dummy.isAlive()) {
-                anyDeadDummy = true;
-                break;
-            }
-        }
 
-        // Start once; restarting every step would prevent the timer from finishing.
-        if (anyDeadDummy && dummyRespawnTimer < 0f) {
-            dummyRespawnTimer = DUMMY_RESPAWN_DELAY;
-        }
-
-        if (dummyRespawnTimer >= 0f) {
-            dummyRespawnTimer -= STEP;
-
-            if (dummyRespawnTimer <= 0f) {
-                // This test setup replaces all dead dummies with one at the last spawn point.
-                dummies.removeIf(dummy -> !dummy.isAlive());
-                spawnDummy(dummySpawnX, dummySpawnY);
-                dummyRespawnTimer = -1f;
-            }
-        }
     
         float dx = moveX * PLAYER_SPEED * STEP;
         float dy = moveY * PLAYER_SPEED * STEP;
@@ -169,6 +175,183 @@ public class ArenaWorld {
             Player.HALF_WIDTH, Player.HALF_HEIGHT);
 
         player.move(resolved[0], resolved[1]);
+        applyChargedPuddleDischarges();
+        updateDummyRespawns();
+    }
+
+    private void createPuddleIfWater(Projectile projectile) {
+        if (projectile.getSpellType() == SpellType.WATER) {
+            zones.add(
+                Zone.createPuddle(
+                    projectile.getX(),
+                    projectile.getY()
+                )
+            );
+        }
+    }
+
+    public List<Zone> getZones() {
+        return zones;
+    }
+
+    private boolean applyProjectileZoneReaction(
+        Projectile projectile
+    ) {
+        SpellType spellType = projectile.getSpellType();
+
+        if (
+            spellType != SpellType.EMBER
+            && spellType != SpellType.LIGHTNING
+        ) {
+            return false;
+        }
+
+        for (int i = 0; i < zones.size(); i++) {
+            Zone zone = zones.get(i);
+
+            if (zone.getType() != Zone.Type.PUDDLE) {
+                continue;
+            }
+
+            float dx = projectile.getX() - zone.getX();
+            float dy = projectile.getY() - zone.getY();
+            float interactionDistance =
+                PROJECTILE_RADIUS + zone.getRadius();
+
+            boolean overlaps =
+                dx * dx + dy * dy
+                    <= interactionDistance * interactionDistance;
+
+            if (!overlaps) {
+                continue;
+            }
+
+            if (spellType == SpellType.EMBER) {
+                zones.set(
+                    i,
+                    Zone.createSteam(
+                        zone.getX(),
+                        zone.getY()
+                    )
+                );
+
+                return true;
+            }
+
+            if (
+                spellType == SpellType.LIGHTNING
+                && !zone.isElectrified()
+            ) {
+                zone.electrify();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void applyChargedPuddleDischarges() {
+        for (Zone zone : zones) {
+            if (
+                zone.getType() != Zone.Type.PUDDLE
+                || !zone.isElectrified()
+            ) {
+                continue;
+            }
+
+            boolean discharged = false;
+
+            if (
+                player.isAlive()
+                && zoneOverlapsPlayer(zone)
+            ) {
+                player.takeDamage(DISCHARGE_DAMAGE);
+                discharged = true;
+            }
+
+            for (TargetDummy dummy : dummies) {
+                if (
+                    dummy.isAlive()
+                    && zoneOverlapsDummy(zone, dummy)
+                ) {
+                    dummy.takeDamage(DISCHARGE_DAMAGE);
+                    discharged = true;
+                }
+            }
+
+            if (discharged) {
+                zone.discharge();
+            }
+        }
+    }
+
+    private boolean zoneOverlapsDummy(
+        Zone zone,
+        TargetDummy dummy
+    ) {
+        float dx = zone.getX() - dummy.getX();
+        float dy = zone.getY() - dummy.getY();
+        float overlapDistance =
+            zone.getRadius() + TargetDummy.RADIUS;
+
+        return dx * dx + dy * dy
+            <= overlapDistance * overlapDistance;
+    }
+
+    private boolean zoneOverlapsPlayer(Zone zone) {
+        float playerLeft =
+            player.getX() - Player.HALF_WIDTH;
+
+        float playerRight =
+            player.getX() + Player.HALF_WIDTH;
+
+        float playerBottom =
+            player.getY() - Player.HALF_HEIGHT;
+
+        float playerTop =
+            player.getY() + Player.HALF_HEIGHT;
+
+        float closestX = Math.max(
+            playerLeft,
+            Math.min(zone.getX(), playerRight)
+        );
+
+        float closestY = Math.max(
+            playerBottom,
+            Math.min(zone.getY(), playerTop)
+        );
+
+        float dx = zone.getX() - closestX;
+        float dy = zone.getY() - closestY;
+
+        return dx * dx + dy * dy
+            <= zone.getRadius() * zone.getRadius();
+    }
+
+    private void addDummyAtSpawn(String spawnName) {
+        SpawnPoint spawn =
+            arenaMap.getSpawnPoint(spawnName);
+
+        dummies.add(
+            new TargetDummy(
+                spawn.x(),
+                spawn.y()
+            )
+        );
+    }
+
+    private void updateDummyRespawns() {
+        for (TargetDummy dummy : dummies) {
+            if (
+                !dummy.isAlive()
+                && !dummy.hasRespawnPending()
+            ) {
+                dummy.beginRespawn(DUMMY_RESPAWN_DELAY);
+                continue;
+            }
+
+            dummy.updateRespawn(STEP);
+        }
     }
 
     // Returns the live list for rendering; callers should not modify it.
@@ -207,13 +390,6 @@ public class ArenaWorld {
         );
 
         player.startCooldown(spellType);
-    }
-
-    // Adds a test dummy and sets the shared location used for the next respawn.
-    public final void spawnDummy (float x, float y) {
-        dummySpawnX = x;
-        dummySpawnY = y;
-        dummies.add(new TargetDummy(x, y));
     }
 
     // Returns the live list for rendering, including dead dummies awaiting respawn.

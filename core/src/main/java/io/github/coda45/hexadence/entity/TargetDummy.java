@@ -4,7 +4,8 @@ package io.github.coda45.hexadence.entity;
 public class TargetDummy {
 
     public static final float RADIUS = 0.3f;
-    private static final float MAX_HEALTH = 50f;
+    private static final float MAX_HEALTH = 100f;
+    private float respawnRemaining = -1f;
 
     private final float x;
     private final float y;
@@ -13,6 +14,29 @@ public class TargetDummy {
     public TargetDummy(float x, float y) {
         this.x = x;
         this.y = y;
+    }
+
+    public boolean hasRespawnPending() {
+        return respawnRemaining >= 0f;
+    }
+
+    public void beginRespawn(float delaySeconds) {
+        if (!isAlive() && !hasRespawnPending()) {
+            respawnRemaining = delaySeconds;
+        }
+    }
+
+    public void updateRespawn(float deltaSeconds) {
+        if (!hasRespawnPending()) {
+            return;
+        }
+
+        respawnRemaining -= deltaSeconds;
+
+        if (respawnRemaining <= 0f) {
+            health = MAX_HEALTH;
+            respawnRemaining = -1f;
+        }
     }
 
     public void takeDamage(float amount) {

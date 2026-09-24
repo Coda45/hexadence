@@ -7,6 +7,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.input.PlayerInputController;
+import io.github.coda45.hexadence.render.HudRenderer;
 import io.github.coda45.hexadence.render.WorldCamera;
 import io.github.coda45.hexadence.render.WorldRenderer;
 import io.github.coda45.hexadence.world.ArenaWorld;
@@ -20,6 +21,7 @@ public class ArenaScreen implements Screen {
 
     private final ArenaWorld world;
     private final WorldRenderer renderer;
+    private final HudRenderer hudRenderer;
 
     private float accumulator;
 
@@ -29,6 +31,7 @@ public class ArenaScreen implements Screen {
         inputController = new PlayerInputController();
         world = new ArenaWorld();
         renderer = new WorldRenderer(world.getArenaMap());
+        hudRenderer = new HudRenderer();
     }
 
     @Override
@@ -76,15 +79,19 @@ public class ArenaScreen implements Screen {
             world,
             worldCamera
         );
+
+        hudRenderer.render(world.getPlayer());
     }
 
     @Override
     public void resize(int width, int height) {
         worldCamera.resize(width, height);
+        hudRenderer.resize(width, height);
     }
 
     @Override
     public void dispose() {
+        hudRenderer.dispose();
         renderer.dispose();
         world.dispose();
     }

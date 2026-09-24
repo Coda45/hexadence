@@ -18,7 +18,7 @@ public class MainMenuScreen implements Screen {
     private final SpriteBatch batch;
     private final BitmapFont font;
     private final GlyphLayout layout;
-    private Texture image;
+    private final Texture image;
 
     public MainMenuScreen(HexadenceGame game) {
         this.game = game;

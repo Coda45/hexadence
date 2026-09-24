@@ -1,5 +1,7 @@
 package io.github.coda45.hexadence.world;
 
+import com.badlogic.gdx.maps.MapLayer;
+import com.badlogic.gdx.maps.MapObject;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
@@ -36,6 +38,7 @@ public class ArenaMap {
         // DecorationOverlay is drawn above the player and is purely visual, so it's excluded.
         markBlockedTiles(blocked, "Ground");
         markBlockedTiles(blocked, "DecorationGround");
+        markBlockedTiles(blocked, "Walls");
 
         return new ArenaCollision(blocked);
     }
@@ -62,6 +65,37 @@ public class ArenaMap {
                 }
             }
         }
+    }
+
+    public SpawnPoint getSpawnPoint(String name) {
+        MapLayer spawnLayer =
+            tiledMap.getLayers().get("Spawns");
+
+        if (spawnLayer == null) {
+            throw new IllegalStateException(
+                "TMX map is missing the Spawns object layer"
+            );
+        }
+
+        MapObject object =
+            spawnLayer.getObjects().get(name);
+
+        if (object == null) {
+            throw new IllegalStateException(
+                "TMX map is missing spawn point: " + name
+            );
+        }
+
+        float pixelX =
+            object.getProperties().get("x", Float.class);
+
+        float pixelY =
+            object.getProperties().get("y", Float.class);
+
+        return new SpawnPoint(
+            pixelX / TILE_SIZE,
+            pixelY / TILE_SIZE
+        );
     }
 
     public float getWorldWidth() {

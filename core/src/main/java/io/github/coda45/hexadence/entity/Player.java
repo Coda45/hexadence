@@ -13,6 +13,9 @@ public class Player {
     private float aimX = 1f;
     private float aimY = 0f;
 
+    private static final float MAX_HEALTH = 100f;
+    private float health = MAX_HEALTH;
+
     // Collision covers the feet, not the full sprite.
     public static final float HALF_WIDTH = 0.275f;
     public static final float HALF_HEIGHT = 0.225f;
@@ -90,6 +93,22 @@ public class Player {
 
     public float getCooldownRemaining(SpellType spellType) {
         return cooldowns.get(spellType);
+    }
+
+    public void takeDamage(float amount) {
+        health = Math.max(0f, health - amount);
+    }
+
+    public boolean isAlive() {
+        return health > 0f;
+    }
+
+    public float getHealth() {
+        return health;
+    }
+
+    public float getMaxHealth() {
+        return MAX_HEALTH;
     }
 
     public void setPosition(float x, float y) {
