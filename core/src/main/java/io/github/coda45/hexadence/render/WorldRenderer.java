@@ -92,8 +92,6 @@ public class WorldRenderer {
             height
         );
 
-        renderPlayerHealthBar(player, height);
-
         for (Projectile projectile : world.getProjectiles()) {
             Texture projectileTexture =
                 textures.getProjectile(projectile.getSpellType());
@@ -119,6 +117,8 @@ public class WorldRenderer {
         mapRenderer.render(new int[] { 3 });
 
         batch.begin();
+        
+        renderPlayerHealthBar(player, height);
 
         for (Zone zone : world.getZones()) {
             if (zone.getType() == Zone.Type.STEAM) {
@@ -136,7 +136,10 @@ public class WorldRenderer {
 
         switch (zone.getType()) {
             case PUDDLE -> {
-                if (zone.isElectrified()) {
+                if (
+                    zone.isElectrified()
+                    || zone.isChargeFlashVisible()
+                ) {
                     batch.setColor(0.9f, 0.95f, 0.2f, 0.75f);
                 } else {
                     batch.setColor(0.2f, 0.55f, 1f, 0.6f);

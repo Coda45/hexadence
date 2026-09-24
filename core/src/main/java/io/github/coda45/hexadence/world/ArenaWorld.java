@@ -170,7 +170,8 @@ public class ArenaWorld {
         float dy = moveY * PLAYER_SPEED * STEP;
 
         float[] resolved = arenaMap.getCollision().resolveMovement(
-            player.getX(), player.getY(),
+            player.getCollisionX(),
+            player.getCollisionY(),
             dx, dy,
             Player.HALF_WIDTH, Player.HALF_HEIGHT);
 
@@ -299,17 +300,20 @@ public class ArenaWorld {
     }
 
     private boolean zoneOverlapsPlayer(Zone zone) {
+        float collisionX = player.getCollisionX();
+        float collisionY = player.getCollisionY();
+
         float playerLeft =
-            player.getX() - Player.HALF_WIDTH;
+            collisionX - Player.HALF_WIDTH;
 
         float playerRight =
-            player.getX() + Player.HALF_WIDTH;
+            collisionX + Player.HALF_WIDTH;
 
         float playerBottom =
-            player.getY() - Player.HALF_HEIGHT;
+            collisionY - Player.HALF_HEIGHT;
 
         float playerTop =
-            player.getY() + Player.HALF_HEIGHT;
+            collisionY + Player.HALF_HEIGHT;
 
         float closestX = Math.max(
             playerLeft,

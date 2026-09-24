@@ -331,6 +331,21 @@
    <property name="blocked" type="bool" value="true"/>
   </properties>
  </tile>
+ <tile id="78">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="79">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="80">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
+  </properties>
+ </tile>
  <tile id="81">
   <properties>
    <property name="blocked" type="bool" value="false"/>
@@ -339,6 +354,21 @@
  <tile id="82">
   <properties>
    <property name="blocked" type="bool" value="false"/>
+  </properties>
+ </tile>
+ <tile id="83">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="84">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="85">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="86">
@@ -364,6 +394,16 @@
  <tile id="95">
   <properties>
    <property name="blocked" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="96">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="97">
+  <properties>
+   <property name="halfBlocked" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="98">

@@ -3,37 +3,67 @@ package io.github.coda45.hexadence.world;
 // Tile collision in world units, backed by a nonempty rectangular grid indexed [x][y].
 public class ArenaCollision {
 
-    private final boolean[][] blocked;
+    private final float[][] blockedHeights;
 
-    public ArenaCollision(boolean[][] blocked) {
-        this.blocked = blocked;
+    public ArenaCollision(float[][] blockedHeights) {
+        this.blockedHeights = blockedHeights;
     }
 
-    public boolean isBlocked(int tileX, int tileY) {
-
-        // Treat outside the map as blocked.
-        if (tileX < 0 || tileY < 0
-            || tileX >= blocked.length
-            || tileY >= blocked[0].length) {
-
-            return true;
+    private float getBlockedHeight(
+        int tileX,
+        int tileY
+    ) {
+        // Outside the map remains completely blocked.
+        if (
+            tileX < 0
+            || tileY < 0
+            || tileX >= blockedHeights.length
+            || tileY >= blockedHeights[0].length
+        ) {
+            return 1f;
         }
 
-        return blocked[tileX][tileY];
+        return blockedHeights[tileX][tileY];
     }
 
     // Tests every tile covered by a rectangular footprint centered at (x, y).
-    public boolean overlaps(float x, float y, float halfWidth, float halfHeight){
-        // Floor also maps negative coordinates outside the arena correctly.
-        // The maximum edges are inclusive: an edge on a tile boundary includes that tile.
-        int minTileX = (int) Math.floor(x - halfWidth);
-        int maxTileX = (int) Math.floor(x + halfWidth);
-        int minTileY = (int) Math.floor(y - halfHeight);
-        int maxTileY = (int) Math.floor(y + halfHeight);
+    public boolean overlaps(
+        float x,
+        float y,
+        float halfWidth,
+        float halfHeight
+    ) {
+        float entityLeft = x - halfWidth;
+        float entityRight = x + halfWidth;
+        float entityBottom = y - halfHeight;
+        float entityTop = y + halfHeight;
 
-        for (int tx = minTileX; tx <= maxTileX; tx++) {
-            for (int ty = minTileY; ty <= maxTileY; ty++) {
-                if (isBlocked(tx, ty)) {
+        int minTileX = (int) Math.floor(entityLeft);
+        int maxTileX = (int) Math.floor(entityRight);
+        int minTileY = (int) Math.floor(entityBottom);
+        int maxTileY = (int) Math.floor(entityTop);
+
+        for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
+            for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
+                float blockedHeight =
+                    getBlockedHeight(tileX, tileY);
+
+                if (blockedHeight <= 0f) {
+                    continue;
+                }
+
+                float blockLeft = tileX;
+                float blockRight = tileX + 1f;
+                float blockBottom = tileY;
+                float blockTop = tileY + blockedHeight;
+
+                boolean intersects =
+                    entityRight >= blockLeft
+                    && entityLeft <= blockRight
+                    && entityTop >= blockBottom
+                    && entityBottom <= blockTop;
+
+                if (intersects) {
                     return true;
                 }
             }

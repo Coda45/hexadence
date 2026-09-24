@@ -21,6 +21,8 @@ public class Zone {
     private float remainingSeconds;
 
     private boolean electrified;
+    private static final float CHARGE_FLASH_DURATION = 0.12f;
+    private float chargeFlashRemaining;
 
     private Zone(
         Type type,
@@ -63,6 +65,7 @@ public class Zone {
     public void electrify() {
         if (type == Type.PUDDLE) {
             electrified = true;
+            chargeFlashRemaining = CHARGE_FLASH_DURATION;
         }
     }
 
@@ -70,9 +73,16 @@ public class Zone {
         electrified = false;
     }
 
+    public boolean isChargeFlashVisible() {
+        return chargeFlashRemaining > 0f;
+    }
+
     public void update(float deltaSeconds) {
         remainingSeconds =
             Math.max(0f, remainingSeconds - deltaSeconds);
+
+        chargeFlashRemaining =
+            Math.max(0f, chargeFlashRemaining - deltaSeconds);
     }
 
     public boolean hasExpired() {

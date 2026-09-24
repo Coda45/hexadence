@@ -17,8 +17,10 @@ public class Player {
     private float health = MAX_HEALTH;
 
     // Collision covers the feet, not the full sprite.
-    public static final float HALF_WIDTH = 0.275f;
+    public static final float HALF_WIDTH = 0.365f;
     public static final float HALF_HEIGHT = 0.225f;
+    public static final float COLLISION_OFFSET_X = 0f;
+    public static final float COLLISION_OFFSET_Y = 0.24f;
 
     // Center of the 36-pixel-tall wizard sprite at 24 pixels per world unit.
     private static final float CAST_OFFSET_Y = 0.75f;
@@ -109,6 +111,14 @@ public class Player {
 
     public float getMaxHealth() {
         return MAX_HEALTH;
+    }
+
+    public float getCollisionX() {
+        return x + COLLISION_OFFSET_X;
+    }
+
+    public float getCollisionY() {
+        return y + COLLISION_OFFSET_Y;
     }
 
     public void setPosition(float x, float y) {

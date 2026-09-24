@@ -33,36 +33,65 @@ public class ArenaMap {
     }
 
     private ArenaCollision buildCollision() {
-        boolean[][] blocked = new boolean[width][height];
+        float[][] blockedHeights = new float[width][height];
 
         // DecorationOverlay is drawn above the player and is purely visual, so it's excluded.
-        markBlockedTiles(blocked, "Ground");
-        markBlockedTiles(blocked, "DecorationGround");
-        markBlockedTiles(blocked, "Walls");
+        markBlockedTiles(blockedHeights, "Ground");
+        markBlockedTiles(blockedHeights, "DecorationGround");
+        markBlockedTiles(blockedHeights, "Walls");
+        markBlockedTiles(blockedHeights, "DecorationOverlay");
 
-        return new ArenaCollision(blocked);
+        return new ArenaCollision(blockedHeights);
     }
 
-    private void markBlockedTiles(boolean[][] blocked, String layerName) {
-        TiledMapTileLayer layer = (TiledMapTileLayer) tiledMap.getLayers().get(layerName);
+    private void markBlockedTiles(
+        float[][] blockedHeights,
+        String layerName
+    ) {
+        TiledMapTileLayer layer =
+            (TiledMapTileLayer) tiledMap
+                .getLayers()
+                .get(layerName);
+
         if (layer == null) {
             return;
         }
 
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
-                TiledMapTileLayer.Cell cell = layer.getCell(x, y);
-                if (cell == null || cell.getTile() == null) {
+                TiledMapTileLayer.Cell cell =
+                    layer.getCell(x, y);
+
+                if (
+                    cell == null
+                    || cell.getTile() == null
+                ) {
                     continue;
                 }
 
-                boolean isBlocked = cell.getTile().getProperties()
-                    .get("blocked", false, Boolean.class);
+                boolean fullyBlocked =
+                    cell.getTile().getProperties()
+                        .get("blocked", false, Boolean.class);
 
-                // Either layer can block a tile; a walkable tile must not clear an earlier block.
-                if (isBlocked) {
-                    blocked[x][y] = true;
+                boolean halfBlocked =
+                    cell.getTile().getProperties()
+                        .get("halfBlocked", false, Boolean.class);
+
+                float blockedHeight;
+
+                if (halfBlocked) {
+                    blockedHeight = 0.5f;
+                } else if (fullyBlocked) {
+                    blockedHeight = 1f;
+                } else {
+                    blockedHeight = 0f;
                 }
+
+                // Preserve stronger collision contributed by another layer.
+                blockedHeights[x][y] = Math.max(
+                    blockedHeights[x][y],
+                    blockedHeight
+                );
             }
         }
     }
