@@ -8,16 +8,15 @@ import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.spell.SpellType;
 
 // Owns gameplay state and applies commands at a fixed 60 Hz rate.
 public class ArenaWorld {
 
     private static final float PLAYER_SPEED = 5f;
     public static final float STEP = 1f / 60f;
-    private static final float PROJECTILE_SPEED = 10f;
     // Temporary combat values for the target dummy test.
     private static final float PROJECTILE_RADIUS = 0.12f;
-    private static final float PROJECTILE_DAMAGE = 10f;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
 
     private final ArenaMap arenaMap;
@@ -46,9 +45,7 @@ public class ArenaWorld {
         float aimX = command.aimX();
         float aimY = command.aimY();
 
-        float aimLengthSquared =
-            aimX * aimX +
-            aimY * aimY;
+        float aimLengthSquared = (aimX * aimX) + (aimY * aimY);
 
         // Keep the last direction when the cursor is too close to the cast point.
         if (aimLengthSquared > 0.0001f) {
@@ -60,18 +57,12 @@ public class ArenaWorld {
             );
         }
 
-        // Spawn before player movement, using the aim chosen for this step.
-        if (command.castPrimary()) {
+        player.updateCooldowns(STEP);
 
-            projectiles.add(
-                new Projectile(
-                    player.getCastX(),
-                    player.getCastY(),
-                    player.getAimX(),
-                    player.getAimY()
-                )
-            );
-        }
+        // Spawn before player movement, using the aim chosen for this step.
+        tryCast(command.castEmber(), SpellType.EMBER);
+        tryCast(command.castWater(), SpellType.WATER);
+        tryCast(command.castLightning(), SpellType.LIGHTNING);
 
         float lengthSquared =
             moveX * moveX +
@@ -85,16 +76,26 @@ public class ArenaWorld {
             moveY /= length;
         }
 
+
         // Move and remove projectiles through one iterator so list changes stay safe.
         Iterator<Projectile> projectileIterator = projectiles.iterator();
         while (projectileIterator.hasNext()) {
             Projectile projectile = projectileIterator.next();
 
-            projectile.update(PROJECTILE_SPEED * STEP, STEP);
+            SpellType spellType = projectile.getSpellType();
 
-            // Expiry and walls take priority over dummy hits. Tile checks use a square footprint.
-            if (projectile.hasExpired()
-                || arenaMap.getCollision().overlaps(
+            float remainingRange =
+                spellType.getRange() - projectile.getDistanceTraveled();
+
+            float movementDistance = Math.min(
+                spellType.getSpeed() * STEP,
+                remainingRange
+            );
+
+            projectile.update(movementDistance);
+
+            // Walls take priority over dummy hits. Tile checks use a square footprint.
+            if (arenaMap.getCollision().overlaps(
                     projectile.getX(),
                     projectile.getY(),
                     PROJECTILE_RADIUS,
@@ -118,7 +119,7 @@ public class ArenaWorld {
 
                 // Circle overlap using squared distance avoids a square root for every dummy.
                 if (dx * dx + dy * dy <= hitDistance * hitDistance) {
-                    dummy.takeDamage(PROJECTILE_DAMAGE);
+                    dummy.takeDamage(spellType.getDamage());
                     hit = true;
                     // A shot damages only the first live dummy it overlaps.
                     break;
@@ -126,6 +127,11 @@ public class ArenaWorld {
             }
 
             if (hit) {
+                projectileIterator.remove();
+                continue;
+            }
+
+            if (projectile.hasReachedMaxRange(spellType.getRange())) {
                 projectileIterator.remove();
             }
         }
@@ -182,8 +188,29 @@ public class ArenaWorld {
         arenaMap.dispose();
     }
 
+    private void tryCast(
+        boolean requested,
+        SpellType spellType
+    ) {
+        if (!requested || !player.isSpellReady(spellType)) {
+            return;
+        }
+
+        projectiles.add(
+            new Projectile(
+                player.getCastX(),
+                player.getCastY(),
+                player.getAimX(),
+                player.getAimY(),
+                spellType
+            )
+        );
+
+        player.startCooldown(spellType);
+    }
+
     // Adds a test dummy and sets the shared location used for the next respawn.
-    public void spawnDummy (float x, float y) {
+    public final void spawnDummy (float x, float y) {
         dummySpawnX = x;
         dummySpawnY = y;
         dummies.add(new TargetDummy(x, y));

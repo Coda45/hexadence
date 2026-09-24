@@ -17,8 +17,7 @@ public class WorldRenderer {
 
     private final OrthogonalTiledMapRenderer mapRenderer;
     private final SpriteBatch batch;
-    private final Texture playerTexture;
-    private final Texture projectileTexture;
+    private final GameTextures textures;
     private final Texture pixelTexture;
 
     public WorldRenderer(ArenaMap arenaMap) {
@@ -32,19 +31,7 @@ public class WorldRenderer {
 
         batch = new SpriteBatch();
 
-        playerTexture = new Texture("sprites/wizard.png");
-
-        projectileTexture = new Texture("spells/ember_bolt.png");
-
-        projectileTexture.setFilter(
-            Texture.TextureFilter.Nearest,
-            Texture.TextureFilter.Nearest
-        );
-
-        playerTexture.setFilter(
-            Texture.TextureFilter.Nearest,
-            Texture.TextureFilter.Nearest
-        );
+        textures = new GameTextures();
 
         // Tint and stretch one white pixel to draw dummy bodies and health bars.
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
@@ -76,6 +63,7 @@ public class WorldRenderer {
         }
 
         Player player = world.getPlayer();
+        Texture playerTexture = textures.getPlayer();
 
         float width = playerTexture.getWidth() / ArenaMap.TILE_SIZE;
         float height = playerTexture.getHeight() / ArenaMap.TILE_SIZE;
@@ -90,6 +78,8 @@ public class WorldRenderer {
         );
 
         for (Projectile projectile : world.getProjectiles()) {
+            Texture projectileTexture =
+                textures.getProjectile(projectile.getSpellType());
 
             float projectileWidth =
                 projectileTexture.getWidth() / ArenaMap.TILE_SIZE;
@@ -142,8 +132,7 @@ public class WorldRenderer {
     public void dispose() {
         mapRenderer.dispose();
         batch.dispose();
-        playerTexture.dispose();
-        projectileTexture.dispose();
+        textures.dispose();
         
         pixelTexture.dispose();
     }

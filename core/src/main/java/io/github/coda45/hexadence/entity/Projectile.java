@@ -1,13 +1,14 @@
 package io.github.coda45.hexadence.entity;
 
-// Stores a projectile's world position, fixed direction, and age. ArenaWorld handles removal.
-public class Projectile {
+import io.github.coda45.hexadence.spell.SpellType;
 
-    private static final float LIFETIME_SECONDS = 2f;
+// Stores a projectile's world position, fixed direction, and distance traveled. ArenaWorld handles removal.
+public class Projectile {
 
     private float x;
     private float y;
-    private float ageSeconds;
+    private float distanceTraveled;
+    private final SpellType spellType;
 
     private final float directionX;
     private final float directionY;
@@ -17,24 +18,33 @@ public class Projectile {
         float x,
         float y,
         float directionX,
-        float directionY
+        float directionY,
+        SpellType spellType
     ) {
         this.x = x;
         this.y = y;
-
         this.directionX = directionX;
         this.directionY = directionY;
+        this.spellType = spellType;
     }
 
-    // Moves by a world-unit distance and ages by simulation time, including the spawn step.
-    public void update(float distance, float deltaSeconds) {
+    // Moves by a world-unit distance and records distance traveled, including the spawn step.
+    public void update(float distance) {
         x += directionX * distance;
         y += directionY * distance;
-        ageSeconds += deltaSeconds;
+        distanceTraveled += distance;
     }
 
-    public boolean hasExpired() {
-        return ageSeconds >= LIFETIME_SECONDS;
+    public SpellType getSpellType() {
+        return spellType;
+    }
+
+    public boolean hasReachedMaxRange(float maxRange) {
+        return distanceTraveled >= maxRange;
+    }
+
+    public float getDistanceTraveled() {
+        return distanceTraveled;
     }
 
     public float getX() {

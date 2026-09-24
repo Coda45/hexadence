@@ -1,5 +1,9 @@
 package io.github.coda45.hexadence.entity;
 
+import java.util.EnumMap;
+
+import io.github.coda45.hexadence.spell.SpellType;
+
 // Player state in world units. (x, y) centers the collision footprint;
 // the renderer also uses it as the bottom-center of the sprite.
 public class Player {
@@ -16,9 +20,15 @@ public class Player {
     // Center of the 36-pixel-tall wizard sprite at 24 pixels per world unit.
     private static final float CAST_OFFSET_Y = 0.75f;
 
+    private final EnumMap<SpellType, Float> cooldowns =
+        new EnumMap<>(SpellType.class);
+
     public Player(float x, float y) {
         this.x = x;
         this.y = y;
+        for (SpellType spellType : SpellType.values()) {
+            cooldowns.put(spellType, 0f);
+        }
     }
 
     public void move(float dx, float dy) {
@@ -54,6 +64,32 @@ public class Player {
 
     public float getAimY() {
         return aimY;
+    }
+
+    public void updateCooldowns(float deltaSeconds) {
+        for (SpellType spellType : SpellType.values()) {
+            float remaining = cooldowns.get(spellType);
+
+            cooldowns.put(
+                spellType,
+                Math.max(0f, remaining - deltaSeconds)
+            );
+        }
+    }
+
+    public boolean isSpellReady(SpellType spellType) {
+        return cooldowns.get(spellType) <= 0f;
+    }
+
+    public void startCooldown(SpellType spellType) {
+        cooldowns.put(
+            spellType,
+            spellType.getCooldownSeconds()
+        );
+    }
+
+    public float getCooldownRemaining(SpellType spellType) {
+        return cooldowns.get(spellType);
     }
 
     public void setPosition(float x, float y) {

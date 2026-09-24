@@ -14,7 +14,9 @@ public class PlayerInputController extends InputAdapter {
     private final Vector2 mouseWorld = new Vector2();
     // Keep a click until the next simulation step, even if a render frame has no step.
     // Multiple clicks before that step count as one request.
-    private boolean primaryPressed;
+    private boolean emberPressed;
+    private boolean waterPressed;
+    private boolean lightningPressed;
 
     public PlayerCommand sample(
         Viewport viewport,
@@ -23,10 +25,22 @@ public class PlayerInputController extends InputAdapter {
 
         float moveX = 0f;
         float moveY = 0f;
-        boolean castPrimary = primaryPressed;
+        boolean castEmber =
+            emberPressed
+            || Gdx.input.isButtonPressed(Input.Buttons.LEFT);
+
+        boolean castWater =
+            waterPressed
+            || Gdx.input.isButtonPressed(Input.Buttons.RIGHT);
+
+        boolean castLightning =
+            lightningPressed
+            || Gdx.input.isKeyPressed(Input.Keys.Q);
 
         // Consume once so catch-up steps don't repeat the same shot.
-        primaryPressed = false;
+        emberPressed = false;
+        waterPressed = false;
+        lightningPressed = false;
 
         if (Gdx.input.isKeyPressed(Input.Keys.W)) {
             moveY += 1f;
@@ -55,7 +69,9 @@ public class PlayerInputController extends InputAdapter {
         float aimX = mouseWorld.x - player.getCastX();
         float aimY = mouseWorld.y - player.getCastY();
 
-        return new PlayerCommand(moveX, moveY, aimX, aimY, castPrimary);
+        return new PlayerCommand(moveX, moveY, aimX, aimY,
+            castEmber, castWater, castLightning
+        );
     }
 
     @Override
@@ -65,9 +81,21 @@ public class PlayerInputController extends InputAdapter {
         int pointer,
         int button
     ) {
-
         if (button == Input.Buttons.LEFT) {
-            primaryPressed = true;
+            emberPressed = true;
+        }
+
+        if (button == Input.Buttons.RIGHT) {
+            waterPressed = true;
+        }
+
+        return false;
+    }
+
+    @Override
+    public boolean keyDown(int keycode) {
+        if (keycode == Input.Keys.Q) {
+            lightningPressed = true;
         }
 
         return false;
