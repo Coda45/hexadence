@@ -18,31 +18,30 @@ public class ArenaWorld {
     public static final float STEP = 1f / 60f;
     // Temporary combat values for the target dummy test.
     private static final float PROJECTILE_RADIUS = 0.12f;
+    private static final float MAX_PROJECTILE_SUBSTEP = PROJECTILE_RADIUS;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
     private static final float DISCHARGE_DAMAGE = 20f;
 
-    private final ArenaMap arenaMap;
+    private final ArenaCollision collision;
     private final Player player;
     private final ArrayList<Projectile> projectiles = new ArrayList<>();
     private final List<TargetDummy> dummies = new ArrayList<>();
-    // A negative timer means no respawn is pending. All dummies share this timer and spawn point.
 
     private final List<Zone> zones = new ArrayList<>();
 
-    public ArenaWorld() {
-        arenaMap = new ArenaMap();
+    public ArenaWorld(ArenaDefinition definition) {
+        collision = definition.collision();
 
-        SpawnPoint playerSpawn =
-            arenaMap.getSpawnPoint("player1");
+        SpawnPoint playerSpawn = definition.playerSpawn();
 
         player = new Player(
             playerSpawn.x(),
             playerSpawn.y()
         );
 
-        addDummyAtSpawn("dummy1");
-        addDummyAtSpawn("dummy2");
-        addDummyAtSpawn("dummy3");
+        for (SpawnPoint dummySpawn : definition.dummySpawns()) {
+            addDummyAtSpawn(dummySpawn);
+        }
     }
 
     // Advances exactly one STEP, regardless of the render frame rate.
@@ -99,68 +98,100 @@ public class ArenaWorld {
 
 
         // Move and remove projectiles through one iterator so list changes stay safe.
-        Iterator<Projectile> projectileIterator = projectiles.iterator();
+        Iterator<Projectile> projectileIterator =
+            projectiles.iterator();
+
         while (projectileIterator.hasNext()) {
-            Projectile projectile = projectileIterator.next();
+            Projectile projectile =
+                projectileIterator.next();
 
-            SpellType spellType = projectile.getSpellType();
+            SpellType spellType =
+                projectile.getSpellType();
 
-            float remainingRange =
-                spellType.getRange() - projectile.getDistanceTraveled();
+            float remainingRange = Math.max(
+                0f,
+                spellType.getRange()
+                    - projectile.getDistanceTraveled()
+            );
 
             float movementDistance = Math.min(
                 spellType.getSpeed() * STEP,
                 remainingRange
             );
 
-            projectile.update(movementDistance);
+            int substepCount = Math.max(
+                1,
+                (int) Math.ceil(
+                    movementDistance
+                        / MAX_PROJECTILE_SUBSTEP
+                )
+            );
 
-            // Terrain takes priority over zone interactions and dummy hits.
-            if (arenaMap.getCollision().overlaps(
-                    projectile.getX(),
-                    projectile.getY(),
-                    PROJECTILE_RADIUS,
-                    PROJECTILE_RADIUS
-                )) {
+            float substepDistance =
+                movementDistance / substepCount;
 
-                createPuddleIfWater(projectile);
-                projectileIterator.remove();
-                continue;
-            }
+            boolean terminated = false;
 
-            if (applyProjectileZoneReaction(projectile)) {
-                projectileIterator.remove();
-                continue;
-            }
+            for (int step = 0; step < substepCount; step++) {
+                float previousX = projectile.getX();
+                float previousY = projectile.getY();
 
-            boolean hit = false;
+                projectile.update(substepDistance);
 
-            for (TargetDummy dummy : dummies) {
-                if (!dummy.isAlive()) {
-                    continue;
+                // Terrain takes priority at every substep.
+                if (collision.overlaps(
+                        projectile.getX(),
+                        projectile.getY(),
+                        PROJECTILE_RADIUS,
+                        PROJECTILE_RADIUS
+                    )) {
+
+                    // Terrain effects use the last clear position,
+                    // not a position already penetrating the wall.
+                    createPuddleIfWater(
+                        projectile,
+                        previousX,
+                        previousY
+                    );
+
+                    terminated = true;
+                    break;
                 }
 
-                float dx = projectile.getX() - dummy.getX();
-                float dy = projectile.getY() - dummy.getY();
-                float hitDistance = PROJECTILE_RADIUS + TargetDummy.RADIUS;
+                // Zone reactions take priority over dummy hits.
+                if (applyProjectileZoneReaction(projectile)) {
+                    terminated = true;
+                    break;
+                }
 
-                // Circle overlap using squared distance avoids a square root for every dummy.
-                if (dx * dx + dy * dy <= hitDistance * hitDistance) {
-                    dummy.takeDamage(spellType.getDamage());
-                    hit = true;
-                    // A shot damages only the first live dummy it overlaps.
+                if (applyProjectileDummyHit(projectile)) {
+                    createPuddleIfWater(
+                        projectile,
+                        projectile.getX(),
+                        projectile.getY()
+                    );
+
+                    terminated = true;
                     break;
                 }
             }
 
-            if (hit) {
-                createPuddleIfWater(projectile);
+            if (terminated) {
                 projectileIterator.remove();
                 continue;
             }
 
-            if (projectile.hasReachedMaxRange(spellType.getRange())) {
-                createPuddleIfWater(projectile);
+            if (
+                projectile.hasReachedMaxRange(
+                    spellType.getRange()
+                )
+            ) {
+                createPuddleIfWater(
+                    projectile,
+                    projectile.getX(),
+                    projectile.getY()
+                );
+
                 projectileIterator.remove();
             }
         }
@@ -169,7 +200,7 @@ public class ArenaWorld {
         float dx = moveX * PLAYER_SPEED * STEP;
         float dy = moveY * PLAYER_SPEED * STEP;
 
-        float[] resolved = arenaMap.getCollision().resolveMovement(
+        float[] resolved = collision.resolveMovement(
             player.getCollisionX(),
             player.getCollisionY(),
             dx, dy,
@@ -180,15 +211,21 @@ public class ArenaWorld {
         updateDummyRespawns();
     }
 
-    private void createPuddleIfWater(Projectile projectile) {
-        if (projectile.getSpellType() == SpellType.WATER) {
-            zones.add(
-                Zone.createPuddle(
-                    projectile.getX(),
-                    projectile.getY()
-                )
-            );
+    private void createPuddleIfWater(
+        Projectile projectile,
+        float x,
+        float y
+    ) {
+        if (
+            projectile.getSpellType()
+                != SpellType.WATER
+        ) {
+            return;
         }
+
+        zones.add(
+            Zone.createPuddle(x, y)
+        );
     }
 
     public List<Zone> getZones() {
@@ -246,6 +283,39 @@ public class ArenaWorld {
                 zone.electrify();
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private boolean applyProjectileDummyHit(
+        Projectile projectile
+    ) {
+        SpellType spellType = projectile.getSpellType();
+
+        for (TargetDummy dummy : dummies) {
+            if (!dummy.isAlive()) {
+                continue;
+            }
+
+            float dx = projectile.getX() - dummy.getX();
+            float dy = projectile.getY() - dummy.getY();
+
+            float hitDistance = PROJECTILE_RADIUS + TargetDummy.RADIUS;
+
+            boolean overlaps = dx * dx + dy * dy <= hitDistance * hitDistance;
+
+            if (!overlaps) {
+                continue;
+            }
+
+            dummy.takeDamage(
+                spellType.getDamage()
+            );
+
+            // A projectile damages only the first
+            // live dummy it overlaps.
+            return true;
         }
 
         return false;
@@ -332,10 +402,7 @@ public class ArenaWorld {
             <= zone.getRadius() * zone.getRadius();
     }
 
-    private void addDummyAtSpawn(String spawnName) {
-        SpawnPoint spawn =
-            arenaMap.getSpawnPoint(spawnName);
-
+    private void addDummyAtSpawn(SpawnPoint spawn) {
         dummies.add(
             new TargetDummy(
                 spawn.x(),
@@ -365,14 +432,6 @@ public class ArenaWorld {
 
     public Player getPlayer() {
         return player;
-    }
-
-    public ArenaMap getArenaMap() {
-        return arenaMap;
-    }
-
-    public void dispose() {
-        arenaMap.dispose();
     }
 
     private void tryCast(

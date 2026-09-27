@@ -1,5 +1,7 @@
 package io.github.coda45.hexadence.world;
 
+import java.util.List;
+
 import com.badlogic.gdx.maps.MapLayer;
 import com.badlogic.gdx.maps.MapObject;
 import com.badlogic.gdx.maps.tiled.TiledMap;
@@ -13,6 +15,12 @@ public class ArenaMap {
     public static final float TILE_SIZE = 24f;
     private final int width;
     private final int height;
+    private static final String[] COLLISION_LAYER_NAMES = {
+        "Ground",
+        "DecorationGround",
+        "Walls",
+        "DecorationOverlay"
+    };
 
     private final TiledMap tiledMap;
     private final ArenaCollision collision;
@@ -33,13 +41,23 @@ public class ArenaMap {
     }
 
     private ArenaCollision buildCollision() {
-        float[][] blockedHeights = new float[width][height];
+        float[][] blockedHeights =
+            new float[width][height];
 
-        // DecorationOverlay is drawn above the player and is purely visual, so it's excluded.
-        markBlockedTiles(blockedHeights, "Ground");
-        markBlockedTiles(blockedHeights, "DecorationGround");
-        markBlockedTiles(blockedHeights, "Walls");
-        markBlockedTiles(blockedHeights, "DecorationOverlay");
+        /*
+        * Every listed layer may contribute collision, but only when
+        * a tile explicitly has blocked or halfBlocked enabled.
+        *
+        * DecorationOverlay is included because some foreground wall
+        * tiles should restrict how far the player can walk beneath them.
+        * Overlay tiles without collision properties remain visual only.
+        */
+        for (String layerName : COLLISION_LAYER_NAMES) {
+            markBlockedTiles(
+                blockedHeights,
+                layerName
+            );
+        }
 
         return new ArenaCollision(blockedHeights);
     }
@@ -96,6 +114,18 @@ public class ArenaMap {
         }
     }
 
+    public ArenaDefinition createDefinition() {
+        return new ArenaDefinition(
+            collision,
+            getSpawnPoint("player1"),
+            List.of(
+                getSpawnPoint("dummy1"),
+                getSpawnPoint("dummy2"),
+                getSpawnPoint("dummy3")
+            )
+        );
+    }
+
     public SpawnPoint getSpawnPoint(String name) {
         MapLayer spawnLayer =
             tiledMap.getLayers().get("Spawns");
@@ -137,10 +167,6 @@ public class ArenaMap {
 
     public TiledMap getTiledMap() {
         return tiledMap;
-    }
-
-    public ArenaCollision getCollision() {
-        return collision;
     }
     
     public void dispose() {

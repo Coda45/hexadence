@@ -10,6 +10,7 @@ import io.github.coda45.hexadence.input.PlayerInputController;
 import io.github.coda45.hexadence.render.HudRenderer;
 import io.github.coda45.hexadence.render.WorldCamera;
 import io.github.coda45.hexadence.render.WorldRenderer;
+import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
 
 
@@ -20,6 +21,7 @@ public class ArenaScreen implements Screen {
     private final PlayerInputController inputController;
 
     private final ArenaWorld world;
+    private final ArenaMap arenaMap;
     private final WorldRenderer renderer;
     private final HudRenderer hudRenderer;
 
@@ -29,8 +31,9 @@ public class ArenaScreen implements Screen {
         
         worldCamera = new WorldCamera();
         inputController = new PlayerInputController();
-        world = new ArenaWorld();
-        renderer = new WorldRenderer(world.getArenaMap());
+        arenaMap = new ArenaMap();
+        world = new ArenaWorld(arenaMap.createDefinition());
+        renderer = new WorldRenderer(arenaMap);
         hudRenderer = new HudRenderer();
     }
 
@@ -62,8 +65,8 @@ public class ArenaScreen implements Screen {
         worldCamera.follow(
             player.getX(),
             player.getY(),
-            world.getArenaMap().getWorldWidth(),
-            world.getArenaMap().getWorldHeight()
+            arenaMap.getWorldWidth(),
+            arenaMap.getWorldHeight()
         );
 
         ScreenUtils.clear(
@@ -93,7 +96,7 @@ public class ArenaScreen implements Screen {
     public void dispose() {
         hudRenderer.dispose();
         renderer.dispose();
-        world.dispose();
+        arenaMap.dispose();
     }
 
     @Override public void show() {
