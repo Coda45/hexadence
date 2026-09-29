@@ -68,7 +68,7 @@ public class ArenaWorld {
         float aimLengthSquared = (aimX * aimX) + (aimY * aimY);
 
         // Keep the last direction when the cursor is too close to the cast point.
-        if (aimLengthSquared > 0.0001f) {
+        if (player.isAlive() && aimLengthSquared > 0.0001f) {
             float aimLength = (float) Math.sqrt(aimLengthSquared);
 
             player.setAim(
@@ -197,16 +197,22 @@ public class ArenaWorld {
         }
 
     
-        float dx = moveX * PLAYER_SPEED * STEP;
-        float dy = moveY * PLAYER_SPEED * STEP;
+        if (player.isAlive()) {
+            float dx = moveX * PLAYER_SPEED * STEP;
+            float dy = moveY * PLAYER_SPEED * STEP;
 
-        float[] resolved = collision.resolveMovement(
-            player.getCollisionX(),
-            player.getCollisionY(),
-            dx, dy,
-            Player.HALF_WIDTH, Player.HALF_HEIGHT);
+            float[] resolved =
+                collision.resolveMovement(
+                    player.getCollisionX(),
+                    player.getCollisionY(),
+                    dx,
+                    dy,
+                    Player.HALF_WIDTH,
+                    Player.HALF_HEIGHT
+                );
 
-        player.move(resolved[0], resolved[1]);
+                player.move(resolved[0], resolved[1]);
+            }
         applyChargedPuddleDischarges();
         updateDummyRespawns();
     }
@@ -438,7 +444,7 @@ public class ArenaWorld {
         boolean requested,
         SpellType spellType
     ) {
-        if (!requested || !player.isSpellReady(spellType)) {
+        if (!player.isAlive() || !requested || !player.isSpellReady(spellType)) {
             return;
         }
 

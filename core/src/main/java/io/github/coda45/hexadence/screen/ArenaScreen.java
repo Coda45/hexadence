@@ -86,6 +86,11 @@ public class ArenaScreen implements Screen {
         hudRenderer.render(world.getPlayer());
     }
 
+    private void resetFrameState() {
+        accumulator = 0f;
+        inputController.clearLatchedActions();
+    }
+
     @Override
     public void resize(int width, int height) {
         worldCamera.resize(width, height);
@@ -99,18 +104,28 @@ public class ArenaScreen implements Screen {
         arenaMap.dispose();
     }
 
-    @Override public void show() {
+    @Override
+    public void show() {
+        resetFrameState();
         Gdx.input.setInputProcessor(inputController);
     }
 
-    @Override public void hide() {
-        // A replacement screen may already have installed its own processor.
+    @Override
+    public void hide() {
+        resetFrameState();
+        // A replacement screen may already have installed its processor.
         if (Gdx.input.getInputProcessor() == inputController) {
             Gdx.input.setInputProcessor(null);
         }
     }
 
-    @Override public void pause() {}
-    
-    @Override public void resume() {}
+    @Override
+    public void pause() {
+        resetFrameState();
+    }
+
+    @Override
+    public void resume() {
+        resetFrameState();
+    }
 }

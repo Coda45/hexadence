@@ -3,6 +3,7 @@ package io.github.coda45.hexadence.world;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
@@ -129,7 +130,60 @@ class ArenaWorldTest {
             EPSILON,
             "A projectile stopped by terrain must not damage the dummy"
         );
-    }    
+    }
+    
+    @Test
+    void deadPlayerCannotAimMoveOrCast() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(2f, 3f),
+            List.of()
+        );
+
+        world.getPlayer().takeDamage(
+            world.getPlayer().getMaxHealth()
+        );
+
+        PlayerCommand command =
+            new PlayerCommand(
+                1f, 0f,
+                0f, 1f,
+                true, true, true
+            );
+
+        world.step(command);
+
+        assertFalse(world.getPlayer().isAlive());
+
+        assertEquals(
+            2f,
+            world.getPlayer().getX(),
+            EPSILON
+        );
+
+        assertEquals(
+            3f,
+            world.getPlayer().getY(),
+            EPSILON
+        );
+
+        // The original default aim points right.
+        assertEquals(
+            1f,
+            world.getPlayer().getAimX(),
+            EPSILON
+        );
+
+        assertEquals(
+            0f,
+            world.getPlayer().getAimY(),
+            EPSILON
+        );
+
+        assertTrue(
+            world.getProjectiles().isEmpty(),
+            "A dead player must not cast spells"
+        );
+    }
 
     private ArenaWorld createEmptyWorld(
         SpawnPoint playerSpawn,

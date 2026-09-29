@@ -20,6 +20,9 @@ public class WorldRenderer {
     private final SpriteBatch batch;
     private final GameTextures textures;
     private final Texture pixelTexture;
+    private final int[] groundLayers;
+    private final int[] lowerTerrainLayers;
+    private final int[] foregroundLayers;
 
     public WorldRenderer(ArenaMap arenaMap) {
 
@@ -29,6 +32,31 @@ public class WorldRenderer {
             arenaMap.getTiledMap(),
             unitScale
         );
+
+        groundLayers = new int[] {
+            requireLayerIndex(
+                arenaMap,
+                ArenaMap.GROUND_LAYER_NAME
+            )
+        };
+
+        lowerTerrainLayers = new int[] {
+            requireLayerIndex(
+                arenaMap,
+                ArenaMap.DECORATION_GROUND_LAYER_NAME
+            ),
+            requireLayerIndex(
+                arenaMap,
+                ArenaMap.WALLS_LAYER_NAME
+            )
+        };
+
+        foregroundLayers = new int[] {
+            requireLayerIndex(
+                arenaMap,
+                ArenaMap.DECORATION_OVERLAY_LAYER_NAME
+            )
+        };
 
         batch = new SpriteBatch();
 
@@ -52,7 +80,7 @@ public class WorldRenderer {
 
         mapRenderer.setView(worldCamera.getCamera());
         // Ground is the bottommost map layer.
-        mapRenderer.render(new int[] { 0 });
+        mapRenderer.render(groundLayers);
 
         batch.setProjectionMatrix(
             worldCamera.getCamera().combined
@@ -68,7 +96,7 @@ public class WorldRenderer {
 
         batch.end();
 
-        mapRenderer.render(new int[] { 1, 2 });
+        mapRenderer.render(lowerTerrainLayers);
 
         batch.begin();
 
@@ -114,7 +142,7 @@ public class WorldRenderer {
         batch.end();
 
         // Foreground art covers all entities and the dummy health bars.
-        mapRenderer.render(new int[] { 3 });
+        mapRenderer.render(foregroundLayers);
 
         batch.begin();
         
@@ -222,6 +250,25 @@ public class WorldRenderer {
 
             batch.setColor(Color.WHITE);
         }
+    }
+
+    private static int requireLayerIndex(
+        ArenaMap arenaMap,
+        String layerName
+    ) {
+        int index =
+            arenaMap.getTiledMap()
+                .getLayers()
+                .getIndex(layerName);
+
+        if (index < 0) {
+            throw new IllegalStateException(
+                "TMX map is missing required layer: "
+                    + layerName
+            );
+        }
+
+        return index;
     }
 
     public void dispose() {

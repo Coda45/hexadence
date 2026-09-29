@@ -73,6 +73,12 @@ public class PlayerInputController extends InputAdapter {
             castEmber, castWater, castLightning
         );
     }
+    
+    public void clearLatchedActions() {
+        emberPressed = false;
+        waterPressed = false;
+        lightningPressed = false;
+    }
 
     @Override
     public boolean touchDown(

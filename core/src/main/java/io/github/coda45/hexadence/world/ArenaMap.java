@@ -15,11 +15,16 @@ public class ArenaMap {
     public static final float TILE_SIZE = 24f;
     private final int width;
     private final int height;
+    public static final String GROUND_LAYER_NAME = "Ground";
+    public static final String DECORATION_GROUND_LAYER_NAME = "DecorationGround";
+    public static final String WALLS_LAYER_NAME = "Walls";
+    public static final String DECORATION_OVERLAY_LAYER_NAME = "DecorationOverlay";
+    public static final String SPAWNS_LAYER_NAME = "Spawns";
     private static final String[] COLLISION_LAYER_NAMES = {
-        "Ground",
-        "DecorationGround",
-        "Walls",
-        "DecorationOverlay"
+        GROUND_LAYER_NAME,
+        DECORATION_GROUND_LAYER_NAME,
+        WALLS_LAYER_NAME,
+        DECORATION_OVERLAY_LAYER_NAME
     };
 
     private final TiledMap tiledMap;
@@ -128,7 +133,7 @@ public class ArenaMap {
 
     public SpawnPoint getSpawnPoint(String name) {
         MapLayer spawnLayer =
-            tiledMap.getLayers().get("Spawns");
+            tiledMap.getLayers().get(SPAWNS_LAYER_NAME);
 
         if (spawnLayer == null) {
             throw new IllegalStateException(
