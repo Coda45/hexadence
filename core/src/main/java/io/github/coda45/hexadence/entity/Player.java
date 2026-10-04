@@ -12,6 +12,7 @@ public class Player {
     private float y;
     private float aimX = 1f;
     private float aimY = 0f;
+    private boolean moving;
 
     private static final float MAX_HEALTH = 100f;
     private float health = MAX_HEALTH;
@@ -37,8 +38,13 @@ public class Player {
     }
 
     public void move(float dx, float dy) {
+        moving = dx * dx + dy * dy > 0.000001f;
         x += dx;
         y += dy;
+    }
+
+    public boolean isMoving() {
+        return moving;
     }
 
     public float getX() {
@@ -99,6 +105,10 @@ public class Player {
 
     public void takeDamage(float amount) {
         health = Math.max(0f, health - amount);
+
+        if (!isAlive()) {
+            moving = false;
+        }
     }
 
     public boolean isAlive() {
@@ -124,5 +134,6 @@ public class Player {
     public void setPosition(float x, float y) {
         this.x = x;
         this.y = y;
+        moving = false;
     }
 }

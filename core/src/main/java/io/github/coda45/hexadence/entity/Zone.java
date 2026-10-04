@@ -70,7 +70,10 @@ public class Zone {
     }
 
     public void discharge() {
-        electrified = false;
+        if (electrified) {
+            electrified = false;
+            chargeFlashRemaining = CHARGE_FLASH_DURATION;
+        }
     }
 
     public boolean isChargeFlashVisible() {

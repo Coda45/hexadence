@@ -72,6 +72,66 @@ public class ArenaCollision {
         return false;
     }
 
+    // Returns the distance to the first blocked tile touched by a beam.
+    // Direction must be normalized. No collision returns NO_HIT.
+    public float raycastTerrain(
+        float originX,
+        float originY,
+        float directionX,
+        float directionY,
+        float maxDistance,
+        float beamHalfWidth
+    ) {
+        float endX = originX + directionX * maxDistance;
+        float endY = originY + directionY * maxDistance;
+
+        int minTileX = (int) Math.floor(Math.min(originX, endX) - beamHalfWidth);
+        int maxTileX = (int) Math.floor(Math.max(originX, endX) + beamHalfWidth);
+        int minTileY = (int) Math.floor(Math.min(originY, endY) - beamHalfWidth);
+        int maxTileY = (int) Math.floor(Math.max(originY, endY) + beamHalfWidth);
+
+        float nearestDistance = CombatGeometry.NO_HIT;
+
+        for (
+            int tileX = minTileX;
+            tileX <= maxTileX;
+            tileX++
+        ) {
+            for (
+                int tileY = minTileY;
+                tileY <= maxTileY;
+                tileY++
+            ) {
+                float blockedHeight = getBlockedHeight(tileX, tileY);
+
+                if (blockedHeight <= 0f) {
+                    continue;
+                }
+
+                float currentLimit = Math.min( maxDistance, nearestDistance);
+
+                float hitDistance =
+                    CombatGeometry.rayAabbEntryDistance(
+                        originX,
+                        originY,
+                        directionX,
+                        directionY,
+                        currentLimit,
+                        tileX - beamHalfWidth,
+                        tileY - beamHalfWidth,
+                        tileX + 1f + beamHalfWidth,
+                        tileY + blockedHeight + beamHalfWidth
+                    );
+
+                if (hitDistance < nearestDistance) {
+                    nearestDistance = hitDistance;
+                }
+            }
+        }
+
+        return nearestDistance;
+    }
+
     // Returns the final {x, y} after the same axis checks as resolveMovement.
     // ArenaWorld uses resolveMovement instead because Player.move takes offsets.
     public float[] move(float x, float y, float dx, float dy, float halfWidth, float halfHeight) {

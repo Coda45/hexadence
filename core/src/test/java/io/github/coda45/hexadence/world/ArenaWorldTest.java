@@ -4,10 +4,13 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
+import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.spell.SpellType;
 
 class ArenaWorldTest {
 
@@ -74,14 +77,14 @@ class ArenaWorldTest {
 
         ArenaWorld world = new ArenaWorld(definition);
 
-        PlayerCommand castLightningDiagonally =
+        PlayerCommand castEmberDiagonally =
             new PlayerCommand(
                 0f, 0f,
                 1f, 1f,
-                false, false, true
+                true, false, false
             );
 
-        world.step(castLightningDiagonally);
+        world.step(castEmberDiagonally);
 
         assertTrue(
             world.getProjectiles().isEmpty(),
@@ -182,6 +185,218 @@ class ArenaWorldTest {
         assertTrue(
             world.getProjectiles().isEmpty(),
             "A dead player must not cast spells"
+        );
+    }
+
+    @Test
+    void lightningDamagesNearestDummyRegardlessOfListOrder() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(
+                // Deliberately put the farther dummy first.
+                new SpawnPoint(6f, 1.75f),
+                new SpawnPoint(3f, 1.75f)
+            )
+        );
+
+        float fartherHealth =
+            world.getDummies().get(0).getHealth();
+
+        float nearerHealth =
+            world.getDummies().get(1).getHealth();
+
+        PlayerCommand castLightningRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                false, false, true
+            );
+
+        world.step(castLightningRight);
+
+        assertEquals(
+            fartherHealth,
+            world.getDummies().get(0).getHealth(),
+            EPSILON
+        );
+
+        assertEquals(
+            nearerHealth
+                - SpellType.LIGHTNING.getDamage(),
+            world.getDummies().get(1).getHealth(),
+            EPSILON
+        );
+
+        assertTrue(
+            world.getProjectiles().isEmpty(),
+            "Lightning should not create a projectile"
+        );
+    }
+
+    @Test
+    void wallStopsLightningBeforeDummy() {
+        float[][] blockedHeights =
+            new float[10][10];
+
+        blockedHeights[3][1] = 1f;
+
+        ArenaWorld world =
+            new ArenaWorld(
+                new ArenaDefinition(
+                    new ArenaCollision(blockedHeights),
+                    new SpawnPoint(1.5f, 1f),
+                    List.of(
+                        new SpawnPoint(5f, 1.75f)
+                    )
+                )
+            );
+
+        float healthBefore =
+            world.getDummies().get(0).getHealth();
+
+        PlayerCommand castLightningRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                false, false, true
+            );
+
+        StepResult result =
+            world.step(castLightningRight);
+
+        assertEquals(
+            healthBefore,
+            world.getDummies().get(0).getHealth(),
+            EPSILON
+        );
+        assertEquals(1, result.events().size());
+
+        LightningStrikeEvent strike =
+            assertInstanceOf(
+                LightningStrikeEvent.class,
+                result.events().get(0)
+            );
+
+        assertEquals(
+            LightningStrikeEvent.EndReason.TERRAIN,
+            strike.endReason()
+        );
+
+        assertEquals(1.5f, strike.startX(), EPSILON);
+        assertEquals(1.75f, strike.startY(), EPSILON);
+
+        // The wall starts at x = 3 and is expanded by the
+        // Lightning collision half-width of 0.1.
+        assertEquals(2.9f, strike.endX(), EPSILON);
+        assertEquals(1.75f, strike.endY(), EPSILON);
+    }
+
+    @Test
+    void puddleStopsLightningAndBecomesElectrified() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(
+                new SpawnPoint(5f, 1.75f)
+            )
+        );
+
+        Zone puddle =
+            Zone.createPuddle(3f, 1.75f);
+
+        world.getZones().add(puddle);
+
+        float healthBefore =
+            world.getDummies().get(0).getHealth();
+
+        PlayerCommand castLightningRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                false, false, true
+            );
+
+        world.step(castLightningRight);
+
+        assertTrue(puddle.isElectrified());
+
+        assertEquals(
+            healthBefore,
+            world.getDummies().get(0).getHealth(),
+            EPSILON
+        );
+    }
+
+    @Test
+    void unobstructedLightningEventEndsAtMaximumRange() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of()
+        );
+
+        PlayerCommand castLightningRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                false, false, true
+            );
+
+        StepResult result =
+            world.step(castLightningRight);
+
+        assertEquals(1L, result.tick());
+        assertEquals(1, result.events().size());
+
+        LightningStrikeEvent strike =
+            assertInstanceOf(
+                LightningStrikeEvent.class,
+                result.events().get(0)
+            );
+
+        assertEquals(
+            LightningStrikeEvent.EndReason.RANGE_LIMIT,
+            strike.endReason()
+        );
+
+        assertEquals(1f, strike.startX(), EPSILON);
+        assertEquals(1.75f, strike.startY(), EPSILON);
+
+        assertEquals(
+            1f + SpellType.LIGHTNING.getRange(),
+            strike.endX(),
+            EPSILON
+        );
+
+        assertEquals(1.75f, strike.endY(), EPSILON);
+    }
+
+    @Test
+    void lightningOnCooldownDoesNotEmitAnotherEvent() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of()
+        );
+
+        PlayerCommand castLightningRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                false, false, true
+            );
+
+        StepResult firstResult =
+            world.step(castLightningRight);
+
+        StepResult secondResult =
+            world.step(castLightningRight);
+
+        assertEquals(1L, firstResult.tick());
+        assertEquals(2L, secondResult.tick());
+
+        assertEquals(1, firstResult.events().size());
+
+        assertTrue(
+            secondResult.events().isEmpty(),
+            "A rejected cooldown cast must not create presentation"
         );
     }
 

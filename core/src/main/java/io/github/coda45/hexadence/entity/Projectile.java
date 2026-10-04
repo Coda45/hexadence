@@ -47,6 +47,14 @@ public class Projectile {
         return distanceTraveled;
     }
 
+    public float getDirectionX() {
+        return directionX;
+    }
+
+    public float getDirectionY() {
+        return directionY;
+    }
+
     public float getX() {
         return x;
     }

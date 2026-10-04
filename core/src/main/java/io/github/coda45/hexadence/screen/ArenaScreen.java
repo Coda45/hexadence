@@ -1,5 +1,8 @@
 package io.github.coda45.hexadence.screen;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -12,6 +15,8 @@ import io.github.coda45.hexadence.render.WorldCamera;
 import io.github.coda45.hexadence.render.WorldRenderer;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
+import io.github.coda45.hexadence.world.StepResult;
+import io.github.coda45.hexadence.world.WorldEvent;
 
 
 // Coordinates input, fixed simulation steps, camera updates, and drawing.
@@ -40,10 +45,17 @@ public class ArenaScreen implements Screen {
     @Override
     public void render(float delta) {
 
-        // Drop excess time after a long stall to limit catch-up work in one frame.
+        // Clamp cosmetic playback separately from simulation catch-up after a stall.
+        float presentationDelta =
+            Math.min(delta, 0.1f);
+
         delta = Math.min(delta, 0.25f);
 
         accumulator += delta;
+
+        // Preserve events from every fixed step until this frame is drawn once.
+        List<WorldEvent> frameEvents =
+            new ArrayList<>();
 
         // Run whole 60 Hz steps and keep leftover time for the next frame.
         while (accumulator >= ArenaWorld.STEP) {
@@ -54,7 +66,8 @@ public class ArenaScreen implements Screen {
                 world.getPlayer()
             );
 
-            world.step(command);
+            StepResult result = world.step(command);
+            frameEvents.addAll(result.events());
 
             accumulator -= ArenaWorld.STEP;
         }
@@ -80,7 +93,9 @@ public class ArenaScreen implements Screen {
 
         renderer.render(
             world,
-            worldCamera
+            worldCamera,
+            presentationDelta,
+            frameEvents
         );
 
         hudRenderer.render(world.getPlayer());

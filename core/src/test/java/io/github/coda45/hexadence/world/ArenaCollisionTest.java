@@ -81,4 +81,97 @@ class ArenaCollisionTest {
             EPSILON
         );
     }
+
+    @Test
+    void terrainRaycastReturnsNearestWallDistance() {
+        float[][] blockedHeights = new float[8][4];
+
+        blockedHeights[3][1] = 1f;
+        blockedHeights[5][1] = 1f;
+
+        ArenaCollision collision =
+            new ArenaCollision(blockedHeights);
+
+        float distance = collision.raycastTerrain(
+            1.5f, 1.5f,
+            1f, 0f,
+            6f,
+            0.1f
+        );
+
+        // The first wall begins at x = 3, expanded left to 2.9.
+        assertEquals(1.4f, distance, EPSILON);
+    }
+
+    @Test
+    void terrainRaycastPassesAboveHalfBlockedTile() {
+        float[][] blockedHeights = new float[6][4];
+        blockedHeights[3][1] = 0.5f;
+
+        ArenaCollision collision =
+            new ArenaCollision(blockedHeights);
+
+        float distance = collision.raycastTerrain(
+            1.5f, 1.75f,
+            1f, 0f,
+            3f,
+            0.1f
+        );
+
+        assertTrue(Float.isInfinite(distance));
+    }
+
+    @Test
+    void terrainRaycastAccountsForBeamThickness() {
+        float[][] blockedHeights = new float[6][4];
+        blockedHeights[3][1] = 1f;
+
+        ArenaCollision collision =
+            new ArenaCollision(blockedHeights);
+
+        float distance = collision.raycastTerrain(
+            1.5f, 2.05f,
+            1f, 0f,
+            3f,
+            0.1f
+        );
+
+        // The center ray is above the wall, but the beam edge touches it.
+        assertEquals(1.4f, distance, EPSILON);
+    }
+
+    @Test
+    void terrainRaycastTreatsOutsideMapAsBlocked() {
+        float[][] blockedHeights = new float[4][4];
+
+        ArenaCollision collision =
+            new ArenaCollision(blockedHeights);
+
+        float distance = collision.raycastTerrain(
+            2.5f, 1.5f,
+            1f, 0f,
+            10f,
+            0f
+        );
+
+        // The map ends at x = 4.
+        assertEquals(1.5f, distance, EPSILON);
+    }
+
+    @Test
+    void terrainRaycastReturnsNoHitWhenPathIsClear() {
+        float[][] blockedHeights = new float[8][4];
+
+        ArenaCollision collision =
+            new ArenaCollision(blockedHeights);
+
+        float distance = collision.raycastTerrain(
+            1.5f, 1.5f,
+            1f, 0f,
+            3f,
+            0.1f
+        );
+
+        assertTrue(Float.isInfinite(distance));
+    }
 }

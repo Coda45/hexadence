@@ -1,17 +1,30 @@
 package io.github.coda45.hexadence.render;
 
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
+import com.badlogic.gdx.math.MathUtils;
 
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
+import io.github.coda45.hexadence.render.animation.ChargedPuddleVisual;
+import io.github.coda45.hexadence.render.animation.FacingDirection;
+import io.github.coda45.hexadence.render.animation.LightningStrikeVisual;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
+import io.github.coda45.hexadence.world.LightningStrikeEvent;
+import io.github.coda45.hexadence.world.WorldEvent;
 
 // Draws world state and owns drawing resources. The TiledMap stays owned by ArenaMap.
 public class WorldRenderer {
@@ -20,9 +33,16 @@ public class WorldRenderer {
     private final SpriteBatch batch;
     private final GameTextures textures;
     private final Texture pixelTexture;
+    private float playerMoveTime;
     private final int[] groundLayers;
     private final int[] lowerTerrainLayers;
     private final int[] foregroundLayers;
+    private final List<LightningStrikeVisual>
+        lightningStrikes = new ArrayList<>();
+
+    // Zone IDs do not exist yet, so visual state follows the exact live object.
+    private final Map<Zone, ChargedPuddleVisual>
+        chargedPuddleVisuals = new IdentityHashMap<>();
 
     public WorldRenderer(ArenaMap arenaMap) {
 
@@ -73,10 +93,18 @@ public class WorldRenderer {
 
     public void render(
         ArenaWorld world,
-        WorldCamera worldCamera
+        WorldCamera worldCamera,
+        float presentationDelta,
+        List<WorldEvent> frameEvents
     ) {
 
+        consumeEvents(frameEvents);
         // TMX order: Ground, DecorationGround, Walls, DecorationOverlay, Spawns.
+
+        updateChargedPuddleVisuals(
+            world,
+            presentationDelta
+        );
 
         mapRenderer.setView(worldCamera.getCamera());
         // Ground is the bottommost map layer.
@@ -91,6 +119,16 @@ public class WorldRenderer {
         for (Zone zone : world.getZones()) {
             if (zone.getType() == Zone.Type.PUDDLE) {
                 renderZone(zone);
+
+                ChargedPuddleVisual visual =
+                    chargedPuddleVisuals.get(zone);
+
+                if (
+                    visual != null
+                    && visual.isPlaying()
+                ) {
+                    renderChargedPuddle(visual);
+                }
             }
         }
 
@@ -106,14 +144,32 @@ public class WorldRenderer {
         }
 
         Player player = world.getPlayer();
-        Texture playerTexture = textures.getPlayer();
 
-        float width = playerTexture.getWidth() / ArenaMap.TILE_SIZE;
-        float height = playerTexture.getHeight() / ArenaMap.TILE_SIZE;
+        if (player.isMoving()) {
+            playerMoveTime += presentationDelta;
+        } else {
+            playerMoveTime = 0f;
+        }
+
+        FacingDirection facing =
+            FacingDirection.fromAim(
+                player.getAimX(),
+                player.getAimY()
+            );
+
+        TextureRegion playerRegion =
+            textures.getPlayerFrame(
+                facing,
+                player.isMoving(),
+                playerMoveTime
+            );
+
+        float width =  playerRegion.getRegionWidth()  / ArenaMap.TILE_SIZE;
+        float height = playerRegion.getRegionHeight() / ArenaMap.TILE_SIZE;
 
         // Anchor the wizard at its feet; projectiles below are centered on their positions.
         batch.draw(
-            playerTexture,
+            playerRegion,
             player.getX() - width / 2f,
             player.getY(),
             width,
@@ -121,23 +177,48 @@ public class WorldRenderer {
         );
 
         for (Projectile projectile : world.getProjectiles()) {
-            Texture projectileTexture =
-                textures.getProjectile(projectile.getSpellType());
+            float stateTime =
+                projectile.getDistanceTraveled()
+                    / projectile.getSpellType().getSpeed();
+
+            TextureRegion projectileRegion =
+                textures.getProjectileFrame(
+                    projectile.getSpellType(),
+                    stateTime
+                );
 
             float projectileWidth =
-                projectileTexture.getWidth() / ArenaMap.TILE_SIZE;
+                projectileRegion.getRegionWidth()
+                    / ArenaMap.TILE_SIZE;
 
             float projectileHeight =
-                projectileTexture.getHeight() / ArenaMap.TILE_SIZE;
+                projectileRegion.getRegionHeight()
+                    / ArenaMap.TILE_SIZE;
+
+            float rotationDegrees =
+                MathUtils.atan2(
+                    projectile.getDirectionY(),
+                    projectile.getDirectionX()
+                ) * MathUtils.radiansToDegrees;
+
+            float left =   projectile.getX() - projectileWidth  / 2f;
+            float bottom = projectile.getY() - projectileHeight / 2f;
 
             batch.draw(
-                projectileTexture,
-                projectile.getX() - projectileWidth / 2f,
-                projectile.getY() - projectileHeight / 2f,
+                projectileRegion,
+                left,
+                bottom,
+                projectileWidth / 2f,
+                projectileHeight / 2f,
                 projectileWidth,
-                projectileHeight
+                projectileHeight,
+                1f,
+                1f,
+                rotationDegrees
             );
         }
+
+        renderLightningStrikes();
 
         batch.end();
 
@@ -155,6 +236,231 @@ public class WorldRenderer {
         }
 
         batch.end();
+
+        updateLightningStrikes(presentationDelta);
+    }
+
+    private void consumeEvents(
+        List<WorldEvent> frameEvents
+    ) {
+        for (WorldEvent event : frameEvents) {
+            if (
+                event
+                    instanceof LightningStrikeEvent strike
+            ) {
+                int variantIndex =
+                    MathUtils.random(
+                        textures.getLightningVariantCount() - 1
+                    );
+
+                lightningStrikes.add(
+                    new LightningStrikeVisual(
+                        strike,
+                        variantIndex
+                    )
+                );
+            }
+        }
+    }
+
+    private void updateLightningStrikes(
+        float presentationDelta
+    ) {
+        Iterator<LightningStrikeVisual> iterator = lightningStrikes.iterator();
+
+        while (iterator.hasNext()) {
+            LightningStrikeVisual strike = iterator.next();
+
+            strike.update(presentationDelta);
+
+            if (
+                strike.isFinished(
+                    textures.getLightningAnimationDuration()
+                )
+            ) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private void renderLightningStrikes() {
+        for (
+            LightningStrikeVisual visual
+                : lightningStrikes
+        ) {
+            renderLightningStrike(visual);
+        }
+    }
+
+    private void renderLightningStrike(
+        LightningStrikeVisual visual
+    ) {
+        LightningStrikeEvent strike = visual.getStrike();
+
+        float deltaX = strike.endX() - strike.startX();
+        float deltaY = strike.endY() - strike.startY();
+
+        float strikeLength = (float) Math.sqrt(
+            deltaX * deltaX + deltaY * deltaY
+        );
+
+        if (strikeLength <= 0.0001f) {
+            return;
+        }
+
+        TextureRegion frame =
+            textures.getLightningFrame(
+                visual.getVariantIndex(),
+                visual.getStateTime()
+            );
+
+        float visualHeight =
+            frame.getRegionHeight()
+                / ArenaMap.TILE_SIZE;
+
+        float rotationDegrees =
+            MathUtils.atan2(deltaY, deltaX)
+                * MathUtils.radiansToDegrees;
+
+        int visiblePixelWidth =
+            Math.max(
+                1,
+                Math.min(
+                    frame.getRegionWidth(),
+                    (int) Math.ceil(
+                        strikeLength
+                            * ArenaMap.TILE_SIZE
+                    )
+                )
+            );
+
+        batch.draw(
+            frame.getTexture(),
+
+            // Place the unrotated image with its left-center
+            // directly on the authoritative cast point.
+            strike.startX(),
+            strike.startY() - visualHeight / 2f,
+
+            // Rotate around that left-center point.
+            0f,
+            visualHeight / 2f,
+
+            // The destination ends at the exact collision distance.
+            strikeLength,
+            visualHeight,
+
+            1f,
+            1f,
+            rotationDegrees,
+
+            // Draw only the visible portion of the selected frame.
+            frame.getRegionX(),
+            frame.getRegionY(),
+            visiblePixelWidth,
+            frame.getRegionHeight(),
+
+            false,
+            false
+        );
+    }
+
+    private void renderChargedPuddle(
+        ChargedPuddleVisual visual
+    ) {
+        Zone zone = visual.getZone();
+
+        TextureRegion frame =
+            textures.getChargedPuddleFrame(
+                visual.getVariantIndex(),
+                visual.getStateTime()
+            );
+
+        float diameter = zone.getRadius() * 2f;
+
+        batch.setColor(Color.WHITE);
+
+        batch.draw(
+            frame,
+            zone.getX() - zone.getRadius(),
+            zone.getY() - zone.getRadius(),
+            diameter,
+            diameter
+        );
+    }
+
+    private void updateChargedPuddleVisuals(
+        ArenaWorld world,
+        float presentationDelta
+    ) {
+        Iterator<
+            Map.Entry<Zone, ChargedPuddleVisual>
+        > iterator =
+            chargedPuddleVisuals
+                .entrySet()
+                .iterator();
+
+        // Discharge, expiration, or replacement immediately ends the overlay.
+        while (iterator.hasNext()) {
+            Map.Entry<Zone, ChargedPuddleVisual> entry =
+                iterator.next();
+
+            Zone zone = entry.getKey();
+
+            boolean zoneStillExists = world.getZones().contains(zone);
+
+            if (
+                !zoneStillExists
+                || !zone.isElectrified()
+            ) {
+                iterator.remove();
+                continue;
+            }
+
+            ChargedPuddleVisual visual = entry.getValue();
+
+            visual.update(
+                presentationDelta,
+                textures.getChargedPuddleAnimationDuration()
+            );
+
+            if (visual.isReadyToPlayAgain()) {
+                int variantIndex =
+                    MathUtils.random(
+                        textures
+                            .getChargedPuddleVariantCount()
+                            - 1
+                    );
+
+                visual.start(variantIndex);
+            }
+        }
+
+        // A newly charged puddle begins its first variation immediately.
+        for (Zone zone : world.getZones()) {
+            if (
+                zone.getType() != Zone.Type.PUDDLE
+                || !zone.isElectrified()
+                || chargedPuddleVisuals.containsKey(zone)
+            ) {
+                continue;
+            }
+
+            int variantIndex =
+                MathUtils.random(
+                    textures
+                        .getChargedPuddleVariantCount()
+                        - 1
+                );
+
+            chargedPuddleVisuals.put(
+                zone,
+                new ChargedPuddleVisual(
+                    zone,
+                    variantIndex
+                )
+            );
+        }
     }
 
     private void renderZone(Zone zone) {
@@ -164,13 +470,30 @@ public class WorldRenderer {
 
         switch (zone.getType()) {
             case PUDDLE -> {
-                if (
-                    zone.isElectrified()
-                    || zone.isChargeFlashVisible()
-                ) {
-                    batch.setColor(0.9f, 0.95f, 0.2f, 0.75f);
+                if (zone.isChargeFlashVisible()) {
+                    // Brief yellow hit/damage feedback.
+                    batch.setColor(
+                        0.9f,
+                        0.95f,
+                        0.2f,
+                        0.75f
+                    );
+                } else if (zone.isElectrified()) {
+                    // Persistent muted teal charged state.
+                    batch.setColor(
+                        0.25f,
+                        0.68f,
+                        0.72f,
+                        0.68f
+                    );
                 } else {
-                    batch.setColor(0.2f, 0.55f, 1f, 0.6f);
+                    // Normal water.
+                    batch.setColor(
+                        0.2f,
+                        0.55f,
+                        1f,
+                        0.6f
+                    );
                 }
             }
             case STEAM ->

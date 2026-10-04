@@ -21,6 +21,8 @@ public class ArenaWorld {
     private static final float MAX_PROJECTILE_SUBSTEP = PROJECTILE_RADIUS;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
     private static final float DISCHARGE_DAMAGE = 20f;
+    private static final float LIGHTNING_HALF_WIDTH = 0.1f;
+    private long tick;
 
     private final ArenaCollision collision;
     private final Player player;
@@ -45,7 +47,10 @@ public class ArenaWorld {
     }
 
     // Advances exactly one STEP, regardless of the render frame rate.
-    public void step(PlayerCommand command) {
+    public StepResult step(PlayerCommand command) {
+        tick++;
+
+        List<WorldEvent> events = new ArrayList<>();
 
         Iterator<Zone> zoneIterator = zones.iterator();
 
@@ -82,7 +87,7 @@ public class ArenaWorld {
         // Spawn before player movement, using the aim chosen for this step.
         tryCast(command.castEmber(), SpellType.EMBER);
         tryCast(command.castWater(), SpellType.WATER);
-        tryCast(command.castLightning(), SpellType.LIGHTNING);
+        castLightning(command.castLightning(), events);
 
         float lengthSquared =
             moveX * moveX +
@@ -215,6 +220,7 @@ public class ArenaWorld {
             }
         applyChargedPuddleDischarges();
         updateDummyRespawns();
+        return new StepResult(tick, events);
     }
 
     private void createPuddleIfWater(
@@ -325,6 +331,90 @@ public class ArenaWorld {
         }
 
         return false;
+    }
+
+    private LightningHit findLightningHit(
+        float originX,
+        float originY,
+        float directionX,
+        float directionY,
+        float maxDistance
+    ) {
+        LightningHit nearest = LightningHit.none();
+
+        float terrainDistance =
+            collision.raycastTerrain(
+                originX,
+                originY,
+                directionX,
+                directionY,
+                maxDistance,
+                LIGHTNING_HALF_WIDTH
+            );
+
+        if (!Float.isInfinite(terrainDistance)) {
+            nearest = LightningHit.terrain(terrainDistance);
+        }
+
+        for (Zone zone : zones) {
+            if (zone.getType() != Zone.Type.PUDDLE) {
+                continue;
+            }
+
+            float distance =
+                CombatGeometry.rayCircleEntryDistance(
+                    originX,
+                    originY,
+                    directionX,
+                    directionY,
+                    maxDistance,
+                    zone.getX(),
+                    zone.getY(),
+                    zone.getRadius() + LIGHTNING_HALF_WIDTH
+                );
+
+            if (Float.isInfinite(distance)) {
+                continue;
+            }
+
+            LightningHit candidate =
+                LightningHit.puddle(distance, zone);
+
+            if (candidate.isCloserThan(nearest)) {
+                nearest = candidate;
+            }
+        }
+
+        for (TargetDummy dummy : dummies) {
+            if (!dummy.isAlive()) {
+                continue;
+            }
+
+            float distance =
+                CombatGeometry.rayCircleEntryDistance(
+                    originX,
+                    originY,
+                    directionX,
+                    directionY,
+                    maxDistance,
+                    dummy.getX(),
+                    dummy.getY(),
+                    TargetDummy.RADIUS + LIGHTNING_HALF_WIDTH
+                );
+
+            if (Float.isInfinite(distance)) {
+                continue;
+            }
+
+            LightningHit candidate =
+                LightningHit.dummy(distance, dummy);
+
+            if (candidate.isCloserThan(nearest)) {
+                nearest = candidate;
+            }
+        }
+
+        return nearest;
     }
 
     private void applyChargedPuddleDischarges() {
@@ -438,6 +528,86 @@ public class ArenaWorld {
 
     public Player getPlayer() {
         return player;
+    }
+
+    private void castLightning(
+        boolean requested,
+        List<WorldEvent> events
+    ) {
+        SpellType lightning = SpellType.LIGHTNING;
+
+        if (
+            !player.isAlive()
+            || !requested
+            || !player.isSpellReady(lightning)
+        ) {
+            return;
+        }
+
+        float originX = player.getCastX();
+        float originY = player.getCastY();
+
+        float directionX = player.getAimX();
+        float directionY = player.getAimY();
+
+        LightningHit hit =
+            findLightningHit(
+                originX,
+                originY,
+                directionX,
+                directionY,
+                lightning.getRange()
+            );
+
+        switch (hit.kind()) {
+            case PUDDLE -> {
+                Zone puddle = hit.zone();
+
+                if (!puddle.isElectrified()) {
+                    puddle.electrify();
+                }
+            }
+
+            case DUMMY ->
+                hit.dummy().takeDamage(
+                    lightning.getDamage()
+                );
+
+            case NONE, TERRAIN -> {
+                // The cast still succeeds, but there is no gameplay effect.
+            }
+        }
+
+        player.startCooldown(lightning);
+        float strikeDistance =
+            hit.kind() == LightningHit.Kind.NONE
+                ? lightning.getRange()
+                : hit.distance();
+
+        LightningStrikeEvent.EndReason endReason =
+            switch (hit.kind()) {
+                case NONE ->
+                    LightningStrikeEvent.EndReason.RANGE_LIMIT;
+
+                case TERRAIN ->
+                    LightningStrikeEvent.EndReason.TERRAIN;
+
+                case PUDDLE ->
+                    LightningStrikeEvent.EndReason.PUDDLE;
+
+                case DUMMY ->
+                    LightningStrikeEvent.EndReason.DUMMY;
+            };
+
+        events.add(
+            new LightningStrikeEvent(
+                originX,
+                originY,
+                originX + directionX * strikeDistance,
+                originY + directionY * strikeDistance,
+                endReason
+            )
+        );
     }
 
     private void tryCast(
