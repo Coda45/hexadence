@@ -105,10 +105,10 @@
   <object id="2" name="dummy1" x="360.667" y="126.667">
    <point/>
   </object>
-  <object id="3" name="dummy2" x="434" y="294">
+  <object id="3" name="dummy2" x="432" y="259.333">
    <point/>
   </object>
-  <object id="4" name="dummy3" x="434" y="264">
+  <object id="4" name="dummy3" x="432.667" y="289.333">
    <point/>
   </object>
  </objectgroup>

@@ -82,7 +82,7 @@ public class WorldRenderer {
 
         textures = new GameTextures();
 
-        // Tint and stretch one white pixel to draw dummy bodies and health bars.
+        // Tint and stretch one white pixel to draw health bars.
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.WHITE);
         pixmap.fill();
@@ -548,21 +548,31 @@ public class WorldRenderer {
         batch.setColor(Color.WHITE);
     }
 
-    // Draws a square placeholder for the circular hit area; dead dummies remain gray.
+    // Center the sprite on the circular hit area; dead dummies remain gray.
     private void renderDummy(TargetDummy dummy) {
+        Texture sprite = textures.getTargetDummy();
+        float width = sprite.getWidth() / ArenaMap.TILE_SIZE;
+        float height = sprite.getHeight() / ArenaMap.TILE_SIZE;
+        float spriteLeft = dummy.getX() - width / 2f;
+        float spriteBottom = dummy.getY() - height / 2f;
         float diameter = TargetDummy.RADIUS * 2f;
-        float left = dummy.getX() - TargetDummy.RADIUS;
-        float bottom = dummy.getY() - TargetDummy.RADIUS;
 
-        batch.setColor(dummy.isAlive() ? Color.FIREBRICK : Color.DARK_GRAY);
-        batch.draw(pixelTexture, left, bottom, diameter, diameter);
-        // Batch tint carries into later draws, so reset it after drawing colored shapes.
+        batch.setColor(dummy.isAlive() ? Color.WHITE : Color.DARK_GRAY);
+        batch.draw(
+            sprite,
+            spriteLeft,
+            spriteBottom,
+            width,
+            height
+        );
+        // Batch tint carries into later draws, so reset it after drawing the sprite.
         batch.setColor(Color.WHITE);
 
         if (dummy.isAlive()) {
             float barWidth = diameter;
             float barHeight = 0.08f;
-            float barY = dummy.getY() + TargetDummy.RADIUS + 0.15f;
+            float left = dummy.getX() - barWidth / 2f;
+            float barY = spriteBottom + height + 0.15f;
             float healthFraction = dummy.getHealth() / dummy.getMaxHealth();
 
             batch.setColor(Color.BLACK);

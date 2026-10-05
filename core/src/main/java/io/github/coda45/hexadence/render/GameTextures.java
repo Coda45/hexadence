@@ -16,6 +16,7 @@ public class GameTextures {
 
     private final Texture waterBolt;
     private final Texture zoneCircle;
+    private final Texture targetDummy;
 
     private static final int PLAYER_FRAME_WIDTH = 24;
     private static final int PLAYER_FRAME_HEIGHT = 36;
@@ -74,6 +75,7 @@ public class GameTextures {
         waterBolt = loadPixelArt("spells/water_bolt.png");
         waterBoltRegion = new TextureRegion(waterBolt);
         zoneCircle = createZoneCircle();
+        targetDummy = loadPixelArt("sprites/target_dummy.png");
     }
 
     private void loadPlayerMoveAnimations(
@@ -429,12 +431,17 @@ public class GameTextures {
         return zoneCircle;
     }
 
+    public Texture getTargetDummy() {
+        return targetDummy;
+    }
+
     public void dispose() {
         playerIdleSheet.dispose();
         waterBolt.dispose();
         lightningSheet.dispose();
         chargedPuddleSheet.dispose();
         zoneCircle.dispose();
+        targetDummy.dispose();
         fireballSheet.dispose();
         playerMoveSheet.dispose();
     }
