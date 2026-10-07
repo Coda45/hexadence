@@ -1,14 +1,20 @@
 package io.github.coda45.hexadence.world;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.net.WorldSnapshot;
 import io.github.coda45.hexadence.spell.SpellType;
 
 // Owns gameplay state and applies commands at a fixed 60 Hz rate.
@@ -25,7 +31,10 @@ public class ArenaWorld {
     private long tick;
 
     private final ArenaCollision collision;
-    private final Player player;
+    private final SpawnPoint playerSpawn;
+    //Keyed by player id. The player created by the constructor id is 0.
+    private final Map<Integer, Player> players = new LinkedHashMap<>();
+    private int nextPlayerId = 1;
     private final ArrayList<Projectile> projectiles = new ArrayList<>();
     private final List<TargetDummy> dummies = new ArrayList<>();
 
@@ -34,11 +43,14 @@ public class ArenaWorld {
     public ArenaWorld(ArenaDefinition definition) {
         collision = definition.collision();
 
-        SpawnPoint playerSpawn = definition.playerSpawn();
+        playerSpawn = definition.playerSpawn();
 
-        player = new Player(
+        players.put(
+            0,
+            new Player(
             playerSpawn.x(),
             playerSpawn.y()
+            )
         );
 
         for (SpawnPoint dummySpawn : definition.dummySpawns()) {
@@ -46,8 +58,14 @@ public class ArenaWorld {
         }
     }
 
-    // Advances exactly one STEP, regardless of the render frame rate.
+    //Single-player entry point: the one commad drives player 0.
     public StepResult step(PlayerCommand command) {
+        return step(Map.of(0, command));
+    }
+
+    // Advances exactly one STEP, regardless of the render frame rate.
+    //A player with no entry in the map this step is treated as idle.
+    public StepResult step(Map<Integer, PlayerCommand> commands) {
         tick++;
 
         List<WorldEvent> events = new ArrayList<>();
@@ -64,43 +82,14 @@ public class ArenaWorld {
             }
         }
 
-        float moveX = command.moveX();
-        float moveY = command.moveY();
-
-        float aimX = command.aimX();
-        float aimY = command.aimY();
-
-        float aimLengthSquared = (aimX * aimX) + (aimY * aimY);
-
-        // Keep the last direction when the cursor is too close to the cast point.
-        if (player.isAlive() && aimLengthSquared > 0.0001f) {
-            float aimLength = (float) Math.sqrt(aimLengthSquared);
-
-            player.setAim(
-                aimX / aimLength,
-                aimY / aimLength
+        // Aim, cooldowns and casts happen before anyone moves.
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            applyAimAndCasts(
+                entry.getValue(),
+                commandFor(commands, entry.getKey()),
+                events
             );
         }
-
-        player.updateCooldowns(STEP);
-
-        // Spawn before player movement, using the aim chosen for this step.
-        tryCast(command.castEmber(), SpellType.EMBER);
-        tryCast(command.castWater(), SpellType.WATER);
-        castLightning(command.castLightning(), events);
-
-        float lengthSquared =
-            moveX * moveX +
-            moveY * moveY;
-
-        // Cap diagonal input so it cannot move faster than a single direction.
-        if (lengthSquared > 1f) {
-            float length = (float) Math.sqrt(lengthSquared);
-
-            moveX /= length;
-            moveY /= length;
-        }
-
 
         // Move and remove projectiles through one iterator so list changes stay safe.
         Iterator<Projectile> projectileIterator =
@@ -202,11 +191,79 @@ public class ArenaWorld {
         }
 
     
-        if (player.isAlive()) {
-            float dx = moveX * PLAYER_SPEED * STEP;
-            float dy = moveY * PLAYER_SPEED * STEP;
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            movePlayer(
+                entry.getValue(),
+                commandFor(commands, entry.getKey())
+            );
+        }
+ 
+        applyChargedPuddleDischarges();
+        updateDummyRespawns();
+        return new StepResult(tick, events);
+    }
+        
+    private static PlayerCommand commandFor(
+        Map<Integer, PlayerCommand> commands,
+        int playerId
+    ) {
+        PlayerCommand command = commands.get(playerId);
+ 
+        return command != null ? command : PlayerCommand.IDLE;
+    }
 
-            float[] resolved =
+    private void applyAimAndCasts(
+        Player player,
+        PlayerCommand command,
+        List<WorldEvent> events
+    ) {
+        float aimX = command.aimX();
+        float aimY = command.aimY();
+
+        float aimLengthSquared = (aimX * aimX) + (aimY * aimY);
+
+        // Keep the last direction when the cursor is too close to the cast point.
+        if (player.isAlive() && aimLengthSquared > 0.0001f) {
+            float aimLength = (float) Math.sqrt(aimLengthSquared);
+
+            player.setAim(
+                aimX / aimLength,
+                aimY / aimLength
+            );
+        }
+
+        player.updateCooldowns(STEP);
+
+        // Spawn before player movement, using the aim chosen for this step.
+        tryCast(player,command.castEmber(), SpellType.EMBER);
+        tryCast(player, command.castWater(), SpellType.WATER);
+        castLightning(player, command.castLightning(), events);
+    }
+
+    private void movePlayer(Player player, PlayerCommand command) {
+        if (!player.isAlive()) {
+            return;
+        }
+
+        float moveX = command.moveX();
+        float moveY = command.moveY();
+
+        float lengthSquared =
+            moveX * moveX +
+            moveY * moveY;
+
+        // Cap diagonal input so it cannot move faster than a single direction.
+        if (lengthSquared > 1f) {
+            float length = (float) Math.sqrt(lengthSquared);
+
+            moveX /= length;
+            moveY /= length;
+        }
+
+        float dx = moveX * PLAYER_SPEED * STEP;
+        float dy = moveY * PLAYER_SPEED * STEP;
+
+        float[] resolved =
                 collision.resolveMovement(
                     player.getCollisionX(),
                     player.getCollisionY(),
@@ -216,11 +273,31 @@ public class ArenaWorld {
                     Player.HALF_HEIGHT
                 );
 
-                player.move(resolved[0], resolved[1]);
-            }
-        applyChargedPuddleDischarges();
-        updateDummyRespawns();
-        return new StepResult(tick, events);
+            player.move(resolved[0], resolved[1]);
+    }
+
+    // Adds a player at the arena spawn and returns its id.
+    public int addPlayer() {
+        int id = nextPlayerId++;
+ 
+        players.put(
+            id,
+            new Player(
+                playerSpawn.x(),
+                playerSpawn.y()
+            )
+        );
+ 
+        return id;
+    }
+ 
+    public void removePlayer(int id) {
+        players.remove(id);
+    }
+ 
+    // Read-only view, in join order; the Player objects are live.
+    public Map<Integer, Player> getPlayers() {
+        return Collections.unmodifiableMap(players);
     }
 
     private void createPuddleIfWater(
@@ -428,14 +505,16 @@ public class ArenaWorld {
 
             boolean discharged = false;
 
-            if (
-                player.isAlive()
-                && zoneOverlapsPlayer(zone)
-            ) {
-                player.takeDamage(DISCHARGE_DAMAGE);
-                discharged = true;
+            for (Player player : players.values()) {
+                if (
+                    player.isAlive()
+                    && zoneOverlapsPlayer(zone, player)
+                ) {
+                    player.takeDamage(DISCHARGE_DAMAGE);
+                    discharged = true;
+                }
             }
-
+            
             for (TargetDummy dummy : dummies) {
                 if (
                     dummy.isAlive()
@@ -465,7 +544,7 @@ public class ArenaWorld {
             <= overlapDistance * overlapDistance;
     }
 
-    private boolean zoneOverlapsPlayer(Zone zone) {
+    private boolean zoneOverlapsPlayer(Zone zone, Player player) {
         float collisionX = player.getCollisionX();
         float collisionY = player.getCollisionY();
 
@@ -526,11 +605,111 @@ public class ArenaWorld {
         return projectiles;
     }
 
+    // Client side: make this world mirror what the host sent.
+    // Never call step() on a world that is being fed snapshots.
+    public void applySnapshot(WorldSnapshot snapshot) {
+        tick = snapshot.tick();
+
+        // Players: update or create by id, drop anyone who left.
+        Set<Integer> present = new HashSet<>();
+
+        for (WorldSnapshot.PlayerState state : snapshot.players()) {
+            present.add(state.id());
+
+            Player player = players.computeIfAbsent(
+                state.id(),
+                id -> new Player(state.x(), state.y())
+            );
+
+            player.restoreState(
+                state.x(), state.y(),
+                state.aimX(), state.aimY(),
+                state.moving(),
+                state.health()
+            );
+
+            for (SpellType spellType : SpellType.values()) {
+                player.setCooldownRemaining(
+                    spellType,
+                    state.cooldownFor(spellType)
+                );
+            }
+        }
+
+        players.keySet().retainAll(present);
+
+        // Dummies never move, so the same index is the same dummy.
+        for (int i = 0; i < dummies.size() && i < snapshot.dummies().size(); i++) {
+            dummies.get(i).setHealth(snapshot.dummies().get(i).health());
+        }
+
+        // Projectiles are rebuilt every snapshot.
+        projectiles.clear();
+
+        for (WorldSnapshot.ProjectileState state : snapshot.projectiles()) {
+            projectiles.add(
+                new Projectile(
+                    state.x(), state.y(),
+                    state.directionX(), state.directionY(),
+                    state.spellType()
+                )
+            );
+        }
+
+        // Zones keep their Java object between snapshots so the
+        // charge flash can play; match by type and position.
+        List<Zone> previous = new ArrayList<>(zones);
+        zones.clear();
+
+        for (WorldSnapshot.ZoneState state : snapshot.zones()) {
+            Zone zone = takeMatchingZone(previous, state);
+
+            if (state.electrified() && !zone.isElectrified()) {
+                zone.electrify();
+            } else if (!state.electrified() && zone.isElectrified()) {
+                zone.discharge();
+            }
+
+            zones.add(zone);
+        }
+    }
+
+    private static Zone takeMatchingZone(
+        List<Zone> candidates,
+        WorldSnapshot.ZoneState state
+    ) {
+        for (Iterator<Zone> it = candidates.iterator(); it.hasNext();) {
+            Zone zone = it.next();
+
+            if (
+                zone.getType() == state.type()
+                && zone.getX() == state.x()
+                && zone.getY() == state.y()
+            ) {
+                it.remove();
+                return zone;
+            }
+        }
+
+        return state.type() == Zone.Type.PUDDLE
+            ? Zone.createPuddle(state.x(), state.y())
+            : Zone.createSteam(state.x(), state.y());
+    }
+
+    // Client side: lets the charge flash fade between snapshots.
+    public void updateZoneVisuals(float deltaSeconds) {
+        for (Zone zone : zones) {
+            zone.update(deltaSeconds);
+        }
+    }
+
+    //Player 0, the local player in single-player.
     public Player getPlayer() {
-        return player;
+        return players.get(0);
     }
 
     private void castLightning(
+        Player player,
         boolean requested,
         List<WorldEvent> events
     ) {
@@ -611,6 +790,7 @@ public class ArenaWorld {
     }
 
     private void tryCast(
+        Player player,
         boolean requested,
         SpellType spellType
     ) {

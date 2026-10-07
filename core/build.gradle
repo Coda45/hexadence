@@ -11,6 +11,8 @@ dependencies {
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
   }
+
+  implementation "io.netty:netty-all:4.1.138.Final"
 }
 
 test {

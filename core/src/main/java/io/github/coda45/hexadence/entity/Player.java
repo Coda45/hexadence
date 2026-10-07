@@ -131,6 +131,27 @@ public class Player {
         return y + COLLISION_OFFSET_Y;
     }
 
+    // Overwrites this player with state received from the host (clients only).
+    public void restoreState(
+        float x,
+        float y,
+        float aimX,
+        float aimY,
+        boolean moving,
+        float health
+    ) {
+        this.x = x;
+        this.y = y;
+        this.aimX = aimX;
+        this.aimY = aimY;
+        this.moving = moving;
+        this.health = Math.min(MAX_HEALTH, health);
+    }
+
+    public void setCooldownRemaining(SpellType spellType, float seconds) {
+        cooldowns.put(spellType, seconds);
+    }
+    
     public void setPosition(float x, float y) {
         this.x = x;
         this.y = y;

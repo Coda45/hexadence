@@ -43,6 +43,11 @@ public class TargetDummy {
         health = Math.max(0f, health - amount);
     }
 
+    // Overwrites health with the value received from the host (clients only).
+    public void setHealth(float health) {
+        this.health = Math.min(MAX_HEALTH, health);
+    }
+    
     public boolean isAlive() {
         return health > 0f;
     }

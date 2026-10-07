@@ -10,14 +10,16 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.input.PlayerInputController;
+import io.github.coda45.hexadence.net.NetSession;
 import io.github.coda45.hexadence.render.HudRenderer;
 import io.github.coda45.hexadence.render.WorldCamera;
 import io.github.coda45.hexadence.render.WorldRenderer;
+import io.github.coda45.hexadence.world.ArenaDefinition;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
+import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.StepResult;
 import io.github.coda45.hexadence.world.WorldEvent;
-
 
 // Coordinates input, fixed simulation steps, camera updates, and drawing.
 public class ArenaScreen implements Screen {
@@ -29,6 +31,10 @@ public class ArenaScreen implements Screen {
     private final ArenaMap arenaMap;
     private final WorldRenderer renderer;
     private final HudRenderer hudRenderer;
+    private static final int DEFAULT_PORT = 7777;
+    //null means normal single-player.
+    private final NetSession session;
+    private long lastAppliedTick = -1;
 
     private float accumulator;
 
@@ -37,9 +43,54 @@ public class ArenaScreen implements Screen {
         worldCamera = new WorldCamera();
         inputController = new PlayerInputController();
         arenaMap = new ArenaMap();
-        world = new ArenaWorld(arenaMap.createDefinition());
+        ArenaDefinition definition = arenaMap.createDefinition();
+        world = new ArenaWorld(definition);
+        session = openSession(definition);
+
+        if (session != null) {
+            //Players now come only from the host's snapshot.
+            world.removePlayer(0);
+        }
         renderer = new WorldRenderer(arenaMap);
         hudRenderer = new HudRenderer();
+    }
+
+    // Reads -Dhexadence.host=true or -Dhexadence.join=host[:port].
+    // Neither set: returns null and the game is single-player.
+    private static NetSession openSession(ArenaDefinition definition) {
+        int port = Integer.getInteger("hexadence.port", DEFAULT_PORT);
+        String join = System.getProperty("hexadence.join");
+
+        try {
+            if (Boolean.getBoolean("hexadence.host")) {
+                return NetSession.host(definition, port);
+            }
+
+            if (join != null) {
+                int colon = join.lastIndexOf(':');
+                String address = colon < 0 ? join : join.substring(0, colon);
+                int joinPort = colon < 0
+                    ? port
+                    : Integer.parseInt(join.substring(colon + 1));
+
+                return NetSession.join(address, joinPort);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while connecting", e);
+        }
+
+        return null;
+    }
+
+    // Single-player: player 0. Multiplayer: the player the host assigned us,
+    // or null until the Welcome and the first snapshot arrive.
+    private Player localPlayer() {
+        if (session == null) {
+            return world.getPlayer();
+        }
+
+        return world.getPlayers().get(session.client().getPlayerId());
     }
 
     @Override
@@ -60,27 +111,37 @@ public class ArenaScreen implements Screen {
         // Run whole 60 Hz steps and keep leftover time for the next frame.
         while (accumulator >= ArenaWorld.STEP) {
 
-            PlayerCommand command =
-                inputController.sample(
-                worldCamera.getViewport(),
-                world.getPlayer()
-            );
-
-            StepResult result = world.step(command);
-            frameEvents.addAll(result.events());
+            if (session == null) {
+                PlayerCommand command =
+                    inputController.sample(
+                    worldCamera.getViewport(),
+                    world.getPlayer()
+                    );
+                
+                StepResult result = world.step(command);
+                frameEvents.addAll(result.events());
+            } else {
+                sendLocalInput();
+            }
 
             accumulator -= ArenaWorld.STEP;
         }
 
-        // Draw the latest completed step; positions are not interpolated between steps.
-        Player player = world.getPlayer();
+        if (session != null) {
+            applyHostState(frameEvents, presentationDelta);
+        }
 
-        worldCamera.follow(
-            player.getX(),
-            player.getY(),
-            arenaMap.getWorldWidth(),
-            arenaMap.getWorldHeight()
-        );
+        // Draw the latest completed step; positions are not interpolated between steps.
+        Player player = localPlayer();
+
+        if (player != null) {
+            worldCamera.follow(
+                player.getX(),
+                player.getY(),
+                arenaMap.getWorldWidth(),
+                arenaMap.getWorldHeight()
+            );
+        }
 
         ScreenUtils.clear(
             0.05f,
@@ -98,7 +159,9 @@ public class ArenaScreen implements Screen {
             frameEvents
         );
 
-        hudRenderer.render(world.getPlayer());
+        if (player != null) {
+            hudRenderer.render(player);
+        }
     }
 
     private void resetFrameState() {
@@ -128,6 +191,11 @@ public class ArenaScreen implements Screen {
     @Override
     public void hide() {
         resetFrameState();
+
+        if (session != null) {
+            session.close();
+        }
+        
         // A replacement screen may already have installed its processor.
         if (Gdx.input.getInputProcessor() == inputController) {
             Gdx.input.setInputProcessor(null);
@@ -142,5 +210,36 @@ public class ArenaScreen implements Screen {
     @Override
     public void resume() {
         resetFrameState();
+    }
+
+    private void sendLocalInput() {
+        Player player = localPlayer();
+
+        // Still waiting for Welcome + first snapshot.
+        if (player == null) {
+            return;
+        }
+
+        session.client().send(
+            inputController.sample(worldCamera.getViewport(), player)
+        );
+    }
+
+    private void applyHostState(
+        List<WorldEvent> frameEvents,
+        float presentationDelta
+    ) {
+        var snapshot = session.client().getLatestSnapshot();
+
+        if (snapshot != null && snapshot.tick() != lastAppliedTick) {
+            world.applySnapshot(snapshot);
+            lastAppliedTick = snapshot.tick();
+        }
+
+        for (LightningStrikeEvent event : session.client().drainEvents()) {
+            frameEvents.add(event);
+        }
+
+        world.updateZoneVisuals(presentationDelta);
     }
 }

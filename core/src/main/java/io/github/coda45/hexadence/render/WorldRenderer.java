@@ -34,6 +34,7 @@ public class WorldRenderer {
     private final GameTextures textures;
     private final Texture pixelTexture;
     private float playerMoveTime;
+    private float playerSpriteHeight;
     private final int[] groundLayers;
     private final int[] lowerTerrainLayers;
     private final int[] foregroundLayers;
@@ -143,38 +144,44 @@ public class WorldRenderer {
             renderDummy(dummy);
         }
 
-        Player player = world.getPlayer();
-
-        if (player.isMoving()) {
+        //One shared walk timer; it runs while anyone is moving.
+        //Players who are standing still ignore it and show the idle frame.
+        if(
+            world.getPlayers().values().stream()
+                .anyMatch(Player::isMoving)
+        ) {
             playerMoveTime += presentationDelta;
         } else {
             playerMoveTime = 0f;
         }
 
-        FacingDirection facing =
-            FacingDirection.fromAim(
-                player.getAimX(),
-                player.getAimY()
+        for (Player player : world.getPlayers().values()){
+            FacingDirection facing =
+                FacingDirection.fromAim(
+                    player.getAimX(),
+                    player.getAimY()
+                );
+
+            TextureRegion playerRegion =
+                textures.getPlayerFrame(
+                    facing,
+                    player.isMoving(),
+                    playerMoveTime
+                );
+
+            float width =  playerRegion.getRegionWidth()  / ArenaMap.TILE_SIZE;
+            float height = playerRegion.getRegionHeight() / ArenaMap.TILE_SIZE;
+            playerSpriteHeight = height;
+
+            // Anchor the wizard at its feet; projectiles below are centered on their positions.
+            batch.draw(
+                playerRegion,
+                player.getX() - width / 2f,
+                player.getY(),
+                width,
+                height
             );
-
-        TextureRegion playerRegion =
-            textures.getPlayerFrame(
-                facing,
-                player.isMoving(),
-                playerMoveTime
-            );
-
-        float width =  playerRegion.getRegionWidth()  / ArenaMap.TILE_SIZE;
-        float height = playerRegion.getRegionHeight() / ArenaMap.TILE_SIZE;
-
-        // Anchor the wizard at its feet; projectiles below are centered on their positions.
-        batch.draw(
-            playerRegion,
-            player.getX() - width / 2f,
-            player.getY(),
-            width,
-            height
-        );
+        }   
 
         for (Projectile projectile : world.getProjectiles()) {
             float stateTime =
@@ -227,7 +234,9 @@ public class WorldRenderer {
 
         batch.begin();
         
-        renderPlayerHealthBar(player, height);
+        for (Player player : world.getPlayers().values()) {
+            renderPlayerHealthBar(player, playerSpriteHeight);
+        }
 
         for (Zone zone : world.getZones()) {
             if (zone.getType() == Zone.Type.STEAM) {
