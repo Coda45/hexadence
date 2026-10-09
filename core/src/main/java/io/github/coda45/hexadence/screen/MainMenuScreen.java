@@ -211,10 +211,11 @@ public class MainMenuScreen implements Screen {
     }
 
     private void startGame() {
-        game.setScreen(new ArenaScreen());
+        game.setScreen(
+            new HostLobbyScreen(game)
+        );
 
-        // Switching screens hides this menu but does not dispose it.
-        dispose();
+    dispose();
     }
 
     @Override

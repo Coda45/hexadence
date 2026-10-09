@@ -29,11 +29,13 @@ public class HostLobbyScreen implements Screen {
     private static final String TITLE_TEXT = "HEXADENCE";
     private static final String HEADER_TEXT = "HOST LOBBY";
     private static final String ROOM_TEXT = "ROOM CODE: 4837";
-    private static final String PLAYER_TEXT = "CHAMPIONS ASSEMBLED";
+    private static final String PLAYER_TEXT = "CHAMPIONS ASSEMBLED (1/4)";
     private static final float BUTTON_PADDING = 12f;
-    private static final float BUTTON_SPACING = 50f;
-    private final Rectangle playBounds = new Rectangle();
-    private final Rectangle exitBounds = new Rectangle();
+    //private static final float BUTTON_SPACING = 50f;
+    private static final String PLAYER_COUNT = "PLAYERS: 1 / 4";
+    private static final String MAP_TEXT = "ARENA: CRYSTAL NEXUS";
+    private final Rectangle startBounds = new Rectangle();
+    private final Rectangle leaveBounds = new Rectangle();
     private static final float MENU_WIDTH = 640f;
     private static final float MENU_HEIGHT = 360f;
 
@@ -44,7 +46,7 @@ public class HostLobbyScreen implements Screen {
     public HostLobbyScreen(HexadenceGame game) {
         this.game = game;
         batch = new SpriteBatch();
-        image = new Texture("title_screen.png");
+        image = new Texture("host_lobbytest2.png");
         font = new BitmapFont();
         font.getData().setScale(1.5f);
         layout = new GlyphLayout();
@@ -65,20 +67,20 @@ public class HostLobbyScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        float playY = MENU_HEIGHT * 0.45f;
+        float startY = 50f;
 
-        float exitY = playY - BUTTON_SPACING;
+        float leaveY = 10f;
 
         updateButtonBounds(
-            playBounds,
+            startBounds,
             START_TEXT,
-            playY
+            startY
         );
 
         updateButtonBounds(
-            exitBounds,
+            leaveBounds,
             LEAVE_TEXT,
-            exitY
+            leaveY
         );
 
         pointer.set(
@@ -100,7 +102,7 @@ public class HostLobbyScreen implements Screen {
             )
             || (
                 clicked
-                && playBounds.contains(
+                && startBounds.contains(
                     pointerX,
                     pointerY
                 )
@@ -117,7 +119,7 @@ public class HostLobbyScreen implements Screen {
             )
             || (
                 clicked
-                && exitBounds.contains(
+                && leaveBounds.contains(
                     pointerX,
                     pointerY
                 )
@@ -145,13 +147,14 @@ public class HostLobbyScreen implements Screen {
             MENU_WIDTH,
             MENU_HEIGHT
         );
+        
         layout.setText(font, TITLE_TEXT);
 
         font.draw(
             batch,
             TITLE_TEXT,
             (MENU_WIDTH - layout.width) / 2f,
-            320f
+            340f
         );
         layout.setText(font, HEADER_TEXT);
 
@@ -159,12 +162,85 @@ public class HostLobbyScreen implements Screen {
             batch,
             HEADER_TEXT,
             (MENU_WIDTH - layout.width) / 2f,
-            290f
+            310f
         );
+        
+        layout.setText(font, ROOM_TEXT);
+        
+        font.setColor(Color.CYAN);
+        
+        font.draw(
+            batch,
+            ROOM_TEXT,
+            (MENU_WIDTH - layout.width) / 2f,
+            275f
+        );
+
+        font.setColor(Color.WHITE);
+        
+        layout.setText(font, PLAYER_TEXT);
+
+        font.draw(
+            batch,
+            PLAYER_TEXT,
+            (MENU_WIDTH - layout.width) / 2f,
+            230f
+        );
+
+        layout.setText(font, PLAYER_COUNT);
+
+        font.draw(
+            batch,
+            PLAYER_COUNT,
+            (MENU_WIDTH - layout.width) / 2f,
+            205f
+        );
+
+        font.setColor(Color.GOLD);
+        
+        font.draw(
+            batch,
+            "[HOST] Victor",
+            220f,
+            170f
+        );
+
+        font.setColor(Color.WHITE);
+
+        font.draw(
+            batch,
+            "[EMPTY SLOT]",
+            220f,
+            135f
+        );
+
+        font.draw(
+            batch,
+            "[EMPTY SLOT]",
+            220f,
+            100f
+        );
+
+        font.draw(
+            batch,
+            "[EMPTY SLOT]",
+            220f,
+            65f
+        );
+
+        layout.setText(font, MAP_TEXT);
+
+        font.draw(
+            batch,
+            MAP_TEXT,
+            (MENU_WIDTH - layout.width) / 2f,
+            110f
+        );
+
         drawButton(
             START_TEXT,
-            playY,
-            playBounds.contains(
+            startY,
+            startBounds.contains(
                 pointerX,
                 pointerY
             )
@@ -172,8 +248,8 @@ public class HostLobbyScreen implements Screen {
 
         drawButton(
             LEAVE_TEXT,
-            exitY,
-            exitBounds.contains(
+            leaveY,
+            leaveBounds.contains(
                 pointerX,
                 pointerY
             )
