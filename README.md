@@ -56,6 +56,39 @@ cd hexadence
 ./gradlew build
 ./gradlew lwjgl3:run
 ```
+### Multiplayer (prototype)
+
+One player hosts and plays, and up to three others join. Build the jar once, then start each copy from the `assets` folder. Start the host first.
+
+**Windows (PowerShell)**
+
+```powershell
+.\gradlew.bat lwjgl3:jar
+cd assets
+
+# Host
+java "-Dhexadence.host=true" -jar ..\lwjgl3\build\libs\Hexadence-1.0.0.jar
+
+# Joiner (in another terminal, also from assets; use the host's IP instead of localhost on a different machine)
+java "-Dhexadence.join=localhost:7777" -jar ..\lwjgl3\build\libs\Hexadence-1.0.0.jar
+```
+
+**Linux / macOS**
+
+```bash
+./gradlew lwjgl3:jar
+cd assets
+
+# Host
+java -Dhexadence.host=true -jar ../lwjgl3/build/libs/Hexadence-1.0.0.jar
+
+# Joiner (in another terminal, also from assets)
+java -Dhexadence.join=localhost:7777 -jar ../lwjgl3/build/libs/Hexadence-1.0.0.jar
+```
+
+On macOS, add `-XstartOnFirstThread` before `-jar`. The port defaults to 7777 (`-Dhexadence.port=...` on the host changes it). Without either option the game runs as normal single-player.
+
+To play across machines on the same network, joiners use the host's local IP address instead of localhost; playing over the internet isn't supported yet.
 
 ## Development Tools
 

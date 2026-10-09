@@ -68,9 +68,9 @@ public class GameTextures {
         );
         fireballSheet = loadPixelArt("spells/fireball.png");
         fireballAnimation = createFireballAnimation(fireballSheet);
-        lightningSheet = loadPixelArt("spells/lightning.png");
+        lightningSheet = loadPixelArt("spells/Lightning.png");
         lightningAnimations = createLightningAnimations(lightningSheet);
-        chargedPuddleSheet = loadPixelArt("spells/chargedpuddle.png");
+        chargedPuddleSheet = loadPixelArt("spells/chargedPuddle.png");
         chargedPuddleAnimations = createChargedPuddleAnimations(chargedPuddleSheet);
         waterBolt = loadPixelArt("spells/water_bolt.png");
         waterBoltRegion = new TextureRegion(waterBolt);
@@ -198,7 +198,7 @@ public class GameTextures {
 
             throw new IllegalStateException(
                 "Expected eight rows of Lightning animations in: "
-                    + "spells/lightning.png"
+                    + "spells/Lightning.png"
             );
         }
 
@@ -302,7 +302,7 @@ public class GameTextures {
 
             throw new IllegalStateException(
                 "Expected rows of eight 48x48 frames in: "
-                    + "spells/chargedpuddle.png"
+                    + "spells/chargedPuddle.png"
             );
         }
 
