@@ -52,10 +52,16 @@ def os = System.properties['os.name'].toLowerCase(Locale.ROOT)
 
 run {
   workingDir = rootProject.file('assets').path
-// You can uncomment the next line if your IDE claims a build failure even when the app closed properly.
+  //You can uncomment the next line if your IDE claims a build failure even when the app closed properly.
   //setIgnoreExitValue(true)
   jvmArgs += "--enable-native-access=ALL-UNNAMED"
   if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+  // Forward -Dhexadence.* from the gradlew command line to the game.
+  System.properties.each { key, value ->
+    if (key.toString().startsWith('hexadence.')) {
+      systemProperty key.toString(), value
+    }
+  }
 }
 
 jar {
