@@ -9,6 +9,7 @@ public class Projectile {
     private float y;
     private float distanceTraveled;
     private final SpellType spellType;
+    private final int ownerPlayerId;
 
     private final float directionX;
     private final float directionY;
@@ -19,13 +20,15 @@ public class Projectile {
         float y,
         float directionX,
         float directionY,
-        SpellType spellType
+        SpellType spellType,
+        int ownerPlayerId
     ) {
         this.x = x;
         this.y = y;
         this.directionX = directionX;
         this.directionY = directionY;
         this.spellType = spellType;
+        this.ownerPlayerId = ownerPlayerId;
     }
 
     // Moves by a world-unit distance and records distance traveled, including the spawn step.
@@ -45,6 +48,10 @@ public class Projectile {
 
     public float getDistanceTraveled() {
         return distanceTraveled;
+    }
+
+    public int getOwnerPlayerId() {
+        return ownerPlayerId;
     }
 
     public float getDirectionX() {

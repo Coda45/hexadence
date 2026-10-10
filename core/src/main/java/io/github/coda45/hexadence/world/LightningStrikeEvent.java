@@ -14,7 +14,8 @@ public record LightningStrikeEvent(
         RANGE_LIMIT,
         TERRAIN,
         PUDDLE,
-        DUMMY
+        DUMMY,
+        PLAYER
     }
 
     public LightningStrikeEvent {

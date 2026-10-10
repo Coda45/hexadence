@@ -85,6 +85,7 @@ public class ArenaWorld {
         // Aim, cooldowns and casts happen before anyone moves.
         for (Map.Entry<Integer, Player> entry : players.entrySet()) {
             applyAimAndCasts(
+                entry.getKey(),
                 entry.getValue(),
                 commandFor(commands, entry.getKey()),
                 events
@@ -158,6 +159,17 @@ public class ArenaWorld {
                     break;
                 }
 
+                if (applyProjectilePlayerHit(projectile)) {
+                    createPuddleIfWater(
+                        projectile,
+                        projectile.getX(),
+                        projectile.getY()
+                    );
+
+                    terminated = true;
+                    break;
+                }
+
                 if (applyProjectileDummyHit(projectile)) {
                     createPuddleIfWater(
                         projectile,
@@ -213,6 +225,7 @@ public class ArenaWorld {
     }
 
     private void applyAimAndCasts(
+        int playerId,
         Player player,
         PlayerCommand command,
         List<WorldEvent> events
@@ -235,9 +248,9 @@ public class ArenaWorld {
         player.updateCooldowns(STEP);
 
         // Spawn before player movement, using the aim chosen for this step.
-        tryCast(player,command.castEmber(), SpellType.EMBER);
-        tryCast(player, command.castWater(), SpellType.WATER);
-        castLightning(player, command.castLightning(), events);
+        tryCast(playerId, player, command.castEmber(), SpellType.EMBER);
+        tryCast(playerId, player, command.castWater(), SpellType.WATER);
+        castLightning(playerId, player, command.castLightning(), events);
     }
 
     private void movePlayer(Player player, PlayerCommand command) {
@@ -411,6 +424,7 @@ public class ArenaWorld {
     }
 
     private LightningHit findLightningHit(
+        int ownerPlayerId,
         float originX,
         float originY,
         float directionX,
@@ -456,6 +470,52 @@ public class ArenaWorld {
 
             LightningHit candidate =
                 LightningHit.puddle(distance, zone);
+
+            if (candidate.isCloserThan(nearest)) {
+                nearest = candidate;
+            }
+        }
+
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            if (entry.getKey() == ownerPlayerId) {
+                continue;
+            }
+
+            Player target = entry.getValue();
+
+            if (!target.isAlive()) {
+                continue;
+            }
+
+            float centerX = target.getCombatCenterX();
+            float centerY = target.getCombatCenterY();
+
+            float distance =
+                CombatGeometry.rayAabbEntryDistance(
+                    originX,
+                    originY,
+                    directionX,
+                    directionY,
+                    maxDistance,
+                    centerX
+                        - Player.COMBAT_HALF_WIDTH
+                        - LIGHTNING_HALF_WIDTH,
+                    centerY
+                        - Player.COMBAT_HALF_HEIGHT
+                        - LIGHTNING_HALF_WIDTH,
+                    centerX
+                        + Player.COMBAT_HALF_WIDTH
+                        + LIGHTNING_HALF_WIDTH,
+                    centerY
+                        + Player.COMBAT_HALF_HEIGHT
+                        + LIGHTNING_HALF_WIDTH
+                );
+
+            if (Float.isInfinite(distance)) {
+                continue;
+            }
+
+            LightningHit candidate = LightningHit.player(distance, target);
 
             if (candidate.isCloserThan(nearest)) {
                 nearest = candidate;
@@ -649,9 +709,12 @@ public class ArenaWorld {
         for (WorldSnapshot.ProjectileState state : snapshot.projectiles()) {
             projectiles.add(
                 new Projectile(
-                    state.x(), state.y(),
-                    state.directionX(), state.directionY(),
-                    state.spellType()
+                    state.x(),
+                    state.y(),
+                    state.directionX(),
+                    state.directionY(),
+                    state.spellType(),
+                    state.ownerPlayerId()
                 )
             );
         }
@@ -709,6 +772,7 @@ public class ArenaWorld {
     }
 
     private void castLightning(
+        int playerId,
         Player player,
         boolean requested,
         List<WorldEvent> events
@@ -731,6 +795,7 @@ public class ArenaWorld {
 
         LightningHit hit =
             findLightningHit(
+                playerId,
                 originX,
                 originY,
                 directionX,
@@ -746,6 +811,11 @@ public class ArenaWorld {
                     puddle.electrify();
                 }
             }
+
+            case PLAYER ->
+                hit.player().takeDamage(
+                    lightning.getDamage()
+                );
 
             case DUMMY ->
                 hit.dummy().takeDamage(
@@ -774,6 +844,9 @@ public class ArenaWorld {
                 case PUDDLE ->
                     LightningStrikeEvent.EndReason.PUDDLE;
 
+                case PLAYER ->
+                    LightningStrikeEvent.EndReason.PLAYER;
+
                 case DUMMY ->
                     LightningStrikeEvent.EndReason.DUMMY;
             };
@@ -789,12 +862,75 @@ public class ArenaWorld {
         );
     }
 
+    private boolean applyProjectilePlayerHit(
+        Projectile projectile
+    ) {
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            int targetPlayerId = entry.getKey();
+            Player target = entry.getValue();
+
+            if (
+                targetPlayerId == projectile.getOwnerPlayerId()
+                || !target.isAlive()
+            ) {
+                continue;
+            }
+
+            if (!projectileOverlapsPlayer(projectile, target)) {
+                continue;
+            }
+
+            target.takeDamage(
+                projectile.getSpellType().getDamage()
+            );
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean projectileOverlapsPlayer(
+        Projectile projectile,
+        Player player
+    ) {
+        float centerX = player.getCombatCenterX();
+        float centerY = player.getCombatCenterY();
+
+        float closestX = Math.max(
+            centerX - Player.COMBAT_HALF_WIDTH,
+            Math.min(
+                projectile.getX(),
+                centerX + Player.COMBAT_HALF_WIDTH
+            )
+        );
+
+        float closestY = Math.max(
+            centerY - Player.COMBAT_HALF_HEIGHT,
+            Math.min(
+                projectile.getY(),
+                centerY + Player.COMBAT_HALF_HEIGHT
+            )
+        );
+
+        float dx = projectile.getX() - closestX;
+        float dy = projectile.getY() - closestY;
+
+        return dx * dx + dy * dy
+            <= PROJECTILE_RADIUS * PROJECTILE_RADIUS;
+    }
+
     private void tryCast(
+        int playerId,
         Player player,
         boolean requested,
         SpellType spellType
     ) {
-        if (!player.isAlive() || !requested || !player.isSpellReady(spellType)) {
+        if (
+            !player.isAlive()
+            || !requested
+            || !player.isSpellReady(spellType)
+        ) {
             return;
         }
 
@@ -804,7 +940,8 @@ public class ArenaWorld {
                 player.getCastY(),
                 player.getAimX(),
                 player.getAimY(),
-                spellType
+                spellType,
+                playerId
             )
         );
 

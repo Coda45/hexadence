@@ -1,26 +1,29 @@
 package io.github.coda45.hexadence.world;
 
+import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 
-// Internal gameplay result, entity references never enter presentation events.
 record LightningHit(
     Kind kind,
     float distance,
     Zone zone,
-    TargetDummy dummy
+    TargetDummy dummy,
+    Player player
 ) {
     enum Kind {
         NONE,
         TERRAIN,
         PUDDLE,
-        DUMMY
+        DUMMY,
+        PLAYER
     }
 
     static LightningHit none() {
         return new LightningHit(
             Kind.NONE,
             CombatGeometry.NO_HIT,
+            null,
             null,
             null
         );
@@ -31,18 +34,17 @@ record LightningHit(
             Kind.TERRAIN,
             distance,
             null,
+            null,
             null
         );
     }
 
-    static LightningHit puddle(
-        float distance,
-        Zone zone
-    ) {
+    static LightningHit puddle(float distance, Zone zone) {
         return new LightningHit(
             Kind.PUDDLE,
             distance,
             zone,
+            null,
             null
         );
     }
@@ -55,7 +57,21 @@ record LightningHit(
             Kind.DUMMY,
             distance,
             null,
-            dummy
+            dummy,
+            null
+        );
+    }
+
+    static LightningHit player(
+        float distance,
+        Player player
+    ) {
+        return new LightningHit(
+            Kind.PLAYER,
+            distance,
+            null,
+            null,
+            player
         );
     }
 

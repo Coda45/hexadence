@@ -58,6 +58,7 @@ public final class SnapshotFactory {
         for (Projectile projectile : world.getProjectiles()) {
             projectiles.add(new WorldSnapshot.ProjectileState(
                 projectile.getSpellType(),
+                projectile.getOwnerPlayerId(),
                 projectile.getX(),
                 projectile.getY(),
                 projectile.getDirectionX(),

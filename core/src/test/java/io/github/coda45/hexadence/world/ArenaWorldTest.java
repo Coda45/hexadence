@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
+import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.spell.SpellType;
@@ -398,6 +399,76 @@ class ArenaWorldTest {
             secondResult.events().isEmpty(),
             "A rejected cooldown cast must not create presentation"
         );
+    }
+
+    @Test
+    void emberDamagesAnotherPlayerButNotItsCaster() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of()
+        );
+
+        Player caster = world.getPlayer();
+
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+        target.setPosition(3f, 1f);
+
+        float casterHealthBefore = caster.getHealth();
+        float targetHealthBefore = target.getHealth();
+
+        PlayerCommand castEmberRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                true, false, false
+            );
+
+        world.step(castEmberRight);
+
+        for (int i = 0; i < 20; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(casterHealthBefore, caster.getHealth(), EPSILON);
+        assertEquals(targetHealthBefore - SpellType.EMBER.getDamage(), target.getHealth(), EPSILON);
+    }
+
+    @Test
+    void lightningDamagesNearestOtherPlayer() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of()
+        );
+
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+        target.setPosition(3f, 1f);
+
+        float healthBefore = target.getHealth();
+
+        StepResult result =
+            world.step(
+                new PlayerCommand(
+                    0f, 0f,
+                    1f, 0f,
+                    false, false, true
+                )
+            );
+
+        assertEquals(
+            healthBefore - SpellType.LIGHTNING.getDamage(),
+            target.getHealth(),
+            EPSILON
+        );
+
+        LightningStrikeEvent strike =
+            assertInstanceOf(
+                LightningStrikeEvent.class,
+                result.events().get(0)
+            );
+
+        assertEquals(LightningStrikeEvent.EndReason.PLAYER, strike.endReason());
     }
 
     private ArenaWorld createEmptyWorld(

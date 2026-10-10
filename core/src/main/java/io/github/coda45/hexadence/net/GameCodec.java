@@ -166,6 +166,7 @@ public final class GameCodec {
         out.writeShort(snapshot.projectiles().size());
         for (WorldSnapshot.ProjectileState p : snapshot.projectiles()) {
             out.writeByte(p.spellType().ordinal());
+            out.writeInt(p.ownerPlayerId());
             out.writeFloat(p.x());
             out.writeFloat(p.y());
             out.writeFloat(p.directionX());
@@ -226,6 +227,7 @@ public final class GameCodec {
         for (int i = 0; i < projectileCount; i++) {
             projectiles.add(new WorldSnapshot.ProjectileState(
                 SpellType.values()[in.readUnsignedByte()],
+                in.readInt(),
                 in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),

@@ -60,6 +60,7 @@ public record WorldSnapshot(
     // The direction is fixed at cast time, so clients can draw it as-is.
     public record ProjectileState(
         SpellType spellType,
+        int ownerPlayerId,
         float x,
         float y,
         float directionX,

@@ -23,6 +23,11 @@ public class Player {
     public static final float COLLISION_OFFSET_X = 0f;
     public static final float COLLISION_OFFSET_Y = 0.24f;
 
+    // Combat covers the visible body. Movement collision only covers the feet.
+    public static final float COMBAT_HALF_WIDTH = 0.365f;
+    public static final float COMBAT_HALF_HEIGHT = 0.75f;
+    public static final float COMBAT_OFFSET_Y = 0.75f;
+
     // Center of the 36-pixel-tall wizard sprite at 24 pixels per world unit.
     private static final float CAST_OFFSET_Y = 0.75f;
 
@@ -129,6 +134,14 @@ public class Player {
 
     public float getCollisionY() {
         return y + COLLISION_OFFSET_Y;
+    }
+
+    public float getCombatCenterX() {
+        return x;
+    }
+
+    public float getCombatCenterY() {
+        return y + COMBAT_OFFSET_Y;
     }
 
     // Overwrites this player with state received from the host (clients only).
