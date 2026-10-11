@@ -32,7 +32,7 @@ public class HostLobbyScreen implements Screen {
     private static final String PLAYER_TEXT = "CHAMPIONS ASSEMBLED (1/4)";
     private static final float BUTTON_PADDING = 12f;
     //private static final float BUTTON_SPACING = 50f;
-    private static final String PLAYER_COUNT = "PLAYERS: 1 / 4";
+    //private static final String PLAYER_COUNT = "PLAYERS: 1 / 4";
     private static final String MAP_TEXT = "ARENA: CRYSTAL NEXUS";
     private final Rectangle startBounds = new Rectangle();
     private final Rectangle leaveBounds = new Rectangle();
@@ -67,9 +67,9 @@ public class HostLobbyScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        float startY = 50f;
+        float startY = 45f;
 
-        float leaveY = 10f;
+        float leaveY = 15f;
 
         updateButtonBounds(
             startBounds,
@@ -126,7 +126,8 @@ public class HostLobbyScreen implements Screen {
             );
 
         if (exitRequested) {
-            Gdx.app.exit();
+            game.setScreen(new MainMenuScreen(game));
+            dispose();
             return;
         }
 
@@ -187,45 +188,37 @@ public class HostLobbyScreen implements Screen {
             230f
         );
 
-        layout.setText(font, PLAYER_COUNT);
-
-        font.draw(
-            batch,
-            PLAYER_COUNT,
-            (MENU_WIDTH - layout.width) / 2f,
-            205f
-        );
 
         font.setColor(Color.GOLD);
         
         font.draw(
             batch,
-            "[HOST] Victor",
+            "[HOST]",
             220f,
-            170f
+            180f
         );
 
         font.setColor(Color.WHITE);
 
         font.draw(
             batch,
-            "[EMPTY SLOT]",
+            "+ OPEN PLAYER SLOT +",
             220f,
-            135f
+            145f
         );
 
         font.draw(
             batch,
-            "[EMPTY SLOT]",
+            "+ OPEN PLAYER SLOT +",
             220f,
-            100f
+            110f
         );
 
         font.draw(
             batch,
-            "[EMPTY SLOT]",
+            "+ OPEN PLAYER SLOT +",
             220f,
-            65f
+            75f
         );
 
         layout.setText(font, MAP_TEXT);
@@ -234,7 +227,7 @@ public class HostLobbyScreen implements Screen {
             batch,
             MAP_TEXT,
             (MENU_WIDTH - layout.width) / 2f,
-            110f
+            95f
         );
 
         drawButton(
