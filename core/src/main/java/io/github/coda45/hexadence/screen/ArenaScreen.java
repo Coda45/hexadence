@@ -42,7 +42,12 @@ public class ArenaScreen implements Screen {
         
         worldCamera = new WorldCamera();
         inputController = new PlayerInputController();
-        arenaMap = new ArenaMap();
+        String mapPath = System.getProperty(
+        "hexadence.map",
+        "maps/dungeon_map.tmx"
+        );
+
+        arenaMap = new ArenaMap(mapPath);
         ArenaDefinition definition = arenaMap.createDefinition();
         world = new ArenaWorld(definition);
         session = openSession(definition);

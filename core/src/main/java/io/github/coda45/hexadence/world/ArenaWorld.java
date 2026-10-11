@@ -21,6 +21,7 @@ import io.github.coda45.hexadence.spell.SpellType;
 public class ArenaWorld {
 
     private static final float PLAYER_SPEED = 5f;
+    private static final float PLAYER_RESPAWN_DELAY = 3f;
     public static final float STEP = 1f / 60f;
     // Temporary combat values for the target dummy test.
     private static final float PROJECTILE_RADIUS = 0.12f;
@@ -31,7 +32,8 @@ public class ArenaWorld {
     private long tick;
 
     private final ArenaCollision collision;
-    private final SpawnPoint playerSpawn;
+    private final List<SpawnPoint> playerSpawns;
+    private final Map<Integer, SpawnPoint> assignedPlayerSpawns = new LinkedHashMap<>();
     //Keyed by player id. The player created by the constructor id is 0.
     private final Map<Integer, Player> players = new LinkedHashMap<>();
     private int nextPlayerId = 1;
@@ -42,16 +44,9 @@ public class ArenaWorld {
 
     public ArenaWorld(ArenaDefinition definition) {
         collision = definition.collision();
+        playerSpawns = definition.playerSpawns();
 
-        playerSpawn = definition.playerSpawn();
-
-        players.put(
-            0,
-            new Player(
-            playerSpawn.x(),
-            playerSpawn.y()
-            )
-        );
+        addPlayerAtAvailableSpawn(0);
 
         for (SpawnPoint dummySpawn : definition.dummySpawns()) {
             addDummyAtSpawn(dummySpawn);
@@ -211,6 +206,7 @@ public class ArenaWorld {
         }
  
         applyChargedPuddleDischarges();
+        updatePlayerRespawns();
         updateDummyRespawns();
         return new StepResult(tick, events);
     }
@@ -292,20 +288,15 @@ public class ArenaWorld {
     // Adds a player at the arena spawn and returns its id.
     public int addPlayer() {
         int id = nextPlayerId++;
- 
-        players.put(
-            id,
-            new Player(
-                playerSpawn.x(),
-                playerSpawn.y()
-            )
-        );
- 
+
+        addPlayerAtAvailableSpawn(id);
+
         return id;
     }
  
     public void removePlayer(int id) {
         players.remove(id);
+        assignedPlayerSpawns.remove(id);
     }
  
     // Read-only view, in join order; the Player objects are live.
@@ -326,8 +317,7 @@ public class ArenaWorld {
         }
 
         zones.add(
-            Zone.createPuddle(x, y)
-        );
+            Zone.createPuddle(x, y, projectile.getOwnerPlayerId()));
     }
 
     public List<Zone> getZones() {
@@ -371,7 +361,8 @@ public class ArenaWorld {
                     i,
                     Zone.createSteam(
                         zone.getX(),
-                        zone.getY()
+                        zone.getY(),
+                        projectile.getOwnerPlayerId()
                     )
                 );
 
@@ -515,7 +506,7 @@ public class ArenaWorld {
                 continue;
             }
 
-            LightningHit candidate = LightningHit.player(distance, target);
+            LightningHit candidate = LightningHit.player(distance, entry.getKey(), target);
 
             if (candidate.isCloserThan(nearest)) {
                 nearest = candidate;
@@ -565,12 +556,19 @@ public class ArenaWorld {
 
             boolean discharged = false;
 
-            for (Player player : players.values()) {
+            for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+                Player target = entry.getValue();
+
                 if (
-                    player.isAlive()
-                    && zoneOverlapsPlayer(zone, player)
+                    target.isAlive()
+                    && zoneOverlapsPlayer(zone, target)
                 ) {
-                    player.takeDamage(DISCHARGE_DAMAGE);
+                    damagePlayer(
+                        entry.getKey(),
+                        DISCHARGE_DAMAGE,
+                        zone.getDamageOwnerPlayerId()
+                    );
+
                     discharged = true;
                 }
             }
@@ -637,6 +635,29 @@ public class ArenaWorld {
             <= zone.getRadius() * zone.getRadius();
     }
 
+    private void addPlayerAtAvailableSpawn(int playerId) {
+        SpawnPoint spawn = findAvailablePlayerSpawn();
+
+        players.put(
+            playerId,
+            new Player(spawn.x(), spawn.y())
+        );
+
+        assignedPlayerSpawns.put(playerId, spawn);
+    }
+
+    private SpawnPoint findAvailablePlayerSpawn() {
+        for (SpawnPoint spawn : playerSpawns) {
+            if (!assignedPlayerSpawns.containsValue(spawn)) {
+                return spawn;
+            }
+        }
+
+        throw new IllegalStateException(
+            "No player spawn is available"
+        );
+    }
+
     private void addDummyAtSpawn(SpawnPoint spawn) {
         dummies.add(
             new TargetDummy(
@@ -644,6 +665,31 @@ public class ArenaWorld {
                 spawn.y()
             )
         );
+    }
+
+    private void updatePlayerRespawns() {
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            int playerId = entry.getKey();
+            Player player = entry.getValue();
+
+            if (player.isAlive()) {
+                continue;
+            }
+
+            if (!player.hasRespawnPending()) {
+                player.beginRespawn(PLAYER_RESPAWN_DELAY);
+            }
+
+            SpawnPoint spawn = assignedPlayerSpawns.get(playerId);
+
+            if (spawn != null) {
+                player.updateRespawn(
+                    STEP,
+                    spawn.x(),
+                    spawn.y()
+                );
+            }
+        }
     }
 
     private void updateDummyRespawns() {
@@ -682,10 +728,15 @@ public class ArenaWorld {
             );
 
             player.restoreState(
-                state.x(), state.y(),
-                state.aimX(), state.aimY(),
+                state.x(),
+                state.y(),
+                state.aimX(),
+                state.aimY(),
                 state.moving(),
-                state.health()
+                state.health(),
+                state.respawnRemaining(),
+                state.kills(),
+                state.deaths()
             );
 
             for (SpellType spellType : SpellType.values()) {
@@ -727,11 +778,19 @@ public class ArenaWorld {
         for (WorldSnapshot.ZoneState state : snapshot.zones()) {
             Zone zone = takeMatchingZone(previous, state);
 
+            zone.setDamageOwnerPlayerId(state.damageOwnerPlayerId());
+
             if (state.electrified() && !zone.isElectrified()) {
-                zone.electrify();
-            } else if (!state.electrified() && zone.isElectrified()) {
+                zone.electrify(state.damageOwnerPlayerId());
+            } else if (
+                !state.electrified()
+                && zone.isElectrified()
+            ) {
                 zone.discharge();
             }
+
+            // Do this after electrify/discharge because those methods reset the timer.
+            zone.setChargeFlashRemaining( state.chargeFlashRemaining());
 
             zones.add(zone);
         }
@@ -755,8 +814,8 @@ public class ArenaWorld {
         }
 
         return state.type() == Zone.Type.PUDDLE
-            ? Zone.createPuddle(state.x(), state.y())
-            : Zone.createSteam(state.x(), state.y());
+            ? Zone.createPuddle(state.x(), state.y(), state.damageOwnerPlayerId())
+            : Zone.createSteam(state.x(), state.y(), state.damageOwnerPlayerId());
     }
 
     // Client side: lets the charge flash fade between snapshots.
@@ -808,13 +867,15 @@ public class ArenaWorld {
                 Zone puddle = hit.zone();
 
                 if (!puddle.isElectrified()) {
-                    puddle.electrify();
+                    puddle.electrify(playerId);
                 }
             }
 
             case PLAYER ->
-                hit.player().takeDamage(
-                    lightning.getDamage()
+                damagePlayer(
+                    hit.playerId(),
+                    lightning.getDamage(),
+                    playerId
                 );
 
             case DUMMY ->
@@ -880,8 +941,10 @@ public class ArenaWorld {
                 continue;
             }
 
-            target.takeDamage(
-                projectile.getSpellType().getDamage()
+            damagePlayer(
+                targetPlayerId,
+                projectile.getSpellType().getDamage(),
+                projectile.getOwnerPlayerId()
             );
 
             return true;
@@ -946,6 +1009,41 @@ public class ArenaWorld {
         );
 
         player.startCooldown(spellType);
+    }
+
+    public int getPlayerCapacity() {
+        return playerSpawns.size();
+    }
+
+    private void damagePlayer(
+        int victimPlayerId,
+        float amount,
+        int attackerPlayerId
+    ) {
+        Player victim = players.get(victimPlayerId);
+
+        if (victim == null || !victim.isAlive()) {
+            return;
+        }
+
+        victim.takeDamage(amount);
+
+        if (victim.isAlive()) {
+            return;
+        }
+
+        victim.recordDeath();
+        victim.beginRespawn(PLAYER_RESPAWN_DELAY);
+
+        if (attackerPlayerId == victimPlayerId) {
+            return;
+        }
+
+        Player attacker = players.get(attackerPlayerId);
+
+        if (attacker != null) {
+            attacker.recordKill();
+        }
     }
 
     // Returns the live list for rendering, including dead dummies awaiting respawn.

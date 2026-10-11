@@ -33,6 +33,7 @@ public class WorldRenderer {
     private final SpriteBatch batch;
     private final GameTextures textures;
     private final Texture pixelTexture;
+    private float projectileAnimationTime;
     private float playerMoveTime;
     private float playerSpriteHeight;
     private final int[] groundLayers;
@@ -102,6 +103,8 @@ public class WorldRenderer {
         consumeEvents(frameEvents);
         // TMX order: Ground, DecorationGround, Walls, DecorationOverlay, Spawns.
 
+        projectileAnimationTime += presentationDelta;
+
         updateChargedPuddleVisuals(
             world,
             presentationDelta
@@ -146,9 +149,12 @@ public class WorldRenderer {
 
         //One shared walk timer; it runs while anyone is moving.
         //Players who are standing still ignore it and show the idle frame.
-        if(
-            world.getPlayers().values().stream()
-                .anyMatch(Player::isMoving)
+        if (world.getPlayers().values().stream()
+                .anyMatch(
+                    player ->
+                        player.isAlive()
+                        && player.isMoving()
+                )
         ) {
             playerMoveTime += presentationDelta;
         } else {
@@ -156,6 +162,9 @@ public class WorldRenderer {
         }
 
         for (Player player : world.getPlayers().values()){
+            if (!player.isAlive()) {
+                continue;
+            }
             FacingDirection facing =
                 FacingDirection.fromAim(
                     player.getAimX(),
@@ -184,14 +193,10 @@ public class WorldRenderer {
         }   
 
         for (Projectile projectile : world.getProjectiles()) {
-            float stateTime =
-                projectile.getDistanceTraveled()
-                    / projectile.getSpellType().getSpeed();
-
             TextureRegion projectileRegion =
                 textures.getProjectileFrame(
                     projectile.getSpellType(),
-                    stateTime
+                    projectileAnimationTime
                 );
 
             float projectileWidth =
@@ -235,6 +240,9 @@ public class WorldRenderer {
         batch.begin();
         
         for (Player player : world.getPlayers().values()) {
+            if (!player.isAlive()) {
+                continue;
+            }
             renderPlayerHealthBar(player, playerSpriteHeight);
         }
 

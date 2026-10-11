@@ -37,6 +37,9 @@ public final class SnapshotFactory {
                 player.getAimY(),
                 player.isMoving(),
                 player.getHealth(),
+                player.getRespawnRemaining(),
+                player.getKills(),
+                player.getDeaths(),
                 player.getCooldownRemaining(SpellType.EMBER),
                 player.getCooldownRemaining(SpellType.WATER),
                 player.getCooldownRemaining(SpellType.LIGHTNING)
@@ -73,7 +76,9 @@ public final class SnapshotFactory {
                 zone.getType(),
                 zone.getX(),
                 zone.getY(),
-                zone.isElectrified()
+                zone.isElectrified(),
+                zone.getChargeFlashRemaining(),
+                zone.getDamageOwnerPlayerId()
             ));
         }
 

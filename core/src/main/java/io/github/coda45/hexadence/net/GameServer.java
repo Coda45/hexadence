@@ -62,7 +62,12 @@ public class GameServer {
     // ---- Called by ServerHandler, always on the game thread ----
 
     int join(Channel channel) {
-        if (channels.size() >= MAX_PLAYERS) {
+        int roomCapacity = Math.min(
+            MAX_PLAYERS,
+            world.getPlayerCapacity()
+        );
+
+        if (channels.size() >= roomCapacity) {
             System.out.println("Rejected " + channel.remoteAddress() + ": game is full");
             channel.close();
             return -1;

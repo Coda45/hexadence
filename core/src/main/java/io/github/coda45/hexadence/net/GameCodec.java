@@ -63,6 +63,11 @@ public final class GameCodec {
             Object message,
             ByteBuf out
         ) {
+            if (message == null) {
+                throw new IllegalArgumentException(
+                    "Cannot encode a null message"
+                );
+            }
             if (message instanceof PlayerCommand command) {
                 writeCommand(out, command);
             } else if (message instanceof Welcome welcome) {
@@ -72,7 +77,7 @@ public final class GameCodec {
                 writeSnapshot(out, snapshot);
             } else {
                 throw new IllegalArgumentException(
-                    "Unsupported message: " + message.getClass()
+                    "Unsupported message: " + message.getClass().getName()
                 );
             }
         }
@@ -151,6 +156,9 @@ public final class GameCodec {
             out.writeFloat(p.aimY());
             out.writeBoolean(p.moving());
             out.writeFloat(p.health());
+            out.writeFloat(p.respawnRemaining());
+            out.writeInt(p.kills());
+            out.writeInt(p.deaths());
             out.writeFloat(p.emberCooldown());
             out.writeFloat(p.waterCooldown());
             out.writeFloat(p.lightningCooldown());
@@ -179,6 +187,8 @@ public final class GameCodec {
             out.writeFloat(z.x());
             out.writeFloat(z.y());
             out.writeBoolean(z.electrified());
+            out.writeFloat(z.chargeFlashRemaining());
+            out.writeInt(z.damageOwnerPlayerId());
         }
 
         out.writeShort(snapshot.events().size());
@@ -205,6 +215,9 @@ public final class GameCodec {
                 in.readFloat(),
                 in.readBoolean(),
                 in.readFloat(),
+                in.readFloat(),
+                in.readInt(),
+                in.readInt(),
                 in.readFloat(),
                 in.readFloat(),
                 in.readFloat()
@@ -242,7 +255,9 @@ public final class GameCodec {
                 Zone.Type.values()[in.readUnsignedByte()],
                 in.readFloat(),
                 in.readFloat(),
-                in.readBoolean()
+                in.readBoolean(),
+                in.readFloat(),
+                in.readInt()
             ));
         }
 

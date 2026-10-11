@@ -36,6 +36,9 @@ public record WorldSnapshot(
         float aimY,
         boolean moving,
         float health,
+        float respawnRemaining,
+        int kills,
+        int deaths,
         float emberCooldown,
         float waterCooldown,
         float lightningCooldown
@@ -73,7 +76,9 @@ public record WorldSnapshot(
         Zone.Type type,
         float x,
         float y,
-        boolean electrified
+        boolean electrified,
+        float chargeFlashRemaining,
+        int damageOwnerPlayerId
     ) {
     }
 }

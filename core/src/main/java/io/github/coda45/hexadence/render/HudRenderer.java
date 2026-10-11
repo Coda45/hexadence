@@ -53,7 +53,20 @@ public class HudRenderer {
 
         batch.begin();
 
+        drawScore(player);
         drawHealth(player);
+
+        if (!player.isAlive()) {
+            font.draw(
+            batch,
+            String.format(
+                "Respawning in %.1f",
+                Math.max(0f, player.getRespawnRemaining())
+                ),
+                250f,
+                190f
+            );
+        }
 
         drawCooldown(
             player,
@@ -179,6 +192,16 @@ public class HudRenderer {
         );
 
         batch.setColor(Color.WHITE);
+    }
+
+    private void drawScore(Player player) {
+        font.draw(
+            batch,
+            "Kills: " + player.getKills()
+                + "  Deaths: " + player.getDeaths(),
+            20f,
+            150f
+        );
     }
 
     public void dispose() {

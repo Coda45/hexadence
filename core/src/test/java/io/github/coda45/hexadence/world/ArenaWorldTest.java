@@ -235,6 +235,113 @@ class ArenaWorldTest {
     }
 
     @Test
+    void assignsDifferentSpawnsAndReusesReleasedSpawn() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f),
+                new SpawnPoint(5f, 1f)
+            ),
+            List.of()
+        );
+
+        int secondId = world.addPlayer();
+        int thirdId = world.addPlayer();
+
+        assertEquals(
+            3f,
+            world.getPlayers().get(secondId).getX(),
+            EPSILON
+        );
+
+        assertEquals(
+            5f,
+            world.getPlayers().get(thirdId).getX(),
+            EPSILON
+        );
+
+        world.removePlayer(secondId);
+
+        int replacementId = world.addPlayer();
+
+        assertEquals(
+            3f,
+            world.getPlayers().get(replacementId).getX(),
+            EPSILON
+        );
+    }
+
+    @Test
+    void deadPlayerRespawnsAtAssignedSpawn() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(4f, 2f)
+            ),
+            List.of()
+        );
+
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+
+        target.setPosition(7f, 7f);
+        target.takeDamage(target.getMaxHealth());
+
+        for (int i = 0; i < 60; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertFalse(target.isAlive());
+
+        for (int i = 0; i < 140; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertTrue(target.isAlive());
+        assertEquals(target.getMaxHealth(), target.getHealth(), EPSILON);
+        assertEquals(4f, target.getX(), EPSILON);
+        assertEquals(2f, target.getY(), EPSILON);
+    }
+
+    @Test
+    void lethalProjectileRecordsKillAndDeath() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+
+        Player attacker = world.getPlayer();
+
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+
+        // Leave exactly one Ember hit worth of health.
+        target.takeDamage(
+            target.getMaxHealth()
+                - SpellType.EMBER.getDamage()
+        );
+
+        world.step(
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                true, false, false
+            )
+        );
+
+        for (int i = 0; i < 20; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertFalse(target.isAlive());
+        assertEquals(1, attacker.getKills());
+        assertEquals(1, target.getDeaths());
+    }
+
+    @Test
     void wallStopsLightningBeforeDummy() {
         float[][] blockedHeights =
             new float[10][10];
@@ -404,7 +511,10 @@ class ArenaWorldTest {
     @Test
     void emberDamagesAnotherPlayerButNotItsCaster() {
         ArenaWorld world = createEmptyWorld(
-            new SpawnPoint(1f, 1f),
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
             List.of()
         );
 
@@ -437,7 +547,10 @@ class ArenaWorldTest {
     @Test
     void lightningDamagesNearestOtherPlayer() {
         ArenaWorld world = createEmptyWorld(
-            new SpawnPoint(1f, 1f),
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
             List.of()
         );
 
@@ -469,6 +582,19 @@ class ArenaWorldTest {
             );
 
         assertEquals(LightningStrikeEvent.EndReason.PLAYER, strike.endReason());
+    }
+
+    private ArenaWorld createEmptyWorld(
+        List<SpawnPoint> playerSpawns,
+        List<SpawnPoint> dummySpawns
+    ) {
+        return new ArenaWorld(
+            new ArenaDefinition(
+                new ArenaCollision(new float[10][10]),
+                playerSpawns,
+                dummySpawns
+            )
+        );
     }
 
     private ArenaWorld createEmptyWorld(
