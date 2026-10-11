@@ -18,22 +18,77 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         this.server = server;
     }
 
-    // A client just connected: give it a player, then tell it which one.
-    @Override
-    public void channelActive(ChannelHandlerContext ctx) {
-        playerId = server.join(ctx.channel());
-        
-        if (playerId >= 0) {
-            ctx.writeAndFlush(new Welcome(playerId));
-        }
-    }
-
     // The client sent its input for a tick. The decoder already turned the
     // bytes into a PlayerCommand, so there is nothing to release here.
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        if (msg instanceof PlayerCommand command) {
-            server.receive(playerId, command);
+    public void channelRead(
+        ChannelHandlerContext ctx,
+        Object msg
+    ) {
+        if (playerId < 0) {
+            handleHandshake(ctx, msg);
+            return;
+        }
+        if (!(msg instanceof PlayerCommand command)) {
+            System.err.println(
+                "Rejected unexpected message from "
+                    + ctx.channel().remoteAddress()
+            );
+
+            ctx.close();
+            return;
+        }
+
+        if (!PlayerCommandValidator.isValid(command)) {
+            System.err.println(
+                "Rejected invalid command from "
+                    + ctx.channel().remoteAddress()
+            );
+
+            ctx.close();
+            return;
+        }
+
+        server.receive(playerId, command);
+    }
+
+    private void handleHandshake(
+        ChannelHandlerContext ctx,
+        Object msg
+    ) {
+        if (!(msg instanceof ClientHello hello)) {
+            System.err.println(
+                "Rejected client that did not send a protocol handshake"
+            );
+            ctx.close();
+            return;
+        }
+
+        if (hello.protocolVersion() != GameCodec.PROTOCOL_VERSION) {
+            System.err.println(
+                "Rejected incompatible protocol version "
+                    + hello.protocolVersion()
+            );
+            ctx.close();
+            return;
+        }
+
+        if (!server.usesMap(hello.mapId())) {
+            System.err.println(
+                "Rejected client using incompatible map: "
+                    + hello.mapId()
+            );
+            ctx.close();
+            return;
+        }
+
+        playerId = server.join(ctx.channel());
+
+        if (playerId >= 0) {
+            ctx.writeAndFlush(new Welcome(
+                GameCodec.PROTOCOL_VERSION,
+                playerId
+            ));
         }
     }
 

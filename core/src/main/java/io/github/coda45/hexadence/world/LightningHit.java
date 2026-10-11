@@ -9,6 +9,7 @@ record LightningHit(
     float distance,
     Zone zone,
     TargetDummy dummy,
+    int playerId,
     Player player
 ) {
     enum Kind {
@@ -25,6 +26,7 @@ record LightningHit(
             CombatGeometry.NO_HIT,
             null,
             null,
+            -1,
             null
         );
     }
@@ -35,6 +37,7 @@ record LightningHit(
             distance,
             null,
             null,
+            -1,
             null
         );
     }
@@ -45,6 +48,7 @@ record LightningHit(
             distance,
             zone,
             null,
+            -1,
             null
         );
     }
@@ -58,12 +62,14 @@ record LightningHit(
             distance,
             null,
             dummy,
+            -1,
             null
         );
     }
 
     static LightningHit player(
         float distance,
+        int playerId,
         Player player
     ) {
         return new LightningHit(
@@ -71,6 +77,7 @@ record LightningHit(
             distance,
             null,
             null,
+            playerId,
             player
         );
     }

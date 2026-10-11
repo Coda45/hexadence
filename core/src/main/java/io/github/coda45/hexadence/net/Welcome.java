@@ -1,6 +1,9 @@
 package io.github.coda45.hexadence.net;
 
-// First message the server sends after a client connects. It tells the client
-// which player in the snapshots is the one it controls.
-public record Welcome(int playerId) {
+// Accepts the negotiated protocol version and tells the client which player
+// in authoritative snapshots it controls.
+public record Welcome(
+    int protocolVersion,
+    int playerId
+) {
 }

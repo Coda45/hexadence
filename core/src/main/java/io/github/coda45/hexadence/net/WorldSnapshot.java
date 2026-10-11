@@ -4,7 +4,6 @@ import java.util.List;
 
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.spell.SpellType;
-import io.github.coda45.hexadence.world.LightningStrikeEvent;
 
 // One simulation tick of world state, as the server sends it to every client.
 // Plain data only: no libGDX, no Netty, no behavior. The codec turns this into
@@ -14,8 +13,7 @@ public record WorldSnapshot(
     List<PlayerState> players,
     List<DummyState> dummies,
     List<ProjectileState> projectiles,
-    List<ZoneState> zones,
-    List<LightningStrikeEvent> events
+    List<ZoneState> zones
 ) {
 
     public WorldSnapshot {
@@ -24,7 +22,6 @@ public record WorldSnapshot(
         dummies = List.copyOf(dummies);
         projectiles = List.copyOf(projectiles);
         zones = List.copyOf(zones);
-        events = List.copyOf(events);
     }
 
     // Everything the renderer and HUD read from a Player.
@@ -36,6 +33,9 @@ public record WorldSnapshot(
         float aimY,
         boolean moving,
         float health,
+        float respawnRemaining,
+        int kills,
+        int deaths,
         float emberCooldown,
         float waterCooldown,
         float lightningCooldown
@@ -51,6 +51,7 @@ public record WorldSnapshot(
 
     // Dummies never move, so only health changes between ticks.
     public record DummyState(
+        int id,
         float x,
         float y,
         float health
@@ -59,6 +60,7 @@ public record WorldSnapshot(
 
     // The direction is fixed at cast time, so clients can draw it as-is.
     public record ProjectileState(
+        int id,
         SpellType spellType,
         int ownerPlayerId,
         float x,
@@ -68,12 +70,14 @@ public record WorldSnapshot(
     ) {
     }
 
-    // Zones never move. A zone's identity on the client is (type, x, y).
+    // Zones never move. The stable ID, not coordinates or list order, is identity.
     public record ZoneState(
+        int id,
         Zone.Type type,
         float x,
         float y,
-        boolean electrified
+        boolean electrified,
+        int damageOwnerPlayerId
     ) {
     }
 }

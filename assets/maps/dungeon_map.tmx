@@ -99,16 +99,16 @@
 </data>
  </layer>
  <objectgroup id="5" name="Spawns">
-  <object id="1" name="player1" x="134" y="252">
+  <object id="1" name="player1" x="132.333" y="254.667">
    <point/>
   </object>
-  <object id="2" name="dummy1" x="360.667" y="126.667">
+  <object id="2" name="player2" x="359.667" y="115.334">
    <point/>
   </object>
-  <object id="3" name="dummy2" x="432" y="259.333">
+  <object id="3" name="player3" x="564.334" y="256.333">
    <point/>
   </object>
-  <object id="4" name="dummy3" x="432.667" y="289.333">
+  <object id="4" name="player4" x="360" y="401.333">
    <point/>
   </object>
  </objectgroup>

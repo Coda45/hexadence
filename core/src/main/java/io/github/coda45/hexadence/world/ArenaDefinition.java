@@ -7,12 +7,31 @@ import java.util.Objects;
 // This class knows nothing about TMX files, textures, cameras, or rendering.
 public record ArenaDefinition(
     ArenaCollision collision,
-    SpawnPoint playerSpawn,
+    List<SpawnPoint> playerSpawns,
     List<SpawnPoint> dummySpawns
 ) {
     public ArenaDefinition {
         collision = Objects.requireNonNull(collision);
-        playerSpawn = Objects.requireNonNull(playerSpawn);
+        playerSpawns = List.copyOf(playerSpawns);
         dummySpawns = List.copyOf(dummySpawns);
+
+        if (playerSpawns.isEmpty()) {
+            throw new IllegalArgumentException(
+                "An arena needs at least one player spawn"
+            );
+        }
+    }
+
+    // Convenience constructor for existing single-player tests.
+    public ArenaDefinition(
+        ArenaCollision collision,
+        SpawnPoint playerSpawn,
+        List<SpawnPoint> dummySpawns
+    ) {
+        this(
+            collision,
+            List.of(playerSpawn),
+            dummySpawns
+        );
     }
 }

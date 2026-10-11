@@ -2,20 +2,23 @@ package io.github.coda45.hexadence.entity;
 
 import io.github.coda45.hexadence.spell.SpellType;
 
-// Stores a projectile's world position, fixed direction, and distance traveled. ArenaWorld handles removal.
+// Stores one stable projectile identity and its simulation state.
+// ArenaWorld owns movement, collision, and removal.
 public class Projectile {
+
+    private final int id;
+    private final SpellType spellType;
+    private final int ownerPlayerId;
+    private final float directionX;
+    private final float directionY;
 
     private float x;
     private float y;
     private float distanceTraveled;
-    private final SpellType spellType;
-    private final int ownerPlayerId;
-
-    private final float directionX;
-    private final float directionY;
 
     // The direction must be normalized so each update travels the requested distance.
     public Projectile(
+        int id,
         float x,
         float y,
         float directionX,
@@ -23,6 +26,7 @@ public class Projectile {
         SpellType spellType,
         int ownerPlayerId
     ) {
+        this.id = id;
         this.x = x;
         this.y = y;
         this.directionX = directionX;
@@ -44,6 +48,16 @@ public class Projectile {
 
     public boolean hasReachedMaxRange(float maxRange) {
         return distanceTraveled >= maxRange;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    // Client-side snapshot restoration only.
+    public void restorePosition(float x, float y) {
+        this.x = x;
+        this.y = y;
     }
 
     public float getDistanceTraveled() {

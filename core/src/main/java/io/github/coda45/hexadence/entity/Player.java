@@ -16,6 +16,9 @@ public class Player {
 
     private static final float MAX_HEALTH = 100f;
     private float health = MAX_HEALTH;
+    private float respawnRemaining = -1f;
+    private int kills;
+    private int deaths;
 
     // Collision covers the feet, not the full sprite.
     public static final float HALF_WIDTH = 0.365f;
@@ -144,6 +147,62 @@ public class Player {
         return y + COMBAT_OFFSET_Y;
     }
 
+    public boolean hasRespawnPending() {
+        return respawnRemaining >= 0f;
+    }
+
+    public float getRespawnRemaining() {
+        return respawnRemaining;
+    }
+
+    public void beginRespawn(float delaySeconds) {
+        if (!isAlive() && !hasRespawnPending()) {
+            respawnRemaining = delaySeconds;
+        }
+    }
+
+    public void updateRespawn(
+        float deltaSeconds,
+        float spawnX,
+        float spawnY
+    ) {
+        if (!hasRespawnPending()) {
+            return;
+        }
+
+        respawnRemaining -= deltaSeconds;
+
+        if (respawnRemaining > 0f) {
+            return;
+        }
+
+        health = MAX_HEALTH;
+        respawnRemaining = -1f;
+        aimX = 1f;
+        aimY = 0f;
+        setPosition(spawnX, spawnY);
+
+        for (SpellType spellType : SpellType.values()) {
+            cooldowns.put(spellType, 0f);
+        }
+    }
+
+    public void recordKill() {
+        kills++;
+    }
+
+    public void recordDeath() {
+        deaths++;
+    }
+
+    public int getKills() {
+        return kills;
+    }
+
+    public int getDeaths() {
+        return deaths;
+    }
+
     // Overwrites this player with state received from the host (clients only).
     public void restoreState(
         float x,
@@ -151,14 +210,20 @@ public class Player {
         float aimX,
         float aimY,
         boolean moving,
-        float health
+        float health,
+        float respawnRemaining,
+        int kills,
+        int deaths
     ) {
         this.x = x;
         this.y = y;
         this.aimX = aimX;
         this.aimY = aimY;
         this.moving = moving;
-        this.health = Math.min(MAX_HEALTH, health);
+        this.health = Math.max(0f, Math.min(MAX_HEALTH, health));
+        this.respawnRemaining = respawnRemaining;
+        this.kills = kills;
+        this.deaths = deaths;
     }
 
     public void setCooldownRemaining(SpellType spellType, float seconds) {

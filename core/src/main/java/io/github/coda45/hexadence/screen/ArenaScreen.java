@@ -17,53 +17,62 @@ import io.github.coda45.hexadence.render.WorldRenderer;
 import io.github.coda45.hexadence.world.ArenaDefinition;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
-import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.StepResult;
 import io.github.coda45.hexadence.world.WorldEvent;
 
 // Coordinates input, fixed simulation steps, camera updates, and drawing.
 public class ArenaScreen implements Screen {
 
-    private final WorldCamera worldCamera;
-    private final PlayerInputController inputController;
+    private static final int DEFAULT_PORT = 7777;
 
-    private final ArenaWorld world;
     private final ArenaMap arenaMap;
+    private final ArenaWorld world;
+    // Null means normal single-player play.
+    private final NetSession session;
+
+    private final PlayerInputController inputController;
+    private final WorldCamera worldCamera;
     private final WorldRenderer renderer;
     private final HudRenderer hudRenderer;
-    private static final int DEFAULT_PORT = 7777;
-    //null means normal single-player.
-    private final NetSession session;
-    private long lastAppliedTick = -1;
 
+    private long lastAppliedTick = -1;
     private float accumulator;
 
     public ArenaScreen() {
-        
         worldCamera = new WorldCamera();
         inputController = new PlayerInputController();
-        arenaMap = new ArenaMap();
+
+        String mapPath = System.getProperty(
+            "hexadence.map",
+            "maps/dungeon_map.tmx"
+        );
+
+        arenaMap = new ArenaMap(mapPath);
         ArenaDefinition definition = arenaMap.createDefinition();
         world = new ArenaWorld(definition);
-        session = openSession(definition);
+        session = openSession(definition, mapPath);
 
         if (session != null) {
-            //Players now come only from the host's snapshot.
+            // Network players come only from authoritative snapshots.
             world.removePlayer(0);
         }
+
         renderer = new WorldRenderer(arenaMap);
         hudRenderer = new HudRenderer();
     }
 
     // Reads -Dhexadence.host=true or -Dhexadence.join=host[:port].
     // Neither set: returns null and the game is single-player.
-    private static NetSession openSession(ArenaDefinition definition) {
+    private static NetSession openSession(
+        ArenaDefinition definition,
+        String mapId
+    ) {
         int port = Integer.getInteger("hexadence.port", DEFAULT_PORT);
         String join = System.getProperty("hexadence.join");
 
         try {
             if (Boolean.getBoolean("hexadence.host")) {
-                return NetSession.host(definition, port);
+                return NetSession.host(definition, mapId, port);
             }
 
             if (join != null) {
@@ -73,7 +82,7 @@ public class ArenaScreen implements Screen {
                     ? port
                     : Integer.parseInt(join.substring(colon + 1));
 
-                return NetSession.join(address, joinPort);
+                return NetSession.join(address, mapId, joinPort);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -128,7 +137,7 @@ public class ArenaScreen implements Screen {
         }
 
         if (session != null) {
-            applyHostState(frameEvents, presentationDelta);
+            applyHostState(frameEvents);
         }
 
         // Draw the latest completed step; positions are not interpolated between steps.
@@ -226,8 +235,7 @@ public class ArenaScreen implements Screen {
     }
 
     private void applyHostState(
-        List<WorldEvent> frameEvents,
-        float presentationDelta
+        List<WorldEvent> frameEvents
     ) {
         var snapshot = session.client().getLatestSnapshot();
 
@@ -236,10 +244,8 @@ public class ArenaScreen implements Screen {
             lastAppliedTick = snapshot.tick();
         }
 
-        for (LightningStrikeEvent event : session.client().drainEvents()) {
-            frameEvents.add(event);
-        }
-
-        world.updateZoneVisuals(presentationDelta);
+        frameEvents.addAll(
+            session.client().drainEvents()
+        );
     }
 }

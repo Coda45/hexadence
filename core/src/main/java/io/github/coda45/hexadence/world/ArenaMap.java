@@ -1,6 +1,10 @@
 package io.github.coda45.hexadence.world;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.badlogic.gdx.maps.MapLayer;
 import com.badlogic.gdx.maps.MapObject;
@@ -31,7 +35,12 @@ public class ArenaMap {
     private final ArenaCollision collision;
 
     public ArenaMap() {
-        tiledMap = new TmxMapLoader().load("maps/dungeon_map.tmx");
+        this("maps/dungeon_map.tmx");
+    }
+
+    public ArenaMap(String mapPath) {
+        tiledMap = new TmxMapLoader().load(mapPath);
+
         width = tiledMap.getProperties().get(
             "width",
             Integer.class
@@ -120,18 +129,25 @@ public class ArenaMap {
     }
 
     public ArenaDefinition createDefinition() {
+        List<SpawnPoint> playerSpawns =
+            getSpawnPoints("player");
+
+        if (playerSpawns.isEmpty()) {
+            throw new IllegalStateException(
+                "TMX map needs at least one player spawn"
+            );
+        }
+
         return new ArenaDefinition(
             collision,
-            getSpawnPoint("player1"),
-            List.of(
-                getSpawnPoint("dummy1"),
-                getSpawnPoint("dummy2"),
-                getSpawnPoint("dummy3")
-            )
+            playerSpawns,
+            getSpawnPoints("dummy")
         );
     }
 
-    public SpawnPoint getSpawnPoint(String name) {
+    private List<SpawnPoint> getSpawnPoints(
+        String namePrefix
+    ) {
         MapLayer spawnLayer =
             tiledMap.getLayers().get(SPAWNS_LAYER_NAME);
 
@@ -141,25 +157,82 @@ public class ArenaMap {
             );
         }
 
-        MapObject object =
-            spawnLayer.getObjects().get(name);
+        return collectSpawnPoints(
+            spawnLayer,
+            namePrefix
+        );
+    }
 
-        if (object == null) {
-            throw new IllegalStateException(
-                "TMX map is missing spawn point: " + name
+    static List<SpawnPoint> collectSpawnPoints(
+        MapLayer spawnLayer,
+        String namePrefix
+    ) {
+        Pattern namePattern = Pattern.compile(
+            Pattern.quote(namePrefix) + "([1-9]\\d*)"
+        );
+
+        List<IndexedSpawn> indexedSpawns = new ArrayList<>();
+
+        for (MapObject object : spawnLayer.getObjects()) {
+            String name = object.getName();
+
+            if (name == null) {
+                continue;
+            }
+
+            Matcher matcher = namePattern.matcher(name);
+
+            if (!matcher.matches()) {
+                continue;
+            }
+
+            int   index  = Integer.parseInt(matcher.group(1));
+            float pixelX = object.getProperties().get("x", Float.class);
+            float pixelY = object.getProperties().get("y", Float.class);
+
+            indexedSpawns.add(new IndexedSpawn(
+                    index,
+                    new SpawnPoint(
+                        pixelX / TILE_SIZE,
+                        pixelY / TILE_SIZE
+                    )
+                )
             );
         }
 
-        float pixelX =
-            object.getProperties().get("x", Float.class);
-
-        float pixelY =
-            object.getProperties().get("y", Float.class);
-
-        return new SpawnPoint(
-            pixelX / TILE_SIZE,
-            pixelY / TILE_SIZE
+        indexedSpawns.sort(
+            Comparator.comparingInt(
+                IndexedSpawn::index
+            )
         );
+
+        for (int i = 1; i < indexedSpawns.size(); i++) {
+            if (
+                indexedSpawns.get(i - 1).index()
+                    == indexedSpawns.get(i).index()
+            ) {
+                throw new IllegalStateException(
+                    "Duplicate "
+                        + namePrefix
+                        + " spawn number: "
+                        + indexedSpawns.get(i).index()
+                );
+            }
+        }
+
+        List<SpawnPoint> result = new ArrayList<>(indexedSpawns.size());
+
+        for (IndexedSpawn indexedSpawn : indexedSpawns) {
+            result.add(indexedSpawn.spawn());
+        }
+
+        return List.copyOf(result);
+    }
+
+    private record IndexedSpawn(
+        int index,
+        SpawnPoint spawn
+    ) {
     }
 
     public float getWorldWidth() {
