@@ -1,13 +1,17 @@
 package io.github.coda45.hexadence.net;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.world.ArenaDefinition;
 import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.StepResult;
+import io.github.coda45.hexadence.world.WorldEvent;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -20,8 +24,8 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 
-// The authoritative game server. It owns the one real ArenaWorld, advances it
-// at 60 Hz, and sends every connected client a snapshot after each tick.
+// The authoritative game server. It owns one ArenaWorld, advances it at
+// 60 Hz, and sends snapshots plus reliable semantic events to each client.
 //
 // It uses no libGDX: the map is loaded elsewhere and passed in as an
 // ArenaDefinition, which is plain data.
@@ -34,24 +38,32 @@ public class GameServer {
     public static final int DEFAULT_PORT = 7777;
     public static final int MAX_PLAYERS = 4;
 
+    private static final int MAX_PENDING_EVENTS_PER_CLIENT = 64;
     // One simulation step is 1/60 s, matching ArenaWorld.STEP.
     private static final long TICK_NANOS = 1_000_000_000L / 60L;
 
     private final int port;
+    private final String mapId;
     private final ArenaWorld world;
 
     // Game-thread state: which connection and which pending input belong
     // to each player ID.
     private final Map<Integer, Channel> channels = new LinkedHashMap<>();
     private final Map<Integer, PendingCommand> pending = new LinkedHashMap<>();
+    private final Map<Integer, Deque<WorldEvent>> pendingEvents = new LinkedHashMap<>();
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private EventExecutorGroup gameThread;
     private Channel serverChannel;
 
-    public GameServer(ArenaDefinition definition, int port) {
+    public GameServer(
+        ArenaDefinition definition,
+        String mapId,
+        int port
+    ) {
         this.port = port;
+        this.mapId = Objects.requireNonNull(mapId);
         this.world = new ArenaWorld(definition);
 
         // ArenaWorld always creates player 0 for single-player. The server has
@@ -76,6 +88,7 @@ public class GameServer {
 
         channels.put(id, channel);
         pending.put(id, new PendingCommand());
+        pendingEvents.put(id, new ArrayDeque<>());
 
         System.out.println("Player " + id + " joined from " + channel.remoteAddress());
         return id;
@@ -93,6 +106,7 @@ public class GameServer {
         channels.remove(playerId);
         pending.remove(playerId);
         world.removePlayer(playerId);
+        pendingEvents.remove(playerId);
 
         System.out.println("Player " + playerId + " left");
     }
@@ -189,13 +203,64 @@ public class GameServer {
             return;
         }
 
+        queueEvents(result);
+
         WorldSnapshot snapshot = SnapshotFactory.capture(world, result);
 
-        for (Channel channel : channels.values()) {
-            // Skip a client whose connection is backed up rather than
-            // letting its queue grow without limit.
-            if (channel.isWritable()) {
-                channel.writeAndFlush(snapshot);
+        for (Map.Entry<Integer, Channel> entry : channels.entrySet()) {
+            int playerId = entry.getKey();
+            Channel channel = entry.getValue();
+
+            // Snapshots are replaceable, so do not queue them for a slow client.
+            if (!channel.isActive() || !channel.isWritable()) {
+                continue;
+            }
+
+            // Send current persistent state first.
+            channel.write(snapshot);
+
+            // Then send every reliable event that client has not received.
+            Deque<WorldEvent> events =
+                pendingEvents.get(playerId);
+
+            if (events != null) {
+                while (!events.isEmpty()) {
+                    channel.write(events.removeFirst());
+                }
+            }
+
+            channel.flush();
+        }
+    }
+
+    boolean usesMap(String requestedMapId) {
+        return mapId.equals(requestedMapId);
+    }
+
+    private void queueEvents(StepResult result) {
+        for (WorldEvent event : result.events()) {
+            for (Map.Entry<Integer, Channel> entry : channels.entrySet()) {
+                int playerId = entry.getKey();
+                Channel channel = entry.getValue();
+
+                Deque<WorldEvent> events =
+                    pendingEvents.get(playerId);
+
+                if (events == null) {
+                    continue;
+                }
+
+                if (events.size() >= MAX_PENDING_EVENTS_PER_CLIENT) {
+                    System.err.println(
+                        "Disconnecting player "
+                            + playerId
+                            + ": reliable event queue overflow"
+                    );
+                    channel.close();
+                    continue;
+                }
+
+                events.addLast(event);
             }
         }
     }
@@ -204,7 +269,10 @@ public class GameServer {
     // Movement and aim keep the newest value; cast requests are OR-ed so a
     // click is never lost if two commands arrive before one tick. This is the
     // same latching PlayerInputController does for mouse clicks.
-    private static final class PendingCommand {
+    static final class PendingCommand {
+        // At 60 Hz this allows approximately 250 ms without a new command.
+        static final int TIMEOUT_TICKS = 15;
+
         private float moveX;
         private float moveY;
         private float aimX;
@@ -212,6 +280,8 @@ public class GameServer {
         private boolean castEmber;
         private boolean castWater;
         private boolean castLightning;
+        private boolean receivedSinceLastTake;
+        private int ticksWithoutCommand = TIMEOUT_TICKS;
 
         void merge(PlayerCommand command) {
             moveX = command.moveX();
@@ -222,15 +292,36 @@ public class GameServer {
             castEmber |= command.castEmber();
             castWater |= command.castWater();
             castLightning |= command.castLightning();
+            receivedSinceLastTake = true;
         }
 
         PlayerCommand take() {
-            PlayerCommand command = new PlayerCommand(
-                moveX, moveY, aimX, aimY,
-                castEmber, castWater, castLightning
-            );
+            if (receivedSinceLastTake) {
+                ticksWithoutCommand = 0;
+            } else {
+                ticksWithoutCommand = Math.min(
+                    TIMEOUT_TICKS,
+                    ticksWithoutCommand + 1
+                );
+            }
 
-            // Held movement and aim carry over; one-shot casts do not.
+            PlayerCommand command;
+
+            if (ticksWithoutCommand >= TIMEOUT_TICKS) {
+                command = PlayerCommand.IDLE;
+            } else {
+                command = new PlayerCommand(
+                    moveX,
+                    moveY,
+                    aimX,
+                    aimY,
+                    castEmber,
+                    castWater,
+                    castLightning
+                );
+            }
+            receivedSinceLastTake = false;
+            // Cast requests are one-shot. Movement receives the timeout grace.
             castEmber = false;
             castWater = false;
             castLightning = false;

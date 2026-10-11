@@ -26,13 +26,13 @@ public final class NetSession {
     }
 
     // Start hosting. The definition comes from the host's own loaded map.
-    public static NetSession host(ArenaDefinition definition, int port)
+    public static NetSession host(ArenaDefinition definition, String mapId, int port)
         throws InterruptedException {
 
-        GameServer server = new GameServer(definition, port);
+        GameServer server = new GameServer(definition, mapId, port);
         server.start();
 
-        NetClient client = new NetClient(LOCAL_ADDRESS, port);
+        NetClient client = new NetClient(LOCAL_ADDRESS, port, mapId);
 
         try {
             client.connect();
@@ -47,10 +47,10 @@ public final class NetSession {
     }
 
     // Join a game someone else is hosting.
-    public static NetSession join(String hostAddress, int port)
+    public static NetSession join(String hostAddress, String mapId, int port)
         throws InterruptedException {
 
-        NetClient client = new NetClient(hostAddress, port);
+        NetClient client = new NetClient(hostAddress, port, mapId);
         client.connect();
 
         return new NetSession(null, client);

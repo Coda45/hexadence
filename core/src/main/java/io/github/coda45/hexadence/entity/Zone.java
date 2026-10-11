@@ -7,26 +7,26 @@ public class Zone {
         STEAM
     }
 
+    public static final int UNASSIGNED_ID = -1;
+    public static final int NO_PLAYER = -1;
+
     private static final float PUDDLE_RADIUS = 0.8f;
     private static final float PUDDLE_DURATION = 6f;
-
     private static final float STEAM_RADIUS = 1f;
     private static final float STEAM_DURATION = 3f;
 
+    private final int id;
     private final Type type;
     private final float x;
     private final float y;
     private final float radius;
 
     private float remainingSeconds;
-    public static final int NO_PLAYER = -1;
     private int damageOwnerPlayerId;
-
     private boolean electrified;
-    private static final float CHARGE_FLASH_DURATION = 0.12f;
-    private float chargeFlashRemaining;
 
     private Zone(
+        int id,
         Type type,
         float x,
         float y,
@@ -34,6 +34,7 @@ public class Zone {
         float duration,
         int damageOwnerPlayerId
     ) {
+        this.id = id;
         this.type = type;
         this.x = x;
         this.y = y;
@@ -43,7 +44,7 @@ public class Zone {
     }
 
     public static Zone createPuddle(float x, float y) {
-        return createPuddle(x, y, NO_PLAYER);
+        return createPuddle(UNASSIGNED_ID, x, y, NO_PLAYER);
     }
 
     public static Zone createPuddle(
@@ -51,7 +52,17 @@ public class Zone {
         float y,
         int ownerPlayerId
     ) {
+        return createPuddle(UNASSIGNED_ID, x, y, ownerPlayerId);
+    }
+
+    public static Zone createPuddle(
+        int id,
+        float x,
+        float y,
+        int ownerPlayerId
+    ) {
         return new Zone(
+            id,
             Type.PUDDLE,
             x,
             y,
@@ -62,7 +73,7 @@ public class Zone {
     }
 
     public static Zone createSteam(float x, float y) {
-        return createSteam(x, y, NO_PLAYER);
+        return createSteam(UNASSIGNED_ID, x, y, NO_PLAYER);
     }
 
     public static Zone createSteam(
@@ -70,7 +81,17 @@ public class Zone {
         float y,
         int ownerPlayerId
     ) {
+        return createSteam(UNASSIGNED_ID, x, y, ownerPlayerId);
+    }
+
+    public static Zone createSteam(
+        int id,
+        float x,
+        float y,
+        int ownerPlayerId
+    ) {
         return new Zone(
+            id,
             Type.STEAM,
             x,
             y,
@@ -88,13 +109,16 @@ public class Zone {
         if (type == Type.PUDDLE) {
             electrified = true;
             damageOwnerPlayerId = ownerPlayerId;
-            chargeFlashRemaining = CHARGE_FLASH_DURATION;
         }
     }
 
     // Keeps existing tests and client-side code usable.
     public void electrify() {
         electrify(damageOwnerPlayerId);
+    }
+
+    public int getId() {
+        return id;
     }
 
     public int getDamageOwnerPlayerId() {
@@ -108,29 +132,11 @@ public class Zone {
     public void discharge() {
         if (electrified) {
             electrified = false;
-            chargeFlashRemaining = CHARGE_FLASH_DURATION;
         }
     }
 
-    public boolean isChargeFlashVisible() {
-        return chargeFlashRemaining > 0f;
-    }
-
-    public float getChargeFlashRemaining() {
-        return chargeFlashRemaining;
-    }
-
-    // Used when restoring authoritative network state.
-    public void setChargeFlashRemaining(float seconds) {
-        chargeFlashRemaining = Math.max(0f, seconds);
-    }
-
     public void update(float deltaSeconds) {
-        remainingSeconds =
-            Math.max(0f, remainingSeconds - deltaSeconds);
-
-        chargeFlashRemaining =
-            Math.max(0f, chargeFlashRemaining - deltaSeconds);
+        remainingSeconds = Math.max(0f, remainingSeconds - deltaSeconds);
     }
 
     public boolean hasExpired() {

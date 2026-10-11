@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.github.coda45.hexadence.input.PlayerCommand;
-import io.github.coda45.hexadence.world.LightningStrikeEvent;
+import io.github.coda45.hexadence.world.WorldEvent;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -18,8 +18,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
-// The game's side of a connection to a GameServer. Every player uses one,
-// including the host, who connects to the server running in its own process.
+// The game's side of a connection to a GameServer. Every networked player uses
+// one, including a host connected to an embedded server in the same process.
 //
 // Netty delivers messages on its own thread, while the game reads them from
 // the render thread. The fields below are all thread-safe holders, so the game
@@ -30,26 +30,21 @@ public class NetClient {
 
     private final String host;
     private final int port;
+    private final String mapId;
 
+    // Netty lifecycle resources, owned by this client.
     private EventLoopGroup group;
     private Channel channel;
 
-    // Set when the server's Welcome arrives; -1 until then.
+    // Cross-thread state written by Netty and read by the render thread.
     private volatile int playerId = -1;
+    private final AtomicReference<WorldSnapshot> latestSnapshot = new AtomicReference<>();
+    private final ConcurrentLinkedQueue<WorldEvent> pendingEvents = new ConcurrentLinkedQueue<>();
 
-    // Only the newest snapshot matters for drawing positions and health.
-    private final AtomicReference<WorldSnapshot> latestSnapshot =
-        new AtomicReference<>();
-
-    // Lightning strikes are one-time events. If two snapshots arrive between
-    // frames, keeping only the latest would lose a strike, so each snapshot's
-    // events are queued here until the game takes them.
-    private final ConcurrentLinkedQueue<LightningStrikeEvent> pendingEvents =
-        new ConcurrentLinkedQueue<>();
-
-    public NetClient(String host, int port) {
+    public NetClient(String host, int port, String mapId) {
         this.host = host;
         this.port = port;
+        this.mapId = mapId;
     }
 
     // Blocks until connected or until the attempt fails (the exception says why).
@@ -105,10 +100,10 @@ public class NetClient {
         return playerId >= 0 && latestSnapshot.get() != null;
     }
 
-    // Returns every lightning strike received since the last call, oldest first.
-    public List<LightningStrikeEvent> drainEvents() {
-        List<LightningStrikeEvent> drained = new ArrayList<>();
-        LightningStrikeEvent event;
+    // Returns every reliable event received since the last call, oldest first.
+    public List<WorldEvent> drainEvents() {
+        List<WorldEvent> drained = new ArrayList<>();
+        WorldEvent event;
 
         while ((event = pendingEvents.poll()) != null) {
             drained.add(event);
@@ -132,12 +127,32 @@ public class NetClient {
     private final class Handler extends ChannelInboundHandlerAdapter {
 
         @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        public void channelActive(ChannelHandlerContext ctx) {
+            ctx.writeAndFlush(
+                new ClientHello(GameCodec.PROTOCOL_VERSION, mapId)
+            );
+        }
+
+        @Override
+        public void channelRead(
+            ChannelHandlerContext ctx,
+            Object msg
+        ) {
             if (msg instanceof Welcome welcome) {
+                if (welcome.protocolVersion() != GameCodec.PROTOCOL_VERSION) {
+                    System.err.println(
+                        "Server uses incompatible protocol version "
+                            + welcome.protocolVersion()
+                    );
+                    ctx.close();
+                    return;
+                }
+
                 playerId = welcome.playerId();
             } else if (msg instanceof WorldSnapshot snapshot) {
                 latestSnapshot.set(snapshot);
-                pendingEvents.addAll(snapshot.events());
+            } else if (msg instanceof WorldEvent event) {
+                pendingEvents.add(event);
             }
         }
 

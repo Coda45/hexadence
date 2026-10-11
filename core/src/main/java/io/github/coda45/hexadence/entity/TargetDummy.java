@@ -4,14 +4,18 @@ package io.github.coda45.hexadence.entity;
 public class TargetDummy {
 
     public static final float RADIUS = 0.3f;
-    private static final float MAX_HEALTH = 100f;
-    private float respawnRemaining = -1f;
 
+    private static final float MAX_HEALTH = 100f;
+
+    private final int id;
     private final float x;
     private final float y;
-    private float health = MAX_HEALTH;
 
-    public TargetDummy(float x, float y) {
+    private float health = MAX_HEALTH;
+    private float respawnRemaining = -1f;
+
+    public TargetDummy(int id, float x, float y) {
+        this.id = id;
         this.x = x;
         this.y = y;
     }
@@ -43,13 +47,17 @@ public class TargetDummy {
         health = Math.max(0f, health - amount);
     }
 
-    // Overwrites health with the value received from the host (clients only).
+    // Overwrites health with authoritative replicated state on clients.
     public void setHealth(float health) {
         this.health = Math.min(MAX_HEALTH, health);
     }
-    
+
     public boolean isAlive() {
         return health > 0f;
+    }
+
+    public int getId() {
+        return id;
     }
 
     public float getX() {

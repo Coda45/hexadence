@@ -1,6 +1,7 @@
 package io.github.coda45.hexadence.render;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -25,26 +26,27 @@ import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.WorldEvent;
+import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 
 // Draws world state and owns drawing resources. The TiledMap stays owned by ArenaMap.
 public class WorldRenderer {
+
+    private static final float ZONE_FLASH_DURATION = 0.12f;
 
     private final OrthogonalTiledMapRenderer mapRenderer;
     private final SpriteBatch batch;
     private final GameTextures textures;
     private final Texture pixelTexture;
-    private float projectileAnimationTime;
-    private float playerMoveTime;
-    private float playerSpriteHeight;
     private final int[] groundLayers;
     private final int[] lowerTerrainLayers;
     private final int[] foregroundLayers;
-    private final List<LightningStrikeVisual>
-        lightningStrikes = new ArrayList<>();
+    private final List<LightningStrikeVisual> lightningStrikes = new ArrayList<>();
+    private final Map<Zone, ChargedPuddleVisual> chargedPuddleVisuals = new IdentityHashMap<>();
+    private final Map<Integer, Float> zoneFlashRemaining = new HashMap<>();
 
-    // Zone IDs do not exist yet, so visual state follows the exact live object.
-    private final Map<Zone, ChargedPuddleVisual>
-        chargedPuddleVisuals = new IdentityHashMap<>();
+    private float projectileAnimationTime;
+    private float playerMoveTime;
+    private float playerSpriteHeight;
 
     public WorldRenderer(ArenaMap arenaMap) {
 
@@ -99,7 +101,7 @@ public class WorldRenderer {
         float presentationDelta,
         List<WorldEvent> frameEvents
     ) {
-
+        updateZoneFlashes(presentationDelta);
         consumeEvents(frameEvents);
         // TMX order: Ground, DecorationGround, Walls, DecorationOverlay, Spawns.
 
@@ -147,8 +149,8 @@ public class WorldRenderer {
             renderDummy(dummy);
         }
 
-        //One shared walk timer; it runs while anyone is moving.
-        //Players who are standing still ignore it and show the idle frame.
+        // One shared walk timer runs while anyone is moving.
+        // Standing players ignore it and show their idle frame.
         if (world.getPlayers().values().stream()
                 .anyMatch(
                     player ->
@@ -261,10 +263,7 @@ public class WorldRenderer {
         List<WorldEvent> frameEvents
     ) {
         for (WorldEvent event : frameEvents) {
-            if (
-                event
-                    instanceof LightningStrikeEvent strike
-            ) {
+            if (event instanceof LightningStrikeEvent strike) {
                 int variantIndex =
                     MathUtils.random(
                         textures.getLightningVariantCount() - 1
@@ -276,6 +275,28 @@ public class WorldRenderer {
                         variantIndex
                     )
                 );
+            } else if (event instanceof ZoneChargeChangedEvent changed) {
+                zoneFlashRemaining.put(
+                    changed.zoneId(),
+                    ZONE_FLASH_DURATION
+                );
+            }
+        }
+    }
+
+    private void updateZoneFlashes(float deltaSeconds) {
+        Iterator<Map.Entry<Integer, Float>> iterator =
+            zoneFlashRemaining.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<Integer, Float> entry = iterator.next();
+
+            float remaining = entry.getValue() - deltaSeconds;
+
+            if (remaining <= 0f) {
+                iterator.remove();
+            } else {
+                entry.setValue(remaining);
             }
         }
     }
@@ -487,7 +508,7 @@ public class WorldRenderer {
 
         switch (zone.getType()) {
             case PUDDLE -> {
-                if (zone.isChargeFlashVisible()) {
+                if (zoneFlashRemaining.containsKey(zone.getId())) {
                     // Brief yellow hit/damage feedback.
                     batch.setColor(
                         0.9f,

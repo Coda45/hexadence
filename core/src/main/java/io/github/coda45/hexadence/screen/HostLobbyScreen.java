@@ -16,14 +16,9 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import io.github.coda45.hexadence.HexadenceGame;
 
-// Displays explicit Play and Exit controls using lightweight text buttons.
+// Displays the current prototype host lobby and its start/leave controls.
 public class HostLobbyScreen implements Screen {
 
-    private final HexadenceGame game;
-    private final SpriteBatch batch;
-    private final BitmapFont font;
-    private final GlyphLayout layout;
-    private final Texture image;
     private static final String START_TEXT = "[ START BATTLE ]";
     private static final String LEAVE_TEXT = "[ LEAVE ]";
     private static final String TITLE_TEXT = "HEXADENCE";
@@ -31,17 +26,23 @@ public class HostLobbyScreen implements Screen {
     private static final String ROOM_TEXT = "ROOM CODE: 4837";
     private static final String PLAYER_TEXT = "CHAMPIONS ASSEMBLED (1/4)";
     private static final float BUTTON_PADDING = 12f;
-    //private static final float BUTTON_SPACING = 50f;
     private static final String PLAYER_COUNT = "PLAYERS: 1 / 4";
     private static final String MAP_TEXT = "ARENA: CRYSTAL NEXUS";
-    private final Rectangle startBounds = new Rectangle();
-    private final Rectangle leaveBounds = new Rectangle();
     private static final float MENU_WIDTH = 640f;
     private static final float MENU_HEIGHT = 360f;
 
+    private final HexadenceGame game;
+    private final SpriteBatch batch;
+    private final BitmapFont font;
+    private final GlyphLayout layout;
+    private final Texture image;
+
+    private final Rectangle startBounds = new Rectangle();
+    private final Rectangle leaveBounds = new Rectangle();
+    private final Vector2 pointer = new Vector2();
+
     private final OrthographicCamera camera;
     private final FitViewport viewport;
-    private final Vector2 pointer = new Vector2();
 
     public HostLobbyScreen(HexadenceGame game) {
         this.game = game;

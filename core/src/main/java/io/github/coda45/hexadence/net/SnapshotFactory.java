@@ -10,9 +10,7 @@ import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.spell.SpellType;
 import io.github.coda45.hexadence.world.ArenaWorld;
-import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.StepResult;
-import io.github.coda45.hexadence.world.WorldEvent;
 
 // Server side: copies the live ArenaWorld into an immutable WorldSnapshot.
 // It only reads the world, so it cannot change gameplay.
@@ -21,8 +19,8 @@ public final class SnapshotFactory {
     private SnapshotFactory() {
     }
 
-    // Call once after each world.step(); the StepResult supplies the tick
-    // number and the events (spells and such) that happened during it.
+    // Call once after each world.step(); StepResult supplies the authoritative
+    // tick. Transient events travel separately from replaceable snapshots.
     public static WorldSnapshot capture(ArenaWorld world, StepResult result) {
         List<WorldSnapshot.PlayerState> players = new ArrayList<>();
 
@@ -50,6 +48,7 @@ public final class SnapshotFactory {
 
         for (TargetDummy dummy : world.getDummies()) {
             dummies.add(new WorldSnapshot.DummyState(
+                dummy.getId(),
                 dummy.getX(),
                 dummy.getY(),
                 dummy.getHealth()
@@ -60,6 +59,7 @@ public final class SnapshotFactory {
 
         for (Projectile projectile : world.getProjectiles()) {
             projectiles.add(new WorldSnapshot.ProjectileState(
+                projectile.getId(),
                 projectile.getSpellType(),
                 projectile.getOwnerPlayerId(),
                 projectile.getX(),
@@ -73,21 +73,13 @@ public final class SnapshotFactory {
 
         for (Zone zone : world.getZones()) {
             zones.add(new WorldSnapshot.ZoneState(
+                zone.getId(),
                 zone.getType(),
                 zone.getX(),
                 zone.getY(),
                 zone.isElectrified(),
-                zone.getChargeFlashRemaining(),
                 zone.getDamageOwnerPlayerId()
             ));
-        }
-
-        List<LightningStrikeEvent> events = new ArrayList<>();
-
-        for (WorldEvent event : result.events()) {
-            if (event instanceof LightningStrikeEvent strike) {
-                events.add(strike);
-            }
         }
 
         return new WorldSnapshot(
@@ -95,8 +87,7 @@ public final class SnapshotFactory {
             players,
             dummies,
             projectiles,
-            zones,
-            events
+            zones
         );
     }
 }

@@ -409,7 +409,7 @@ class ArenaWorldTest {
         );
 
         Zone puddle =
-            Zone.createPuddle(3f, 1.75f);
+            Zone.createPuddle(123, 3f, 1.75f, Zone.NO_PLAYER);
 
         world.getZones().add(puddle);
 
