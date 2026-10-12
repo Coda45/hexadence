@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
+import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.render.animation.FacingDirection;
 import io.github.coda45.hexadence.spell.SpellType;
 
@@ -44,28 +45,37 @@ public class GameTextures {
     private final Texture fireballSheet;
     private final Animation<TextureRegion> fireballAnimation;
     private final TextureRegion waterBoltRegion;
-    private final Texture playerIdleSheet;
+
 
     // Directional sheet rows follow FacingDirection order, columns are frames.
-    private final EnumMap<FacingDirection, Animation<TextureRegion>> playerIdleAnimations =
-        new EnumMap<>(FacingDirection.class);
+    private final EnumMap<
+        PlayerColor,
+        PlayerAnimationSet
+    > playerAnimationSets =
+        new EnumMap<>(PlayerColor.class);
 
-    private final Texture playerMoveSheet;
 
-    private final EnumMap<FacingDirection, Animation<TextureRegion>> playerMoveAnimations =
-        new EnumMap<>(FacingDirection.class);
+
+
 
     public GameTextures() {
-        playerIdleSheet = loadPixelArt("sprites/idle.png");
-        playerMoveSheet = loadPixelArt("sprites/move.png");
-        loadPlayerMoveAnimations(
-            playerMoveSheet,
-            "sprites/move.png"
+        for (PlayerColor color : PlayerColor.values()) {
+        String folder     = "sprites/player/" + color.assetFolder();
+        String idlePath   = folder + "/idle.png";
+        String movePath   = folder + "/move.png";
+        Texture idleSheet = loadPixelArt(idlePath);
+        Texture moveSheet = loadPixelArt(movePath);
+
+        playerAnimationSets.put(
+            color,
+            new PlayerAnimationSet(
+                idleSheet,
+                moveSheet,
+                createPlayerIdleAnimations(idleSheet, idlePath),
+                createPlayerMoveAnimations(moveSheet, movePath)
+            )
         );
-        loadPlayerIdleAnimations(
-            playerIdleSheet,
-            "sprites/idle.png"
-        );
+    }
         fireballSheet = loadPixelArt("spells/fireball.png");
         fireballAnimation = createFireballAnimation(fireballSheet);
         lightningSheet = loadPixelArt("spells/Lightning.png");
@@ -78,11 +88,14 @@ public class GameTextures {
         targetDummy = loadPixelArt("sprites/target_dummy.png");
     }
 
-    private void loadPlayerMoveAnimations(
+    private EnumMap<FacingDirection, Animation<TextureRegion>> createPlayerMoveAnimations(
         Texture sheet,
         String path
     ) {
         FacingDirection[] directions = FacingDirection.values();
+
+        EnumMap<FacingDirection, Animation<TextureRegion>> 
+            animations = new EnumMap<>(FacingDirection.class);
 
         boolean invalidDimensions =
             sheet.getWidth()
@@ -109,45 +122,43 @@ public class GameTextures {
                 PLAYER_FRAME_HEIGHT
             );
 
-        for (
-            int row = 0;
-            row < directions.length;
-            row++
-        ) {
+        for (int row = 0; row < directions.length; row++) {
             Animation<TextureRegion> animation =
                 new Animation<>(
                     MOVE_FRAME_DURATION,
                     split[row]
                 );
 
-            animation.setPlayMode(
-                Animation.PlayMode.LOOP
-            );
-
-            playerMoveAnimations.put(
-                directions[row],
-                animation
-            );
+            animation.setPlayMode(Animation.PlayMode.LOOP);
+            animations.put(directions[row], animation);
         }
+
+        return animations;
     }
 
-    private void loadPlayerIdleAnimations(
+    private EnumMap<FacingDirection, Animation<TextureRegion>> createPlayerIdleAnimations(
         Texture sheet,
         String path
     ) {
-        FacingDirection[] directions =  FacingDirection.values();
+        FacingDirection[] directions =
+            FacingDirection.values();
+
+        EnumMap<FacingDirection, Animation<TextureRegion>> 
+            animations = new EnumMap<>(FacingDirection.class);
 
         boolean invalidDimensions =
             sheet.getWidth() < PLAYER_FRAME_WIDTH
             || sheet.getWidth() % PLAYER_FRAME_WIDTH != 0
             || sheet.getHeight()
-                != PLAYER_FRAME_HEIGHT * directions.length;
+                != PLAYER_FRAME_HEIGHT
+                    * directions.length;
 
         if (invalidDimensions) {
             sheet.dispose();
 
             throw new IllegalStateException(
-                "Expected eight rows of 24x36 idle frames in: "
+                "Expected eight rows of 24x36 "
+                    + "idle frames in: "
                     + path
             );
         }
@@ -159,26 +170,18 @@ public class GameTextures {
                 PLAYER_FRAME_HEIGHT
             );
 
-        for (
-            int row = 0;
-            row < directions.length;
-            row++
-        ) {
+        for (int row = 0; row < directions.length; row++) {
             Animation<TextureRegion> animation =
                 new Animation<>(
                     IDLE_FRAME_DURATION,
                     split[row]
                 );
 
-            animation.setPlayMode(
-                Animation.PlayMode.LOOP
-            );
-
-            playerIdleAnimations.put(
-                directions[row],
-                animation
-            );
+            animation.setPlayMode(Animation.PlayMode.LOOP);
+            animations.put(directions[row], animation);
         }
+
+        return animations;
     }
 
     private List<Animation<TextureRegion>>
@@ -364,21 +367,24 @@ public class GameTextures {
     }
 
     public TextureRegion getPlayerFrame(
+        PlayerColor color,
         FacingDirection direction,
         boolean moving,
         float stateTime
     ) {
-        EnumMap<
-            FacingDirection,
-            Animation<TextureRegion>
-        > animations =
-            moving
-                ? playerMoveAnimations
-                : playerIdleAnimations;
+        PlayerAnimationSet animations = playerAnimationSets.get(color);
 
-        return animations
-            .get(direction)
-            .getKeyFrame(stateTime);
+        if (animations == null) {
+            throw new IllegalArgumentException(
+                "No animations loaded for color: " + color
+            );
+        }
+
+        return animations.getFrame(
+            direction,
+            moving,
+            stateTime
+        );
     }
 
     public TextureRegion getProjectileFrame(
@@ -435,14 +441,52 @@ public class GameTextures {
         return targetDummy;
     }
 
+    private record PlayerAnimationSet(
+        Texture idleSheet,
+        Texture moveSheet,
+        EnumMap<
+            FacingDirection,
+            Animation<TextureRegion>
+        > idleAnimations,
+        EnumMap<
+            FacingDirection,
+            Animation<TextureRegion>
+        > moveAnimations
+    ) {
+
+        private TextureRegion getFrame(
+            FacingDirection direction,
+            boolean moving,
+            float stateTime
+        ) {
+            EnumMap<
+                FacingDirection,
+                Animation<TextureRegion>
+            > animations =
+                moving
+                    ? moveAnimations
+                    : idleAnimations;
+
+            return animations
+                .get(direction)
+                .getKeyFrame(stateTime);
+        }
+
+        private void dispose() {
+            idleSheet.dispose();
+            moveSheet.dispose();
+        }
+    }
+
     public void dispose() {
-        playerIdleSheet.dispose();
+        for (PlayerAnimationSet animations : playerAnimationSets.values()) {
+            animations.dispose();
+        }
         waterBolt.dispose();
         lightningSheet.dispose();
         chargedPuddleSheet.dispose();
         zoneCircle.dispose();
         targetDummy.dispose();
         fireballSheet.dispose();
-        playerMoveSheet.dispose();
     }
 }

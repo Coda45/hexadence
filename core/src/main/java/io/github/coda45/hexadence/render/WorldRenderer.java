@@ -175,6 +175,7 @@ public class WorldRenderer {
 
             TextureRegion playerRegion =
                 textures.getPlayerFrame(
+                    player.getColor(),
                     facing,
                     player.isMoving(),
                     playerMoveTime

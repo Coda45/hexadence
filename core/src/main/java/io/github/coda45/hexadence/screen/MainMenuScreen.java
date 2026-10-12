@@ -15,6 +15,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import io.github.coda45.hexadence.HexadenceGame;
+import io.github.coda45.hexadence.world.ArenaMaps;
 
 // Displays explicit Play and Exit controls using lightweight text buttons.
 public class MainMenuScreen implements Screen {
@@ -24,11 +25,13 @@ public class MainMenuScreen implements Screen {
     private final BitmapFont font;
     private final GlyphLayout layout;
     private final Texture image;
-    private static final String PLAY_TEXT = "[ PLAY ]";
+    private static final String TRAINING_TEXT = "[ TRAINING GROUNDS ]";
+    private static final String MULTIPLAYER_TEXT = "[ MULTIPLAYER ]";
     private static final String EXIT_TEXT = "[ EXIT ]";
     private static final float BUTTON_PADDING = 12f;
     private static final float BUTTON_SPACING = 50f;
-    private final Rectangle playBounds = new Rectangle();
+    private final Rectangle trainingBounds = new Rectangle();
+    private final Rectangle multiplayerBounds = new Rectangle();
     private final Rectangle exitBounds = new Rectangle();
     private static final float MENU_WIDTH = 640f;
     private static final float MENU_HEIGHT = 360f;
@@ -61,14 +64,20 @@ public class MainMenuScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        float playY = MENU_HEIGHT * 0.45f;
-
-        float exitY = playY - BUTTON_SPACING;
+        float multiplayerY = MENU_HEIGHT * 0.45f;
+        float trainingY = multiplayerY - BUTTON_SPACING;
+        float exitY = trainingY - BUTTON_SPACING;
 
         updateButtonBounds(
-            playBounds,
-            PLAY_TEXT,
-            playY
+            multiplayerBounds,
+            MULTIPLAYER_TEXT,
+            multiplayerY
+        );
+
+        updateButtonBounds(
+            trainingBounds,
+            TRAINING_TEXT,
+            trainingY
         );
 
         updateButtonBounds(
@@ -90,20 +99,37 @@ public class MainMenuScreen implements Screen {
         boolean clicked =
             Gdx.input.justTouched();
 
-        boolean playRequested =
+        boolean trainingRequested =
             Gdx.input.isKeyJustPressed(
                 Input.Keys.ENTER
             )
             || (
                 clicked
-                && playBounds.contains(
+                && trainingBounds.contains(
                     pointerX,
                     pointerY
                 )
             );
 
-        if (playRequested) {
-            startGame();
+        if (trainingRequested) {
+            startTraining();
+            return;
+        }
+
+        boolean multiplayerRequested =
+            Gdx.input.isKeyJustPressed(
+                Input.Keys.ENTER
+            )
+            || (
+                clicked
+                && multiplayerBounds.contains(
+                    pointerX,
+                    pointerY
+                )
+            );
+
+        if (multiplayerRequested) {
+            openMultiplayerLobby();
             return;
         }
 
@@ -143,9 +169,18 @@ public class MainMenuScreen implements Screen {
         );
 
         drawButton(
-            PLAY_TEXT,
-            playY,
-            playBounds.contains(
+            MULTIPLAYER_TEXT,
+            multiplayerY,
+            multiplayerBounds.contains(
+                pointerX,
+                pointerY
+            )
+        );
+
+        drawButton(
+            TRAINING_TEXT,
+            trainingY,
+            trainingBounds.contains(
                 pointerX,
                 pointerY
             )
@@ -210,12 +245,20 @@ public class MainMenuScreen implements Screen {
         font.setColor(Color.WHITE);
     }
 
-    private void startGame() {
+    private void startTraining() {
+        game.setScreen(
+            new ArenaScreen(ArenaMaps.TRAINING)
+        );
+
+        dispose();
+    }
+
+    private void openMultiplayerLobby() {
         game.setScreen(
             new HostLobbyScreen(game)
         );
 
-    dispose();
+        dispose();
     }
 
     @Override

@@ -29,6 +29,7 @@ public final class SnapshotFactory {
 
             players.add(new WorldSnapshot.PlayerState(
                 entry.getKey(),
+                player.getColor(),
                 player.getX(),
                 player.getY(),
                 player.getAimX(),

@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 import io.github.coda45.hexadence.entity.Player;
+import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
@@ -654,10 +655,29 @@ public class ArenaWorld {
 
         players.put(
             playerId,
-            new Player(spawn.x(), spawn.y())
+            new Player(spawn.x(), spawn.y(), findAvailablePlayerColor())
         );
 
         assignedPlayerSpawns.put(playerId, spawn);
+    }
+
+    private PlayerColor findAvailablePlayerColor() {
+        for (PlayerColor color : PlayerColor.values()) {
+            boolean alreadyUsed =
+                players.values().stream()
+                    .anyMatch(
+                        player ->
+                            player.getColor() == color
+                    );
+
+            if (!alreadyUsed) {
+                return color;
+            }
+        }
+
+        throw new IllegalStateException(
+            "No player color is available"
+        );
     }
 
     private SpawnPoint findAvailablePlayerSpawn() {
@@ -739,7 +759,7 @@ public class ArenaWorld {
 
             Player player = players.computeIfAbsent(
                 state.id(),
-                id -> new Player(state.x(), state.y())
+                id -> new Player(state.x(), state.y(), state.color())
             );
 
             player.restoreState(
@@ -751,7 +771,8 @@ public class ArenaWorld {
                 state.health(),
                 state.respawnRemaining(),
                 state.kills(),
-                state.deaths()
+                state.deaths(),
+                state.color()
             );
 
             for (SpellType spellType : SpellType.values()) {

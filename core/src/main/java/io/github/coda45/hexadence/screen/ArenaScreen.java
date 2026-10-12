@@ -16,6 +16,7 @@ import io.github.coda45.hexadence.render.WorldCamera;
 import io.github.coda45.hexadence.render.WorldRenderer;
 import io.github.coda45.hexadence.world.ArenaDefinition;
 import io.github.coda45.hexadence.world.ArenaMap;
+import io.github.coda45.hexadence.world.ArenaMaps;
 import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.StepResult;
 import io.github.coda45.hexadence.world.WorldEvent;
@@ -39,21 +40,37 @@ public class ArenaScreen implements Screen {
     private float accumulator;
 
     public ArenaScreen() {
+        this(
+            System.getProperty(
+                "hexadence.map",
+                ArenaMaps.MULTIPLAYER
+            ),
+            true
+        );
+    }
+
+    public ArenaScreen(String localMapPath) {
+        this(localMapPath, false);
+    }
+
+    private ArenaScreen(
+        String mapPath,
+        boolean networkingEnabled
+    ) {
         worldCamera = new WorldCamera();
         inputController = new PlayerInputController();
 
-        String mapPath = System.getProperty(
-            "hexadence.map",
-            "maps/dungeon_map.tmx"
-        );
-
         arenaMap = new ArenaMap(mapPath);
-        ArenaDefinition definition = arenaMap.createDefinition();
+        ArenaDefinition definition =
+            arenaMap.createDefinition();
+
         world = new ArenaWorld(definition);
-        session = openSession(definition, mapPath);
+
+        session = networkingEnabled
+            ? openSession(definition, mapPath)
+            : null;
 
         if (session != null) {
-            // Network players come only from authoritative snapshots.
             world.removePlayer(0);
         }
 

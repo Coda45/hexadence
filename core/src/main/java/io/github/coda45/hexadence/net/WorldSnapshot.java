@@ -2,6 +2,7 @@ package io.github.coda45.hexadence.net;
 
 import java.util.List;
 
+import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.spell.SpellType;
 
@@ -27,6 +28,7 @@ public record WorldSnapshot(
     // Everything the renderer and HUD read from a Player.
     public record PlayerState(
         int id,
+        PlayerColor color,
         float x,
         float y,
         float aimX,

@@ -1,6 +1,7 @@
 package io.github.coda45.hexadence.entity;
 
 import java.util.EnumMap;
+import java.util.Objects;
 
 import io.github.coda45.hexadence.spell.SpellType;
 
@@ -19,6 +20,7 @@ public class Player {
     private float respawnRemaining = -1f;
     private int kills;
     private int deaths;
+    private PlayerColor color;
 
     // Collision covers the feet, not the full sprite.
     public static final float HALF_WIDTH = 0.365f;
@@ -38,8 +40,18 @@ public class Player {
         new EnumMap<>(SpellType.class);
 
     public Player(float x, float y) {
+        this(x, y, PlayerColor.CYAN);
+    }
+
+    public Player(
+        float x,
+        float y,
+        PlayerColor color
+    ) {
         this.x = x;
         this.y = y;
+        this.color = Objects.requireNonNull(color);
+
         for (SpellType spellType : SpellType.values()) {
             cooldowns.put(spellType, 0f);
         }
@@ -53,6 +65,10 @@ public class Player {
 
     public boolean isMoving() {
         return moving;
+    }
+
+    public PlayerColor getColor() {
+        return color;
     }
 
     public float getX() {
@@ -213,7 +229,8 @@ public class Player {
         float health,
         float respawnRemaining,
         int kills,
-        int deaths
+        int deaths,
+        PlayerColor color
     ) {
         this.x = x;
         this.y = y;
@@ -224,6 +241,7 @@ public class Player {
         this.respawnRemaining = respawnRemaining;
         this.kills = kills;
         this.deaths = deaths;
+        this.color = Objects.requireNonNull(color);
     }
 
     public void setCooldownRemaining(SpellType spellType, float seconds) {

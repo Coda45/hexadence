@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.spell.SpellType;
@@ -27,7 +28,7 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 // Enums travel as explicit stable IDs.
 public final class GameCodec {
 
-    public static final int PROTOCOL_VERSION = 4;
+    public static final int PROTOCOL_VERSION = 5;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -179,6 +180,7 @@ public final class GameCodec {
         out.writeShort(snapshot.players().size());
         for (WorldSnapshot.PlayerState p : snapshot.players()) {
             out.writeInt(p.id());
+            out.writeByte(playerColorId(p.color()));
             out.writeFloat(p.x());
             out.writeFloat(p.y());
             out.writeFloat(p.aimX());
@@ -231,6 +233,7 @@ public final class GameCodec {
         for (int i = 0; i < playerCount; i++) {
             players.add(new WorldSnapshot.PlayerState(
                 in.readInt(),
+                playerColorFromId(in.readUnsignedByte()),
                 in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),
@@ -311,6 +314,28 @@ public final class GameCodec {
         }
 
         return in.readCharSequence(byteCount, StandardCharsets.UTF_8).toString();
+    }
+
+    private static int playerColorId(PlayerColor color) {
+        return switch (color) {
+            case CYAN -> 1;
+            case RED -> 2;
+            case GREEN -> 3;
+            case GOLD -> 4;
+        };
+    }
+
+    private static PlayerColor playerColorFromId(int id) {
+        return switch (id) {
+            case 1 -> PlayerColor.CYAN;
+            case 2 -> PlayerColor.RED;
+            case 3 -> PlayerColor.GREEN;
+            case 4 -> PlayerColor.GOLD;
+
+            default -> throw new IllegalArgumentException(
+                "Unknown PlayerColor ID: " + id
+            );
+        };
     }
 
     private static int spellTypeId(SpellType type) {

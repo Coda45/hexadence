@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
+import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.spell.SpellType;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
@@ -52,7 +53,24 @@ class GameCodecTest {
     void roundTripsSnapshotEntityIds() {
         WorldSnapshot expected = new WorldSnapshot(
             99L,
-            List.of(),
+            List.of(
+                new WorldSnapshot.PlayerState(
+                    7,
+                    PlayerColor.GREEN,
+                    1f,
+                    2f,
+                    1f,
+                    0f,
+                    true,
+                    80f,
+                    -1f,
+                    3,
+                    2,
+                    0.1f,
+                    0.2f,
+                    0.3f
+                )
+            ),
             List.of(
                 new WorldSnapshot.DummyState(
                     11,
