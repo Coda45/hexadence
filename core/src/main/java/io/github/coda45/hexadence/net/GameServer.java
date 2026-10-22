@@ -21,6 +21,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 
@@ -39,6 +40,11 @@ public class GameServer {
     public static final int MAX_PLAYERS = 4;
 
     private static final int MAX_PENDING_EVENTS_PER_CLIENT = 64;
+    // Clients send input every tick, so a connection that has been silent
+    // this long is dead (closed laptop, lost Wi-Fi) or never was a game client
+    // (port scanners on the internet). Closing it frees the player slot.
+    // Generous, because a minimized game window may stop sending for a while.
+    static final int READ_TIMEOUT_SECONDS = 30;
     // One simulation step is 1/60 s, matching ArenaWorld.STEP.
     private static final long TICK_NANOS = 1_000_000_000L / 60L;
 
@@ -127,6 +133,9 @@ public class GameServer {
             .childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) {
+                    ch.pipeline().addLast(
+                        new ReadTimeoutHandler(READ_TIMEOUT_SECONDS)
+                    );
                     GameCodec.install(ch.pipeline());
                     // Passing gameThread runs this handler on the game thread
                     // instead of the connection's own I/O thread.

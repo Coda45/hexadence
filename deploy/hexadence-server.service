@@ -1,0 +1,29 @@
+# systemd unit for the Hexadence dedicated server.
+# setup-vps.sh installs this as /etc/systemd/system/hexadence-server.service.
+#
+#   sudo systemctl status hexadence-server     is it running?
+#   sudo systemctl restart hexadence-server    after deploying a new jar
+#   journalctl -u hexadence-server -f          follow the server's output
+
+[Unit]
+Description=Hexadence dedicated game server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=hexadence
+WorkingDirectory=/opt/hexadence
+Environment=HEXADENCE_PORT=7777
+# The server holds one small arena; 512 MB of heap is plenty.
+ExecStart=/usr/bin/java -Xms128m -Xmx512m -jar /opt/hexadence/hexadence-server.jar
+Restart=on-failure
+RestartSec=3
+
+# The server only needs to read its own jar and open a network port.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

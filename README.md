@@ -88,7 +88,30 @@ java -Dhexadence.join=localhost:7777 -jar ../lwjgl3/build/libs/Hexadence-1.0.0.j
 
 On macOS, add `-XstartOnFirstThread` before `-jar`. The port defaults to 7777 (`-Dhexadence.port=...` on the host changes it). Without either option the game runs as normal single-player.
 
-To play across machines on the same network, joiners use the host's local IP address instead of localhost; playing over the internet isn't supported yet.
+To play across machines on the same network, joiners use the host's local IP address instead of localhost. To play over the internet, use the dedicated server below.
+
+### Dedicated server
+
+The `server` module runs the game server on its own, with no window and no local player. Every player joins it as a client, so start each game copy with `-Dhexadence.join=<server-address>:7777`.
+
+Run one locally:
+
+```bash
+./gradlew server:run
+# then, from assets, in two other terminals:
+java -Dhexadence.join=localhost:7777 -jar ../lwjgl3/build/libs/Hexadence-1.0.0.jar
+```
+
+`./gradlew server:jar` builds `server/build/libs/hexadence-server.jar`, a single file with the maps bundled. Options: `-Dhexadence.port=` (or the `HEXADENCE_PORT` environment variable) and `-Dhexadence.map=`. The server and every client must run the same build, because clients are only accepted when their protocol version and map match the server's.
+
+**Deploying to the VPS** (Ubuntu, from Linux, macOS, or Git Bash on Windows):
+
+```bash
+./deploy/deploy.sh ubuntu@<vps-ip> --setup   # first time: installs Java, the service, and the firewall rules
+./deploy/deploy.sh ubuntu@<vps-ip>           # later: rebuild, upload, restart
+```
+
+On the VPS, `sudo systemctl status hexadence-server` shows whether it's running and `journalctl -u hexadence-server -f` follows its output. The server restarts on its own after a crash or a reboot, and closes connections that send nothing for 30 seconds.
 
 ## Development Tools
 

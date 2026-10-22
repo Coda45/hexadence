@@ -3,6 +3,7 @@ package io.github.coda45.hexadence.net;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.timeout.ReadTimeoutException;
 
 // One instance per connected client. It reacts to that client's connection
 // events and hands everything to GameServer, which owns the world.
@@ -102,7 +103,14 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        cause.printStackTrace();
+        if (cause instanceof ReadTimeoutException) {
+            System.out.println(
+                "Closing silent connection from " + ctx.channel().remoteAddress()
+            );
+        } else {
+            cause.printStackTrace();
+        }
+
         ctx.close();   // closing triggers channelInactive, which removes the player
     }
 }
