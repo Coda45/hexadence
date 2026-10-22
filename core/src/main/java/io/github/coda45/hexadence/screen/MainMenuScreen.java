@@ -25,6 +25,7 @@ public class MainMenuScreen implements Screen {
     private final BitmapFont font;
     private final GlyphLayout layout;
     private final Texture image;
+    private boolean showMultiplayerPopup = false;
     private static final String TRAINING_TEXT = "[ TRAINING GROUNDS ]";
     private static final String MULTIPLAYER_TEXT = "[ MULTIPLAYER ]";
     private static final String EXIT_TEXT = "[ EXIT ]";
@@ -33,6 +34,9 @@ public class MainMenuScreen implements Screen {
     private final Rectangle trainingBounds = new Rectangle();
     private final Rectangle multiplayerBounds = new Rectangle();
     private final Rectangle exitBounds = new Rectangle();
+    private final Rectangle hostBounds = new Rectangle();
+    private final Rectangle joinBounds = new Rectangle();
+    private final Rectangle closeBounds = new Rectangle();
     private static final float MENU_WIDTH = 640f;
     private static final float MENU_HEIGHT = 360f;
 
@@ -85,6 +89,28 @@ public class MainMenuScreen implements Screen {
             EXIT_TEXT,
             exitY
         );
+        if (showMultiplayerPopup) {
+
+            float popupCenterY = MENU_HEIGHT / 2f;
+
+            updateButtonBounds(
+                hostBounds,
+                "[ HOST GAME ]",
+                popupCenterY + 30f
+            );
+
+            updateButtonBounds(
+                joinBounds,
+                "[ JOIN GAME ]",
+                popupCenterY - 20f
+            );
+
+            updateButtonBounds(
+                closeBounds,
+                "[ CLOSE ]",
+                popupCenterY - 70f
+            );
+        }
 
         pointer.set(
             Gdx.input.getX(),
@@ -98,16 +124,36 @@ public class MainMenuScreen implements Screen {
 
         boolean clicked =
             Gdx.input.justTouched();
+        
+        if (showMultiplayerPopup && clicked) {
 
+            if (hostBounds.contains(pointerX, pointerY)) {
+                System.out.println("HOST GAME CLICKED");
+            }
+
+            if (joinBounds.contains(pointerX, pointerY)) {
+                System.out.println("JOIN GAME CLICKED");
+            }
+
+            if (closeBounds.contains(pointerX, pointerY)) {
+                showMultiplayerPopup = false;
+                return;
+            }
+
+        }
         boolean trainingRequested =
-            Gdx.input.isKeyJustPressed(
-                Input.Keys.ENTER
-            )
-            || (
-                clicked
-                && trainingBounds.contains(
-                    pointerX,
-                    pointerY
+            !showMultiplayerPopup
+            &&
+            (
+                Gdx.input.isKeyJustPressed(
+                    Input.Keys.ENTER
+                )
+                || (
+                    clicked
+                    && trainingBounds.contains(
+                        pointerX,
+                        pointerY
+                    )
                 )
             );
 
@@ -117,31 +163,39 @@ public class MainMenuScreen implements Screen {
         }
 
         boolean multiplayerRequested =
-            Gdx.input.isKeyJustPressed(
-                Input.Keys.ENTER
-            )
-            || (
-                clicked
-                && multiplayerBounds.contains(
-                    pointerX,
-                    pointerY
+            !showMultiplayerPopup
+            &&
+            (
+                Gdx.input.isKeyJustPressed(
+                    Input.Keys.ENTER
+                )
+                || (
+                    clicked
+                    && multiplayerBounds.contains(
+                        pointerX,
+                        pointerY
+                    )
                 )
             );
 
         if (multiplayerRequested) {
-            openMultiplayerLobby();
-            return;
+        showMultiplayerPopup = true;
         }
+        
 
         boolean exitRequested =
-            Gdx.input.isKeyJustPressed(
-                Input.Keys.ESCAPE
-            )
-            || (
-                clicked
-                && exitBounds.contains(
-                    pointerX,
-                    pointerY
+            !showMultiplayerPopup
+            &&
+            (
+                Gdx.input.isKeyJustPressed(
+                    Input.Keys.ESCAPE
+                )
+                || (
+                    clicked
+                    && exitBounds.contains(
+                        pointerX,
+                        pointerY
+                    )
                 )
             );
 
@@ -168,33 +222,79 @@ public class MainMenuScreen implements Screen {
             MENU_HEIGHT
         );
 
-        drawButton(
-            MULTIPLAYER_TEXT,
-            multiplayerY,
-            multiplayerBounds.contains(
-                pointerX,
-                pointerY
-            )
-        );
+        if (!showMultiplayerPopup) {
 
-        drawButton(
-            TRAINING_TEXT,
-            trainingY,
-            trainingBounds.contains(
-                pointerX,
-                pointerY
-            )
-        );
+            drawButton(
+                MULTIPLAYER_TEXT,
+                multiplayerY,
+                multiplayerBounds.contains(
+                    pointerX,
+                    pointerY
+                )
+            );
 
-        drawButton(
-            EXIT_TEXT,
-            exitY,
-            exitBounds.contains(
-                pointerX,
-                pointerY
-            )
-        );
+            drawButton(
+                TRAINING_TEXT,
+                trainingY,
+                trainingBounds.contains(
+                    pointerX,
+                    pointerY
+                )
+            );
 
+            drawButton(
+                EXIT_TEXT,
+                exitY,
+                exitBounds.contains(
+                    pointerX,
+                    pointerY
+                )
+            );
+        }
+
+        if (showMultiplayerPopup) {
+
+            font.setColor(Color.WHITE);
+
+            layout.setText(
+                font,
+                "MULTIPLAYER"
+            );
+
+            font.draw(
+                batch,
+                layout,
+                (MENU_WIDTH - layout.width) / 2f,
+                MENU_HEIGHT / 2f + 80f
+            );
+
+            drawButton(
+                "[ HOST GAME ]",
+                MENU_HEIGHT / 2f + 30f,
+                hostBounds.contains(
+                    pointerX,
+                    pointerY
+                )       
+            );
+
+            drawButton(
+                "[ JOIN GAME ]",
+                MENU_HEIGHT / 2f - 20f,
+                joinBounds.contains(
+                    pointerX,
+                    pointerY
+                )
+            );
+
+            drawButton(
+                "[ CLOSE ]",
+                MENU_HEIGHT / 2f - 70f,
+                closeBounds.contains(
+                    pointerX,
+                    pointerY
+                )
+            );
+        }
         batch.end();
     }
 
