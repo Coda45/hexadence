@@ -56,53 +56,32 @@ cd hexadence
 ./gradlew build
 ./gradlew lwjgl3:run
 ```
-### Multiplayer (prototype)
+### Multiplayer
 
-One player hosts and plays, and up to three others join. Build the jar once, then start each copy from the `assets` folder. Start the host first.
+Up to four players play one match, called a room, on the team's dedicated server. From the main menu choose **Multiplayer**:
 
-**Windows (PowerShell)**
+* **Host Game** creates a room and shows its four-character room code. Share the code, wait for players to appear in the lobby, then press **Start Battle**.
+* **Join Game**: type the host's room code and press **Join Game** (or Enter). You wait in the lobby until the host starts.
 
-```powershell
-.\gradlew.bat lwjgl3:jar
-cd assets
+The server can run many rooms at once. If the host leaves the lobby before starting, the room closes and everyone in it returns to the code screen. Once a match has started, no one new can join it.
 
-# Host
-java "-Dhexadence.host=true" -jar ..\lwjgl3\build\libs\Hexadence-1.0.0.jar
-
-# Joiner (in another terminal, also from assets; use the host's IP instead of localhost on a different machine)
-java "-Dhexadence.join=localhost:7777" -jar ..\lwjgl3\build\libs\Hexadence-1.0.0.jar
-```
-
-**Linux / macOS**
-
-```bash
-./gradlew lwjgl3:jar
-cd assets
-
-# Host
-java -Dhexadence.host=true -jar ../lwjgl3/build/libs/Hexadence-1.0.0.jar
-
-# Joiner (in another terminal, also from assets)
-java -Dhexadence.join=localhost:7777 -jar ../lwjgl3/build/libs/Hexadence-1.0.0.jar
-```
-
-On macOS, add `-XstartOnFirstThread` before `-jar`. The port defaults to 7777 (`-Dhexadence.port=...` on the host changes it). Without either option the game runs as normal single-player.
-
-To play across machines on the same network, joiners use the host's local IP address instead of localhost. To play over the internet, use the dedicated server below.
+The game connects to the server at `40.160.225.76:7777` by default. Everyone must run the same build as the server; otherwise the lobby says the game version does not match.
 
 ### Dedicated server
 
-The `server` module runs the game server on its own, with no window and no local player. Every player joins it as a client, so start each game copy with `-Dhexadence.join=40.160.225.76:7777`.
+The `server` module runs the game server on its own, with no window and no local player.
 
-Run one locally:
+To test on your own machine, run a local server and point the game at it:
 
 ```bash
 ./gradlew server:run
-# then, from assets, in two other terminals:
-java -Dhexadence.join=localhost:7777 -jar ../lwjgl3/build/libs/Hexadence-1.0.0.jar
+# in another terminal:
+./gradlew lwjgl3:run -Dhexadence.server=localhost
 ```
 
-`./gradlew server:jar` builds `server/build/libs/hexadence-server.jar`, a single file with the maps bundled. Options: `-Dhexadence.port=` (or the `HEXADENCE_PORT` environment variable) and `-Dhexadence.map=`. The server and every client must run the same build, because clients are only accepted when their protocol version and map match the server's.
+On Windows, use `.\gradlew.bat` and quote the option: `.\gradlew.bat lwjgl3:run "-Dhexadence.server=localhost"`. To test with several players, build the jar with `lwjgl3:jar` and start more copies from the `assets` folder with `java -Dhexadence.server=localhost -jar ../lwjgl3/build/libs/Hexadence-1.0.0.jar`.
+
+`./gradlew server:jar` builds `server/build/libs/hexadence-server.jar`, a single file with the maps bundled. Options: `-Dhexadence.port=` (or the `HEXADENCE_PORT` environment variable) and `-Dhexadence.map=`. The server and every client must run the same build, because clients are only accepted when their protocol version and map match the server's, so redeploy after changing anything the server runs.
 
 **Deploying to the VPS** (Ubuntu, from Linux, macOS, or Git Bash on Windows):
 

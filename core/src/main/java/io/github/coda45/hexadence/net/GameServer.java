@@ -1,17 +1,15 @@
 package io.github.coda45.hexadence.net;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.LinkedHashMap;
+import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.world.ArenaDefinition;
-import io.github.coda45.hexadence.world.ArenaWorld;
-import io.github.coda45.hexadence.world.StepResult;
-import io.github.coda45.hexadence.world.WorldEvent;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -25,38 +23,39 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 
-// The authoritative game server. It owns one ArenaWorld, advances it at
-// 60 Hz, and sends snapshots plus reliable semantic events to each client.
+// The authoritative game server. It hosts any number of rooms, each its own
+// match with its own ArenaWorld (see GameRoom), and advances every running
+// room at 60 Hz.
 //
 // It uses no libGDX: the map is loaded elsewhere and passed in as an
-// ArenaDefinition, which is plain data.
+// ArenaDefinition, which is plain data. Every room uses that same arena.
 //
 // Threading: every ServerHandler callback and every tick runs on the single
-// "game thread" below. The fields in this class are only touched from that
-// thread, so they need no locks.
+// "game thread" below. The fields in this class, and every GameRoom, are
+// only touched from that thread, so they need no locks.
 public class GameServer {
 
     public static final int DEFAULT_PORT = 7777;
     public static final int MAX_PLAYERS = 4;
+    // Caps memory use: each room holds a world even before its match starts.
+    static final int MAX_ROOMS = 50;
 
-    private static final int MAX_PENDING_EVENTS_PER_CLIENT = 64;
-    // Clients send input every tick, so a connection that has been silent
-    // this long is dead (closed laptop, lost Wi-Fi) or never was a game client
-    // (port scanners on the internet). Closing it frees the player slot.
-    // Generous, because a minimized game window may stop sending for a while.
+    // Clients send input every tick in a match and a KeepAlive every few
+    // seconds otherwise, so a connection silent this long is dead (closed
+    // laptop, lost Wi-Fi) or never was a game client (port scanners on the
+    // internet). Closing it frees the player slot.
     static final int READ_TIMEOUT_SECONDS = 30;
+
     // One simulation step is 1/60 s, matching ArenaWorld.STEP.
     private static final long TICK_NANOS = 1_000_000_000L / 60L;
 
     private final int port;
     private final String mapId;
-    private final ArenaWorld world;
+    private final ArenaDefinition definition;
 
-    // Game-thread state: which connection and which pending input belong
-    // to each player ID.
-    private final Map<Integer, Channel> channels = new LinkedHashMap<>();
-    private final Map<Integer, PendingCommand> pending = new LinkedHashMap<>();
-    private final Map<Integer, Deque<WorldEvent>> pendingEvents = new LinkedHashMap<>();
+    // Game-thread state.
+    private final Map<String, GameRoom> rooms = new HashMap<>();
+    private final RoomCodes codes = new RoomCodes();
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -70,51 +69,60 @@ public class GameServer {
     ) {
         this.port = port;
         this.mapId = Objects.requireNonNull(mapId);
-        this.world = new ArenaWorld(definition);
-
-        // ArenaWorld always creates player 0 for single-player. The server has
-        // no local player; every player here is a connected client.
-        world.removePlayer(0);
+        this.definition = Objects.requireNonNull(definition);
     }
 
     // ---- Called by ServerHandler, always on the game thread ----
 
-    int join(Channel channel) {
-        int roomCapacity = Math.min(
-            MAX_PLAYERS,
-            world.getPlayerCapacity()
-        );
-
-        if (channels.size() >= roomCapacity) {
-            System.out.println("Rejected " + channel.remoteAddress() + ": game is full");
-            channel.close();
-            return -1;
-        }
-        int id = world.addPlayer();
-
-        channels.put(id, channel);
-        pending.put(id, new PendingCommand());
-        pendingEvents.put(id, new ArrayDeque<>());
-
-        System.out.println("Player " + id + " joined from " + channel.remoteAddress());
-        return id;
+    boolean usesMap(String requestedMapId) {
+        return mapId.equals(requestedMapId);
     }
 
-    void receive(int playerId, PlayerCommand command) {
-        PendingCommand slot = pending.get(playerId);
+    // A new empty room, or null if the server already has MAX_ROOMS.
+    GameRoom createRoom() {
+        if (rooms.size() >= MAX_ROOMS) {
+            return null;
+        }
 
-        if (slot != null) {
-            slot.merge(command);
+        String code = codes.next(rooms.keySet());
+        GameRoom room = new GameRoom(code, definition, mapId);
+        rooms.put(code, room);
+
+        System.out.println("[room " + code + "] Created ("
+            + rooms.size() + " room(s) open)");
+        return room;
+    }
+
+    // The room with this code, or null. Accepts codes as players type them.
+    GameRoom findRoom(String typedCode) {
+        return rooms.get(RoomCodes.normalize(typedCode));
+    }
+
+    void receive(GameRoom room, int playerId, PlayerCommand command) {
+        room.receive(playerId, command);
+    }
+
+    void start(GameRoom room, int playerId) {
+        room.start(playerId);
+    }
+
+    void leave(GameRoom room, int playerId) {
+        room.leave(playerId);
+        forgetIfFinished(room);
+    }
+
+    // A room nobody joined, for example because its creator's Welcome
+    // could not be sent, must not linger.
+    void forgetIfFinished(GameRoom room) {
+        if (room.isFinished() && rooms.get(room.code()) == room) {
+            rooms.remove(room.code());
+            System.out.println("[room " + room.code() + "] Removed ("
+                + rooms.size() + " room(s) open)");
         }
     }
 
-    void leave(int playerId) {
-        channels.remove(playerId);
-        pending.remove(playerId);
-        world.removePlayer(playerId);
-        pendingEvents.remove(playerId);
-
-        System.out.println("Player " + playerId + " left");
+    int roomCount() {
+        return rooms.size();
     }
 
     // ---- Lifecycle ----
@@ -162,7 +170,13 @@ public class GameServer {
             TimeUnit.NANOSECONDS
         );
 
-        System.out.println("Hexadence server listening on port " + port);
+        System.out.println("Hexadence server listening on port " + boundPort());
+    }
+
+    // The port actually in use. Differs from the requested one only when
+    // the server was created with port 0, which tests use to get a free port.
+    public int boundPort() {
+        return ((InetSocketAddress) serverChannel.localAddress()).getPort();
     }
 
     // Blocks until the server channel closes
@@ -190,86 +204,17 @@ public class GameServer {
 
     // ---- The simulation loop ----
 
-    // A repeating task stops forever if it throws once, so catch everything.
+    // A repeating task stops forever if it throws once, so catch everything,
+    // and catch per room so one broken match cannot stop the others.
     private void tickSafely() {
-        try {
-            tick();
-        } catch (Throwable t) {
-            t.printStackTrace();
-        }
-    }
+        List<GameRoom> snapshot = new ArrayList<>(rooms.values());
 
-    private void tick() {
-        Map<Integer, PlayerCommand> commands = new LinkedHashMap<>();
-
-        for (Map.Entry<Integer, PendingCommand> entry : pending.entrySet()) {
-            commands.put(entry.getKey(), entry.getValue().take());
-        }
-
-        StepResult result = world.step(commands);
-
-        if (channels.isEmpty()) {
-            return;
-        }
-
-        queueEvents(result);
-
-        WorldSnapshot snapshot = SnapshotFactory.capture(world, result);
-
-        for (Map.Entry<Integer, Channel> entry : channels.entrySet()) {
-            int playerId = entry.getKey();
-            Channel channel = entry.getValue();
-
-            // Snapshots are replaceable, so do not queue them for a slow client.
-            if (!channel.isActive() || !channel.isWritable()) {
-                continue;
-            }
-
-            // Send current persistent state first.
-            channel.write(snapshot);
-
-            // Then send every reliable event that client has not received.
-            Deque<WorldEvent> events =
-                pendingEvents.get(playerId);
-
-            if (events != null) {
-                while (!events.isEmpty()) {
-                    channel.write(events.removeFirst());
-                }
-            }
-
-            channel.flush();
-        }
-    }
-
-    boolean usesMap(String requestedMapId) {
-        return mapId.equals(requestedMapId);
-    }
-
-    private void queueEvents(StepResult result) {
-        for (WorldEvent event : result.events()) {
-            for (Map.Entry<Integer, Channel> entry : channels.entrySet()) {
-                int playerId = entry.getKey();
-                Channel channel = entry.getValue();
-
-                Deque<WorldEvent> events =
-                    pendingEvents.get(playerId);
-
-                if (events == null) {
-                    continue;
-                }
-
-                if (events.size() >= MAX_PENDING_EVENTS_PER_CLIENT) {
-                    System.err.println(
-                        "Disconnecting player "
-                            + playerId
-                            + ": reliable event queue overflow"
-                    );
-                    channel.close();
-                    continue;
-                }
-
-                events.addLast(event);
+        for (GameRoom room : snapshot) {
+            try {
+                room.tick();
+            } catch (Throwable t) {
+                System.err.println("[room " + room.code() + "] Tick failed");
+                t.printStackTrace();
             }
         }
     }

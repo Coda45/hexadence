@@ -28,7 +28,9 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 // Enums travel as explicit stable IDs.
 public final class GameCodec {
 
-    public static final int PROTOCOL_VERSION = 5;
+    // 6: rooms and the lobby (room codes, JoinRejected, LobbyState,
+    //    StartGame, GameStarted, RoomClosed, KeepAlive).
+    public static final int PROTOCOL_VERSION = 6;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -36,9 +38,16 @@ public final class GameCodec {
     private static final byte TYPE_LIGHTNING_EVENT = 4;
     private static final byte TYPE_CLIENT_HELLO = 5;
     private static final byte TYPE_ZONE_CHARGE_CHANGED = 6;
+    private static final byte TYPE_JOIN_REJECTED = 7;
+    private static final byte TYPE_LOBBY_STATE = 8;
+    private static final byte TYPE_START_GAME = 9;
+    private static final byte TYPE_GAME_STARTED = 10;
+    private static final byte TYPE_ROOM_CLOSED = 11;
+    private static final byte TYPE_KEEP_ALIVE = 12;
 
     private static final int LENGTH_FIELD_BYTES = 4;
     private static final int MAX_MAP_ID_BYTES = 128;
+    private static final int MAX_ROOM_CODE_BYTES = 16;
     private static final int KNOWN_COMMAND_FLAGS = 0b111;
 
     // Far larger than any real snapshot; guards against garbage length values.
@@ -82,12 +91,14 @@ public final class GameCodec {
                 out.writeByte(TYPE_CLIENT_HELLO);
                 out.writeInt(hello.protocolVersion());
                 writeMapId(out, hello.mapId());
+                writeRoomCode(out, hello.roomCode());
             } else if (message instanceof PlayerCommand command) {
                 writeCommand(out, command);
             } else if (message instanceof Welcome welcome) {
                 out.writeByte(TYPE_WELCOME);
                 out.writeInt(welcome.protocolVersion());
                 out.writeInt(welcome.playerId());
+                writeRoomCode(out, welcome.roomCode());
             } else if (message instanceof WorldSnapshot snapshot) {
                 writeSnapshot(out, snapshot);
             } else if (message instanceof LightningStrikeEvent event) {
@@ -96,6 +107,21 @@ public final class GameCodec {
                 out.writeByte(TYPE_ZONE_CHARGE_CHANGED);
                 out.writeInt(event.zoneId());
                 out.writeBoolean(event.electrified());
+            } else if (message instanceof JoinRejected rejected) {
+                out.writeByte(TYPE_JOIN_REJECTED);
+                out.writeByte(rejectReasonId(rejected.reason()));
+            } else if (message instanceof LobbyState lobby) {
+                out.writeByte(TYPE_LOBBY_STATE);
+                out.writeByte(lobby.playerCount());
+                out.writeByte(lobby.maxPlayers());
+            } else if (message instanceof StartGame) {
+                out.writeByte(TYPE_START_GAME);
+            } else if (message instanceof GameStarted) {
+                out.writeByte(TYPE_GAME_STARTED);
+            } else if (message instanceof RoomClosed) {
+                out.writeByte(TYPE_ROOM_CLOSED);
+            } else if (message instanceof KeepAlive) {
+                out.writeByte(TYPE_KEEP_ALIVE);
             } else {
                 throw new IllegalArgumentException(
                     "Unsupported message: " + message.getClass().getName()
@@ -116,12 +142,31 @@ public final class GameCodec {
             byte type = in.readByte();
 
             switch (type) {
-                case TYPE_CLIENT_HELLO -> out.add(new ClientHello(in.readInt(), readMapId(in)));
+                case TYPE_CLIENT_HELLO -> out.add(new ClientHello(
+                    in.readInt(),
+                    readMapId(in),
+                    readRoomCode(in)
+                ));
                 case TYPE_COMMAND -> out.add(readCommand(in));
-                case TYPE_WELCOME -> out.add(new Welcome(in.readInt(), in.readInt()));
+                case TYPE_WELCOME -> out.add(new Welcome(
+                    in.readInt(),
+                    in.readInt(),
+                    readRoomCode(in)
+                ));
                 case TYPE_SNAPSHOT -> out.add(readSnapshot(in));
                 case TYPE_LIGHTNING_EVENT -> out.add(readLightningEvent(in));
                 case TYPE_ZONE_CHARGE_CHANGED -> out.add(new ZoneChargeChangedEvent(in.readInt(), in.readBoolean()));
+                case TYPE_JOIN_REJECTED -> out.add(new JoinRejected(
+                    rejectReasonFromId(in.readUnsignedByte())
+                ));
+                case TYPE_LOBBY_STATE -> out.add(new LobbyState(
+                    in.readUnsignedByte(),
+                    in.readUnsignedByte()
+                ));
+                case TYPE_START_GAME -> out.add(new StartGame());
+                case TYPE_GAME_STARTED -> out.add(new GameStarted());
+                case TYPE_ROOM_CLOSED -> out.add(new RoomClosed());
+                case TYPE_KEEP_ALIVE -> out.add(new KeepAlive());
                 default -> throw new IllegalArgumentException(
                     "Unknown message type: " + type
                 );
@@ -314,6 +359,57 @@ public final class GameCodec {
         }
 
         return in.readCharSequence(byteCount, StandardCharsets.UTF_8).toString();
+    }
+
+    // Room codes may be empty: a ClientHello with no code asks for a new room.
+    private static void writeRoomCode(ByteBuf out, String roomCode) {
+        byte[] bytes = roomCode.getBytes(StandardCharsets.UTF_8);
+
+        if (bytes.length > MAX_ROOM_CODE_BYTES) {
+            throw new IllegalArgumentException(
+                "Invalid room code byte length: " + bytes.length
+            );
+        }
+
+        out.writeByte(bytes.length);
+        out.writeBytes(bytes);
+    }
+
+    private static String readRoomCode(ByteBuf in) {
+        int byteCount = in.readUnsignedByte();
+
+        if (byteCount > MAX_ROOM_CODE_BYTES) {
+            throw new IllegalArgumentException(
+                "Invalid room code byte length: " + byteCount
+            );
+        }
+
+        return in.readCharSequence(byteCount, StandardCharsets.UTF_8).toString();
+    }
+
+    private static int rejectReasonId(JoinRejected.Reason reason) {
+        return switch (reason) {
+            case ROOM_NOT_FOUND -> 1;
+            case ROOM_FULL -> 2;
+            case GAME_IN_PROGRESS -> 3;
+            case SERVER_FULL -> 4;
+            case WRONG_VERSION -> 5;
+            case WRONG_MAP -> 6;
+        };
+    }
+
+    private static JoinRejected.Reason rejectReasonFromId(int id) {
+        return switch (id) {
+            case 1 -> JoinRejected.Reason.ROOM_NOT_FOUND;
+            case 2 -> JoinRejected.Reason.ROOM_FULL;
+            case 3 -> JoinRejected.Reason.GAME_IN_PROGRESS;
+            case 4 -> JoinRejected.Reason.SERVER_FULL;
+            case 5 -> JoinRejected.Reason.WRONG_VERSION;
+            case 6 -> JoinRejected.Reason.WRONG_MAP;
+            default -> throw new IllegalArgumentException(
+                "Unknown JoinRejected reason ID: " + id
+            );
+        };
     }
 
     private static int playerColorId(PlayerColor color) {

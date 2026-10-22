@@ -10,8 +10,8 @@ import io.github.coda45.hexadence.world.ArenaMaps;
 import io.github.coda45.hexadence.world.TmxArenaLoader;
 
 // Entry point for the dedicated server: a GameServer with no window and no
-// local player, meant to run on the VPS. Every player connects as a client
-// (the same path as -Dhexadence.join).
+// local player, meant to run on the VPS. Players create and join rooms on
+// it from the game's HOST GAME and JOIN GAME buttons.
 //
 // Settings, each optional:
 //   port   -Dhexadence.port=7777,  or the HEXADENCE_PORT environment variable
