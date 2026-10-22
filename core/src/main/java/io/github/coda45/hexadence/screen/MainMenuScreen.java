@@ -127,12 +127,15 @@ public class MainMenuScreen implements Screen {
         
         if (showMultiplayerPopup && clicked) {
 
+            // Each of these disposes this screen, so stop rendering it.
             if (hostBounds.contains(pointerX, pointerY)) {
-                System.out.println("HOST GAME CLICKED");
+                openMultiplayerLobby();
+                return;
             }
 
             if (joinBounds.contains(pointerX, pointerY)) {
-                System.out.println("JOIN GAME CLICKED");
+                openJoinLobby();
+                return;
             }
 
             if (closeBounds.contains(pointerX, pointerY)) {
@@ -356,6 +359,14 @@ public class MainMenuScreen implements Screen {
     private void openMultiplayerLobby() {
         game.setScreen(
             new HostLobbyScreen(game)
+        );
+
+        dispose();
+    }
+
+    private void openJoinLobby() {
+        game.setScreen(
+            new JoinLobbyScreen(game)
         );
 
         dispose();

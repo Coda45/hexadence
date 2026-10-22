@@ -17,9 +17,10 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.handler.timeout.IdleStateHandler;
 
-// The game's side of a connection to a GameServer. Every networked player uses
-// one, including a host connected to an embedded server in the same process.
+// The game's side of a connection to a GameServer.
 //
 // Netty delivers messages on its own thread, while the game reads them from
 // the render thread. The fields below are all thread-safe holders, so the game
@@ -27,10 +28,12 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 public class NetClient {
 
     private static final int CONNECT_TIMEOUT_MILLIS = 5000;
+    // Well under the server's 30 s read timeout.
+    private static final int KEEP_ALIVE_SECONDS = 5;
 
     private final String host;
     private final int port;
-    private final String mapId;
+    private final ClientHello hello;
 
     // Netty lifecycle resources, owned by this client.
     private EventLoopGroup group;
@@ -38,16 +41,24 @@ public class NetClient {
 
     // Cross-thread state written by Netty and read by the render thread.
     private volatile int playerId = -1;
+    private volatile String roomCode;
+    private volatile JoinRejected.Reason rejection;
+    private volatile LobbyState lobbyState;
+    private volatile boolean gameStarted;
+    private volatile boolean roomClosed;
+    private volatile boolean disconnected;
     private final AtomicReference<WorldSnapshot> latestSnapshot = new AtomicReference<>();
     private final ConcurrentLinkedQueue<WorldEvent> pendingEvents = new ConcurrentLinkedQueue<>();
 
-    public NetClient(String host, int port, String mapId) {
+    public NetClient(String host, int port, ClientHello hello) {
         this.host = host;
         this.port = port;
-        this.mapId = mapId;
+        this.hello = hello;
     }
 
     // Blocks until connected or until the attempt fails (the exception says why).
+    // The handshake then continues in the background: poll getRoomCode() or
+    // getRejection() to see how it went.
     public void connect() throws InterruptedException {
         group = new NioEventLoopGroup(1);
 
@@ -61,6 +72,11 @@ public class NetClient {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) {
+                        // Fires an event when nothing has been sent for a
+                        // while; Handler answers it with a KeepAlive.
+                        ch.pipeline().addLast(
+                            new IdleStateHandler(0, KEEP_ALIVE_SECONDS, 0)
+                        );
                         GameCodec.install(ch.pipeline());
                         ch.pipeline().addLast(new Handler());
                     }
@@ -81,6 +97,13 @@ public class NetClient {
         }
     }
 
+    // Asks the server to start the match. Only the host's request counts.
+    public void requestStart() {
+        if (isConnected()) {
+            channel.writeAndFlush(new StartGame());
+        }
+    }
+
     public boolean isConnected() {
         return channel != null && channel.isActive();
     }
@@ -88,6 +111,36 @@ public class NetClient {
     // -1 until the server has said which player this client controls.
     public int getPlayerId() {
         return playerId;
+    }
+
+    // Null until the server accepts this client into a room.
+    public String getRoomCode() {
+        return roomCode;
+    }
+
+    // Null unless the server refused to let this client in.
+    public JoinRejected.Reason getRejection() {
+        return rejection;
+    }
+
+    // Null until the first lobby update arrives.
+    public LobbyState getLobbyState() {
+        return lobbyState;
+    }
+
+    // True once the host has started the match.
+    public boolean isGameStarted() {
+        return gameStarted;
+    }
+
+    // True if the host left the lobby and the room no longer exists.
+    public boolean isRoomClosed() {
+        return roomClosed;
+    }
+
+    // True once the connection has ended for any reason.
+    public boolean isDisconnected() {
+        return disconnected;
     }
 
     // Null until the first snapshot arrives.
@@ -123,14 +176,12 @@ public class NetClient {
     }
 
     // Receives whatever the server sends. The decoder has already turned the
-    // bytes into Welcome and WorldSnapshot objects.
+    // bytes into message objects.
     private final class Handler extends ChannelInboundHandlerAdapter {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            ctx.writeAndFlush(
-                new ClientHello(GameCodec.PROTOCOL_VERSION, mapId)
-            );
+            ctx.writeAndFlush(hello);
         }
 
         @Override
@@ -144,20 +195,42 @@ public class NetClient {
                         "Server uses incompatible protocol version "
                             + welcome.protocolVersion()
                     );
+                    rejection = JoinRejected.Reason.WRONG_VERSION;
                     ctx.close();
                     return;
                 }
 
                 playerId = welcome.playerId();
+                roomCode = welcome.roomCode();
             } else if (msg instanceof WorldSnapshot snapshot) {
                 latestSnapshot.set(snapshot);
             } else if (msg instanceof WorldEvent event) {
                 pendingEvents.add(event);
+            } else if (msg instanceof LobbyState state) {
+                lobbyState = state;
+            } else if (msg instanceof GameStarted) {
+                gameStarted = true;
+            } else if (msg instanceof JoinRejected rejected) {
+                rejection = rejected.reason();
+            } else if (msg instanceof RoomClosed) {
+                roomClosed = true;
+            }
+        }
+
+        @Override
+        public void userEventTriggered(ChannelHandlerContext ctx, Object event)
+            throws Exception {
+
+            if (event instanceof IdleStateEvent) {
+                ctx.writeAndFlush(new KeepAlive());
+            } else {
+                super.userEventTriggered(ctx, event);
             }
         }
 
         @Override
         public void channelInactive(ChannelHandlerContext ctx) {
+            disconnected = true;
             System.out.println("Disconnected from server");
         }
 

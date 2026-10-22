@@ -4,307 +4,264 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.GlyphLayout;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.math.Rectangle;
-import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import io.github.coda45.hexadence.HexadenceGame;
+import io.github.coda45.hexadence.net.LobbyConnection;
+import io.github.coda45.hexadence.net.RoomCodes;
+import io.github.coda45.hexadence.net.ServerAddress;
+import io.github.coda45.hexadence.world.ArenaMaps;
 
-// Displays explicit Play and Exit controls using lightweight text buttons.
+// The joining player's lobby, laid out like HostLobbyScreen. The player types
+// the host's room code and presses JOIN; once in the room it waits for the
+// host to start the match.
 public class JoinLobbyScreen implements Screen {
 
-    private final HexadenceGame game;
-    private final SpriteBatch batch;
-    private final BitmapFont font;
-    private final GlyphLayout layout;
-    private final Texture image;
-    private static final String START_TEXT = "[ JOIN GAME ]";
+    private static final String JOIN_TEXT = "[ JOIN GAME ]";
     private static final String LEAVE_TEXT = "[ LEAVE ]";
-    private static final String TITLE_TEXT = "HEXADENCE";
     private static final String HEADER_TEXT = "JOIN LOBBY";
-    private static final String ROOM_TEXT = "ENTER ROOM CODE";
-    private static final String PLAYER_TEXT = "WAITING FOR HOST...";
-    private static final float BUTTON_PADDING = 12f;
-    //private static final float BUTTON_SPACING = 50f;
-    //private static final String PLAYER_COUNT = "PLAYERS: 1 / 4";
     private static final String MAP_TEXT = "ARENA: CRYSTAL NEXUS";
-    private final Rectangle startBounds = new Rectangle();
-    private final Rectangle leaveBounds = new Rectangle();
+    private static final String ENTER_CODE_TEXT = "TYPE THE HOST'S ROOM CODE";
     private static final float MENU_WIDTH = 640f;
     private static final float MENU_HEIGHT = 360f;
 
-    private final OrthographicCamera camera;
-    private final FitViewport viewport;
-    private final Vector2 pointer = new Vector2();
+    private final HexadenceGame game;
+    private final BitmapFont font;
+    private final Texture image;
+    private final Stage stage;
+
+    private final Label codeLabel;
+    private final Label statusLabel;
+    private final TextButton joinButton;
+
+    private final StringBuilder typedCode = new StringBuilder();
+    // Null while the player is typing a code; set once JOIN is pressed.
+    private LobbyConnection connection;
+    // Why the last attempt ended, shown until the player tries again.
+    private String lastProblem = "";
+
+    // Set by listeners and handled after stage.act(), so the stage is
+    // never disposed while it is still processing input.
+    private boolean joinRequested;
+    private boolean leaveRequested;
 
     public JoinLobbyScreen(HexadenceGame game) {
         this.game = game;
-        batch = new SpriteBatch();
         image = new Texture("host_lobbytest2.png");
         font = new BitmapFont();
         font.getData().setScale(1.5f);
-        layout = new GlyphLayout();
-        camera = new OrthographicCamera();
 
-        viewport = new FitViewport(
-            MENU_WIDTH,
-            MENU_HEIGHT,
-            camera
-        );
+        stage = new Stage(new FitViewport(MENU_WIDTH, MENU_HEIGHT));
 
-        viewport.update(
-            Gdx.graphics.getWidth(),
-            Gdx.graphics.getHeight(),
-            true
-        );
+        // Styles built in code, so no skin file is needed.
+        TextButton.TextButtonStyle buttonStyle = new TextButton.TextButtonStyle();
+        buttonStyle.font = font;
+        buttonStyle.fontColor = Color.WHITE;
+        buttonStyle.overFontColor = Color.GOLD;
+
+        Label.LabelStyle whiteText = new Label.LabelStyle(font, Color.WHITE);
+        Label.LabelStyle goldText = new Label.LabelStyle(font, Color.GOLD);
+        Label.LabelStyle cyanText = new Label.LabelStyle(font, Color.CYAN);
+
+        Table root = new Table();
+        root.setFillParent(true);
+        root.setBackground(new TextureRegionDrawable(image));
+
+        codeLabel = new Label("", cyanText);
+        statusLabel = new Label("", goldText);
+        joinButton = new TextButton(JOIN_TEXT, buttonStyle);
+        TextButton leaveButton = new TextButton(LEAVE_TEXT, buttonStyle);
+
+        root.add(new Label(HEADER_TEXT, whiteText)).padBottom(8).row();
+        root.add(codeLabel).padBottom(8).row();
+        root.add(statusLabel).padBottom(8).row();
+        root.add(new Label(MAP_TEXT, whiteText)).padBottom(4).row();
+        root.add(joinButton).padTop(10).row();
+        root.add(leaveButton).padTop(4);
+
+        stage.addActor(root);
+        
+        joinButton.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                joinRequested = true;
+            }
+        });
+
+        leaveButton.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                leaveRequested = true;
+            }
+        });
+
+        // With no text field focused, the stage sends typed keys to its
+        // root, which is where stage listeners live.
+        stage.addListener(new InputListener() {
+            @Override
+            public boolean keyTyped(InputEvent event, char character) {
+                if (
+                    connection == null
+                    && typedCode.length() < RoomCodes.LENGTH
+                    && RoomCodes.isCodeCharacter(character)
+                ) {
+                    typedCode.append(Character.toUpperCase(character));
+                    lastProblem = "";
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                if (
+                    keycode == Input.Keys.BACKSPACE
+                    && connection == null
+                    && typedCode.length() > 0
+                ) {
+                    typedCode.setLength(typedCode.length() - 1);
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        updateLabels();
+    }
+
+    @Override
+    public void show() {
+        // Route mouse and keyboard events to this screen.
+        Gdx.input.setInputProcessor(stage);
     }
 
     @Override
     public void render(float delta) {
-        float startY = 45f;
-
-        float leaveY = 15f;
-
-        updateButtonBounds(
-            startBounds,
-            START_TEXT,
-            startY
-        );
-
-        updateButtonBounds(
-            leaveBounds,
-            LEAVE_TEXT,
-            leaveY
-        );
-
-        pointer.set(
-            Gdx.input.getX(),
-            Gdx.input.getY()
-        );
-
-        viewport.unproject(pointer);
-
-        float pointerX = pointer.x;
-        float pointerY = pointer.y;
-
-        boolean clicked =
-            Gdx.input.justTouched();
-
-        boolean playRequested =
-            Gdx.input.isKeyJustPressed(
-                Input.Keys.ENTER
-            )
-            || (
-                clicked
-                && startBounds.contains(
-                    pointerX,
-                    pointerY
-                )
-            );
-
-        if (playRequested) {
-            startGame();
-            return;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            leaveRequested = true;
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+            joinRequested = true;
         }
 
-        boolean exitRequested =
-            Gdx.input.isKeyJustPressed(
-                Input.Keys.ESCAPE
-            )
-            || (
-                clicked
-                && leaveBounds.contains(
-                    pointerX,
-                    pointerY
-                )
-            );
-
-        if (exitRequested) {
-            game.setScreen(new MainMenuScreen(game));
-            dispose();
-            return;
+        if (connection != null) {
+            connection.poll();
+            endFailedAttempt();
         }
+
+        updateLabels();
 
         ScreenUtils.clear(0.15f, 0.15f, 0.2f, 1f);
+        stage.act(delta);
+        stage.draw();
 
-        viewport.apply();
-            batch.setProjectionMatrix(
-            camera.combined
-        );
+        if (joinRequested) {
+            joinRequested = false;
+            tryJoin();
+        }
 
-        batch.begin();
-
-        // Draw the title image at its native size.
-        batch.draw(
-            image,
-            0f,
-            0f,
-            MENU_WIDTH,
-            MENU_HEIGHT
-        );
-        
-        layout.setText(font, TITLE_TEXT);
-
-        font.draw(
-            batch,
-            TITLE_TEXT,
-            (MENU_WIDTH - layout.width) / 2f,
-            340f
-        );
-        layout.setText(font, HEADER_TEXT);
-
-        font.draw(
-            batch,
-            HEADER_TEXT,
-            (MENU_WIDTH - layout.width) / 2f,
-            310f
-        );
-        
-        layout.setText(font, ROOM_TEXT);
-        
-        font.setColor(Color.CYAN);
-        
-        font.draw(
-            batch,
-            ROOM_TEXT,
-            (MENU_WIDTH - layout.width) / 2f,
-            275f
-        );
-
-        font.setColor(Color.WHITE);
-        
-        layout.setText(font, PLAYER_TEXT);
-
-        font.draw(
-            batch,
-            PLAYER_TEXT,
-            (MENU_WIDTH - layout.width) / 2f,
-            230f
-        );
-
-
-        font.setColor(Color.GOLD);
-        
-        font.draw(
-            batch,
-            "CONNECTED TO LOBBY...",
-            220f,
-            180f
-        );
-
-        font.setColor(Color.WHITE);
-
-        font.draw(
-            batch,
-            "WAITING FOR HOST TO START...",
-            160f,
-            125f
-        );
-
-        layout.setText(font, MAP_TEXT);
-
-        font.draw(
-            batch,
-            MAP_TEXT,
-            (MENU_WIDTH - layout.width) / 2f,
-            95f
-        );
-
-        drawButton(
-            START_TEXT,
-            startY,
-            startBounds.contains(
-                pointerX,
-                pointerY
-            )
-        );
-
-        drawButton(
-            LEAVE_TEXT,
-            leaveY,
-            leaveBounds.contains(
-                pointerX,
-                pointerY
-            )
-        );
-
-        batch.end();
+        if (
+            connection != null
+            && connection.status() == LobbyConnection.Status.STARTED
+        ) {
+            game.setScreen(new ArenaScreen(connection.handOff()));
+            // Switching screens hides this screen but does not dispose it.
+            dispose();
+        } else if (leaveRequested) {
+            game.setScreen(new MainMenuScreen(game));
+            dispose();
+        }
     }
 
-    private void updateButtonBounds(
-        Rectangle bounds,
-        String text,
-        float baselineY
-    ) {
-        layout.setText(font, text);
+    private void tryJoin() {
+        if (connection != null || typedCode.length() < RoomCodes.LENGTH) {
+            return;
+        }
 
-        float textX = (MENU_WIDTH - layout.width) / 2f;
-
-        bounds.set(
-            textX - BUTTON_PADDING,
-            baselineY
-                - layout.height
-                - BUTTON_PADDING,
-            layout.width
-                + BUTTON_PADDING * 2f,
-            layout.height
-                + BUTTON_PADDING * 2f
+        lastProblem = "";
+        connection = LobbyConnection.joinRoom(
+            ServerAddress.fromSettings(),
+            ArenaMaps.MULTIPLAYER,
+            typedCode.toString()
         );
     }
 
-    private void drawButton(
-        String text,
-        float baselineY,
-        boolean hovered
-    ) {
-        font.setColor(
-            hovered
-                ? Color.GOLD
-                : Color.WHITE
-        );
+    // If the attempt ended badly, remember why and let the player try again.
+    private void endFailedAttempt() {
+        String problem = switch (connection.status()) {
+            case UNREACHABLE -> "COULD NOT REACH THE SERVER";
+            case REJECTED -> LobbyConnection.describe(connection.rejection());
+            case ROOM_CLOSED -> "THE HOST LEFT THE LOBBY";
+            case DISCONNECTED -> "LOST CONNECTION TO THE SERVER";
+            case CONNECTING, IN_LOBBY, STARTED -> null;
+        };
 
-        layout.setText(font, text);
-
-        float textX =
-            (MENU_WIDTH - layout.width) / 2f;
-
-        font.draw(
-            batch,
-            layout,
-            textX,
-            baselineY
-        );
-
-        font.setColor(Color.WHITE);
+        if (problem != null) {
+            lastProblem = problem;
+            connection.close();
+            connection = null;
+        }
     }
 
-    private void startGame() {
-        game.setScreen(new ArenaScreen());
+    private void updateLabels() {
+        StringBuilder shown = new StringBuilder(typedCode);
 
-        // Switching screens hides this menu but does not dispose it.
-        dispose();
+        while (shown.length() < RoomCodes.LENGTH) {
+            shown.append('_');
+        }
+
+        codeLabel.setText("ROOM CODE: " + shown);
+
+        if (connection == null) {
+            statusLabel.setText(lastProblem.isEmpty() ? ENTER_CODE_TEXT : lastProblem);
+            joinButton.setVisible(true);
+            return;
+        }
+
+        joinButton.setVisible(false);
+
+        statusLabel.setText(switch (connection.status()) {
+            case IN_LOBBY -> "CONNECTED - WAITING FOR HOST TO START ("
+                + connection.playerCount() + "/" + connection.maxPlayers() + ")";
+            case STARTED -> "STARTING...";
+            default -> "CONNECTING...";
+        });
     }
 
     @Override
     public void resize(int width, int height) {
-        viewport.update(width, height,true);
+        stage.getViewport().update(width, height, true);
     }
-    @Override public void show() {}
-    @Override public void hide() {}
+
+    @Override
+    public void hide() {
+        // Stop sending input to this stage once another screen is active.
+        Gdx.input.setInputProcessor(null);
+    }
+
     @Override public void pause() {}
     @Override public void resume() {}
 
     @Override
     public void dispose() {
-        batch.dispose();
+        // Leaves the room, unless the match started and the arena took over.
+        if (connection != null) {
+            connection.close();
+        }
+        stage.dispose();
         font.dispose();
         image.dispose();
     }
 }
-

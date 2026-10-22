@@ -24,8 +24,6 @@ import io.github.coda45.hexadence.world.WorldEvent;
 // Coordinates input, fixed simulation steps, camera updates, and drawing.
 public class ArenaScreen implements Screen {
 
-    private static final int DEFAULT_PORT = 7777;
-
     private final ArenaMap arenaMap;
     private final ArenaWorld world;
     // Null means normal single-player play.
@@ -39,23 +37,20 @@ public class ArenaScreen implements Screen {
     private long lastAppliedTick = -1;
     private float accumulator;
 
-    public ArenaScreen() {
-        this(
-            System.getProperty(
-                "hexadence.map",
-                ArenaMaps.MULTIPLAYER
-            ),
-            true
-        );
+    // Multiplayer: a match on the dedicated server. The lobby hands over a
+    // session whose match has already started.
+    public ArenaScreen(NetSession session) {
+        this(ArenaMaps.MULTIPLAYER, session);
     }
 
+    // Single-player on a local map, such as the training grounds.
     public ArenaScreen(String localMapPath) {
-        this(localMapPath, false);
+        this(localMapPath, null);
     }
 
     private ArenaScreen(
         String mapPath,
-        boolean networkingEnabled
+        NetSession session
     ) {
         worldCamera = new WorldCamera();
         inputController = new PlayerInputController();
@@ -65,11 +60,9 @@ public class ArenaScreen implements Screen {
             arenaMap.createDefinition();
 
         world = new ArenaWorld(definition);
+        this.session = session;
 
-        session = networkingEnabled
-            ? openSession(definition, mapPath)
-            : null;
-
+        // The server decides who is in the match; drop the local player 0.
         if (session != null) {
             world.removePlayer(0);
         }
@@ -78,38 +71,7 @@ public class ArenaScreen implements Screen {
         hudRenderer = new HudRenderer();
     }
 
-    // Reads -Dhexadence.host=true or -Dhexadence.join=host[:port].
-    // Neither set: returns null and the game is single-player.
-    private static NetSession openSession(
-        ArenaDefinition definition,
-        String mapId
-    ) {
-        int port = Integer.getInteger("hexadence.port", DEFAULT_PORT);
-        String join = System.getProperty("hexadence.join");
-
-        try {
-            if (Boolean.getBoolean("hexadence.host")) {
-                return NetSession.host(definition, mapId, port);
-            }
-
-            if (join != null) {
-                int colon = join.lastIndexOf(':');
-                String address = colon < 0 ? join : join.substring(0, colon);
-                int joinPort = colon < 0
-                    ? port
-                    : Integer.parseInt(join.substring(colon + 1));
-
-                return NetSession.join(address, mapId, joinPort);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while connecting", e);
-        }
-
-        return null;
-    }
-
-    // Single-player: player 0. Multiplayer: the player the host assigned us,
+    // Single-player: player 0. Multiplayer: the player the server assigned us,
     // or null until the Welcome and the first snapshot arrive.
     private Player localPlayer() {
         if (session == null) {

@@ -1,0 +1,45 @@
+// The dedicated server: a headless GameServer that runs on the VPS.
+// All game code lives in core; this module only packages it with the maps
+// into one runnable jar.
+//
+//   ./gradlew server:run    run it locally on port 7777
+//   ./gradlew server:jar    build server/build/libs/hexadence-server.jar
+plugins {
+  id "application"
+}
+
+eclipse.project.name = appName + '-server'
+application.mainClass = 'io.github.coda45.hexadence.net.ServerLauncher'
+
+dependencies {
+  implementation project(':core')
+}
+
+// The server needs only the map files (TMX and TSX), not textures or sounds.
+// Bundling them keeps the deploy to a single file.
+processResources {
+  from(rootProject.file('assets/maps')) {
+    into 'maps'
+    include '*.tmx', '*.tsx'
+  }
+}
+
+run {
+  // Forward -Dhexadence.* from the gradlew command line to the server.
+  System.properties.each { key, value ->
+    if (key.toString().startsWith('hexadence.')) {
+      systemProperty key.toString(), value
+    }
+  }
+}
+
+jar {
+  archiveFileName.set('hexadence-server.jar')
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  dependsOn configurations.runtimeClasspath
+  from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+  exclude('META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/maven/**')
+  manifest {
+    attributes 'Main-Class': application.mainClass
+  }
+}

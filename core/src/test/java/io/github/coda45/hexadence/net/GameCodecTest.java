@@ -17,12 +17,17 @@ import io.netty.channel.embedded.EmbeddedChannel;
 class GameCodecTest {
 
     @Test
-    void roundTripsClientHello() {
+    void roundTripsClientHelloThatCreatesARoom() {
         ClientHello expected =
-            new ClientHello(
-                GameCodec.PROTOCOL_VERSION,
-                "maps/dungeon_map.tmx"
-            );
+            ClientHello.createRoom("maps/dungeon_map.tmx");
+
+        assertEquals(expected, roundTrip(expected));
+    }
+
+    @Test
+    void roundTripsClientHelloThatJoinsARoom() {
+        ClientHello expected =
+            ClientHello.joinRoom("maps/dungeon_map.tmx", "AB3K");
 
         assertEquals(expected, roundTrip(expected));
     }
@@ -30,9 +35,27 @@ class GameCodecTest {
     @Test
     void roundTripsWelcome() {
         Welcome expected =
-            new Welcome(GameCodec.PROTOCOL_VERSION, 42);
+            new Welcome(GameCodec.PROTOCOL_VERSION, 42, "AB3K");
 
         assertEquals(expected, roundTrip(expected));
+    }
+
+    @Test
+    void roundTripsEveryJoinRejectedReason() {
+        for (JoinRejected.Reason reason : JoinRejected.Reason.values()) {
+            JoinRejected expected = new JoinRejected(reason);
+
+            assertEquals(expected, roundTrip(expected));
+        }
+    }
+
+    @Test
+    void roundTripsLobbyMessages() {
+        assertEquals(new LobbyState(3, 4), roundTrip(new LobbyState(3, 4)));
+        assertEquals(new StartGame(), roundTrip(new StartGame()));
+        assertEquals(new GameStarted(), roundTrip(new GameStarted()));
+        assertEquals(new RoomClosed(), roundTrip(new RoomClosed()));
+        assertEquals(new KeepAlive(), roundTrip(new KeepAlive()));
     }
 
     @Test
