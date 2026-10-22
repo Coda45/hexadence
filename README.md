@@ -92,7 +92,7 @@ To play across machines on the same network, joiners use the host's local IP add
 
 ### Dedicated server
 
-The `server` module runs the game server on its own, with no window and no local player. Every player joins it as a client, so start each game copy with `-Dhexadence.join=<server-address>:7777`.
+The `server` module runs the game server on its own, with no window and no local player. Every player joins it as a client, so start each game copy with `-Dhexadence.join=40.160.225.76:7777`.
 
 Run one locally:
 
@@ -107,8 +107,8 @@ java -Dhexadence.join=localhost:7777 -jar ../lwjgl3/build/libs/Hexadence-1.0.0.j
 **Deploying to the VPS** (Ubuntu, from Linux, macOS, or Git Bash on Windows):
 
 ```bash
-./deploy/deploy.sh ubuntu@<vps-ip> --setup   # first time: installs Java, the service, and the firewall rules
-./deploy/deploy.sh ubuntu@<vps-ip>           # later: rebuild, upload, restart
+./deploy/deploy.sh ubuntu@40.160.225.76 --setup   # first time: installs Java, the service, and the firewall rules
+./deploy/deploy.sh ubuntu@40.160.225.76           # later: rebuild, upload, restart
 ```
 
 On the VPS, `sudo systemctl status hexadence-server` shows whether it's running and `journalctl -u hexadence-server -f` follows its output. The server restarts on its own after a crash or a reboot, and closes connections that send nothing for 30 seconds.
