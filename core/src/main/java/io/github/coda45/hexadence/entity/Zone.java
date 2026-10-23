@@ -43,6 +43,19 @@ public class Zone {
         this.damageOwnerPlayerId = damageOwnerPlayerId;
     }
 
+    // A zone with explicit size and lifetime, as a power's definition gives them.
+    public static Zone create(
+        int id,
+        Type type,
+        float x,
+        float y,
+        float radius,
+        float duration,
+        int ownerPlayerId
+    ) {
+        return new Zone(id, type, x, y, radius, duration, ownerPlayerId);
+    }
+
     public static Zone createPuddle(float x, float y) {
         return createPuddle(UNASSIGNED_ID, x, y, NO_PLAYER);
     }

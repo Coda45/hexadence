@@ -84,8 +84,8 @@ class PendingCommandTest {
             )
         );
 
-        assertTrue(pending.take().castEmber());
-        assertFalse(pending.take().castEmber());
+        assertTrue(pending.take().castSlot1());
+        assertFalse(pending.take().castSlot1());
     }
 
     private static PlayerCommand movingCommand(

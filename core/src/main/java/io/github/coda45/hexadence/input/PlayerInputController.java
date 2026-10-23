@@ -14,9 +14,10 @@ public class PlayerInputController extends InputAdapter {
     private final Vector2 mouseWorld = new Vector2();
     // Keep a click until the next simulation step, even if a render frame has no step.
     // Multiple clicks before that step count as one request.
-    private boolean emberPressed;
-    private boolean waterPressed;
-    private boolean lightningPressed;
+    // Slot 1 = left mouse, slot 2 = right mouse, slot 3 = Q.
+    private boolean slot1Pressed;
+    private boolean slot2Pressed;
+    private boolean slot3Pressed;
 
     public PlayerCommand sample(
         Viewport viewport,
@@ -25,22 +26,22 @@ public class PlayerInputController extends InputAdapter {
 
         float moveX = 0f;
         float moveY = 0f;
-        boolean castEmber =
-            emberPressed
+        boolean castSlot1 =
+            slot1Pressed
             || Gdx.input.isButtonPressed(Input.Buttons.LEFT);
 
-        boolean castWater =
-            waterPressed
+        boolean castSlot2 =
+            slot2Pressed
             || Gdx.input.isButtonPressed(Input.Buttons.RIGHT);
 
-        boolean castLightning =
-            lightningPressed
+        boolean castSlot3 =
+            slot3Pressed
             || Gdx.input.isKeyPressed(Input.Keys.Q);
 
         // Consume once so catch-up steps don't repeat the same shot.
-        emberPressed = false;
-        waterPressed = false;
-        lightningPressed = false;
+        slot1Pressed = false;
+        slot2Pressed = false;
+        slot3Pressed = false;
 
         if (Gdx.input.isKeyPressed(Input.Keys.W)) {
             moveY += 1f;
@@ -70,14 +71,14 @@ public class PlayerInputController extends InputAdapter {
         float aimY = mouseWorld.y - player.getCastY();
 
         return new PlayerCommand(moveX, moveY, aimX, aimY,
-            castEmber, castWater, castLightning
+            castSlot1, castSlot2, castSlot3
         );
     }
     
     public void clearLatchedActions() {
-        emberPressed = false;
-        waterPressed = false;
-        lightningPressed = false;
+        slot1Pressed = false;
+        slot2Pressed = false;
+        slot3Pressed = false;
     }
 
     @Override
@@ -88,11 +89,11 @@ public class PlayerInputController extends InputAdapter {
         int button
     ) {
         if (button == Input.Buttons.LEFT) {
-            emberPressed = true;
+            slot1Pressed = true;
         }
 
         if (button == Input.Buttons.RIGHT) {
-            waterPressed = true;
+            slot2Pressed = true;
         }
 
         return false;
@@ -101,7 +102,7 @@ public class PlayerInputController extends InputAdapter {
     @Override
     public boolean keyDown(int keycode) {
         if (keycode == Input.Keys.Q) {
-            lightningPressed = true;
+            slot3Pressed = true;
         }
 
         return false;

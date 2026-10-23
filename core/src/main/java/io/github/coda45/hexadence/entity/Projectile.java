@@ -1,13 +1,13 @@
 package io.github.coda45.hexadence.entity;
 
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Power;
 
 // Stores one stable projectile identity and its simulation state.
 // ArenaWorld owns movement, collision, and removal.
 public class Projectile {
 
     private final int id;
-    private final SpellType spellType;
+    private final Power power;
     private final int ownerPlayerId;
     private final float directionX;
     private final float directionY;
@@ -23,7 +23,7 @@ public class Projectile {
         float y,
         float directionX,
         float directionY,
-        SpellType spellType,
+        Power power,
         int ownerPlayerId
     ) {
         this.id = id;
@@ -31,7 +31,7 @@ public class Projectile {
         this.y = y;
         this.directionX = directionX;
         this.directionY = directionY;
-        this.spellType = spellType;
+        this.power = power;
         this.ownerPlayerId = ownerPlayerId;
     }
 
@@ -42,8 +42,8 @@ public class Projectile {
         distanceTraveled += distance;
     }
 
-    public SpellType getSpellType() {
-        return spellType;
+    public Power getPower() {
+        return power;
     }
 
     public boolean hasReachedMaxRange(float maxRange) {

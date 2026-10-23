@@ -7,7 +7,8 @@ import java.util.List;
 import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.netty.buffer.ByteBuf;
@@ -30,7 +31,9 @@ public final class GameCodec {
 
     // 6: rooms and the lobby (room codes, JoinRejected, LobbyState,
     //    StartGame, GameStarted, RoomClosed, KeepAlive).
-    public static final int PROTOCOL_VERSION = 6;
+    // 7: powers travel by ID and players by loadout slot, so adding or
+    //    tuning a power never changes this file.
+    public static final int PROTOCOL_VERSION = 7;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -185,9 +188,9 @@ public final class GameCodec {
 
         // The three cast booleans share one byte.
         int flags =
-            (command.castEmber() ? 1 : 0)
-            | (command.castWater() ? 2 : 0)
-            | (command.castLightning() ? 4 : 0);
+            (command.castSlot1() ? 1 : 0)
+            | (command.castSlot2() ? 2 : 0)
+            | (command.castSlot3() ? 4 : 0);
 
         out.writeByte(flags);
     }
@@ -235,9 +238,12 @@ public final class GameCodec {
             out.writeFloat(p.respawnRemaining());
             out.writeInt(p.kills());
             out.writeInt(p.deaths());
-            out.writeFloat(p.emberCooldown());
-            out.writeFloat(p.waterCooldown());
-            out.writeFloat(p.lightningCooldown());
+
+            out.writeByte(p.slots().size());
+            for (WorldSnapshot.SlotState slot : p.slots()) {
+                writePower(out, slot.power());
+                out.writeFloat(slot.cooldownRemaining());
+            }
         }
 
         out.writeShort(snapshot.dummies().size());
@@ -251,7 +257,7 @@ public final class GameCodec {
         out.writeShort(snapshot.projectiles().size());
         for (WorldSnapshot.ProjectileState p : snapshot.projectiles()) {
             out.writeInt(p.id());
-            out.writeByte(spellTypeId(p.spellType()));
+            writePower(out, p.power());
             out.writeInt(p.ownerPlayerId());
             out.writeFloat(p.x());
             out.writeFloat(p.y());
@@ -265,6 +271,7 @@ public final class GameCodec {
             out.writeByte(zoneTypeId(z.type()));
             out.writeFloat(z.x());
             out.writeFloat(z.y());
+            out.writeFloat(z.radius());
             out.writeBoolean(z.electrified());
             out.writeInt(z.damageOwnerPlayerId());
         }
@@ -288,9 +295,7 @@ public final class GameCodec {
                 in.readFloat(),
                 in.readInt(),
                 in.readInt(),
-                in.readFloat(),
-                in.readFloat(),
-                in.readFloat()
+                readSlots(in)
             ));
         }
 
@@ -311,7 +316,7 @@ public final class GameCodec {
         for (int i = 0; i < projectileCount; i++) {
             projectiles.add(new WorldSnapshot.ProjectileState(
                 in.readInt(),
-                spellTypeFromId(in.readUnsignedByte()),
+                readPower(in),
                 in.readInt(),
                 in.readFloat(),
                 in.readFloat(),
@@ -326,6 +331,7 @@ public final class GameCodec {
             zones.add(new WorldSnapshot.ZoneState(
                 in.readInt(),
                 zoneTypeFromId(in.readUnsignedByte()),
+                in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),
                 in.readBoolean(),
@@ -434,23 +440,34 @@ public final class GameCodec {
         };
     }
 
-    private static int spellTypeId(SpellType type) {
-        return switch (type) {
-            case EMBER -> 1;
-            case WATER -> 2;
-            case LIGHTNING -> 3;
-        };
+    // Powers travel as their ID from Powers, so the codec never needs to
+    // know which powers exist.
+    private static void writePower(ByteBuf out, Power power) {
+        out.writeByte(power.id());
     }
 
-    private static SpellType spellTypeFromId(int id) {
-        return switch (id) {
-            case 1 -> SpellType.EMBER;
-            case 2 -> SpellType.WATER;
-            case 3 -> SpellType.LIGHTNING;
-            default -> throw new IllegalArgumentException(
-                "Unknown SpellType ID: " + id
+    private static Power readPower(ByteBuf in) {
+        int id = in.readUnsignedByte();
+        Power power = Powers.byId(id);
+
+        if (power == null) {
+            throw new IllegalArgumentException(
+                "Unknown power ID: " + id + " (is the other side running the same build?)"
             );
-        };
+        }
+
+        return power;
+    }
+
+    private static List<WorldSnapshot.SlotState> readSlots(ByteBuf in) {
+        int count = in.readUnsignedByte();
+        List<WorldSnapshot.SlotState> slots = new ArrayList<>(count);
+
+        for (int i = 0; i < count; i++) {
+            slots.add(new WorldSnapshot.SlotState(readPower(in), in.readFloat()));
+        }
+
+        return slots;
     }
 
     private static int zoneTypeId(Zone.Type type) {

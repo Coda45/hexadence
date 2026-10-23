@@ -231,9 +231,9 @@ public class GameServer {
         private float moveY;
         private float aimX;
         private float aimY;
-        private boolean castEmber;
-        private boolean castWater;
-        private boolean castLightning;
+        private boolean castSlot1;
+        private boolean castSlot2;
+        private boolean castSlot3;
         private boolean receivedSinceLastTake;
         private int ticksWithoutCommand = TIMEOUT_TICKS;
 
@@ -243,9 +243,9 @@ public class GameServer {
             aimX = command.aimX();
             aimY = command.aimY();
 
-            castEmber |= command.castEmber();
-            castWater |= command.castWater();
-            castLightning |= command.castLightning();
+            castSlot1 |= command.castSlot1();
+            castSlot2 |= command.castSlot2();
+            castSlot3 |= command.castSlot3();
             receivedSinceLastTake = true;
         }
 
@@ -269,16 +269,16 @@ public class GameServer {
                     moveY,
                     aimX,
                     aimY,
-                    castEmber,
-                    castWater,
-                    castLightning
+                    castSlot1,
+                    castSlot2,
+                    castSlot3
                 );
             }
             receivedSinceLastTake = false;
             // Cast requests are one-shot. Movement receives the timeout grace.
-            castEmber = false;
-            castWater = false;
-            castLightning = false;
+            castSlot1 = false;
+            castSlot2 = false;
+            castSlot3 = false;
 
             return command;
         }

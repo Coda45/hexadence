@@ -1,6 +1,7 @@
 package io.github.coda45.hexadence.render;
 
-import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
@@ -15,7 +16,8 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import io.github.coda45.hexadence.entity.Player;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Loadout;
+import io.github.coda45.hexadence.power.Power;
 
 public class HudRenderer {
 
@@ -28,16 +30,13 @@ public class HudRenderer {
     private static final float COOLDOWN_RADIUS = 16f;
     private static final int COOLDOWN_SEGMENTS = 48;
 
-    private static final SpellType[] HUD_SPELLS = {
-        SpellType.EMBER,
-        SpellType.WATER,
-        SpellType.LIGHTNING
-    };
+    // Key shown on each loadout slot's icon.
+    private static final String[] SLOT_BINDINGS = { "LMB", "RMB", "Q" };
 
     private final ShapeRenderer shapeRenderer;
 
-    private final EnumMap<SpellType, AbilityIcon>
-        abilityIcons = new EnumMap<>(SpellType.class);
+    // Icon images by path, loaded the first time a power using them appears.
+    private final Map<String, Texture> iconTextures = new HashMap<>();
 
     private final OrthographicCamera camera;
     private final FitViewport viewport;
@@ -57,33 +56,6 @@ public class HudRenderer {
         font = new BitmapFont();
 
         shapeRenderer = new ShapeRenderer();
-
-        abilityIcons.put(
-            SpellType.EMBER,
-            new AbilityIcon(
-                loadUiTexture("ui/bg_fireball.png"),
-                loadUiTexture("ui/rim_orange.png"),
-                "LMB"
-            )
-        );
-
-        abilityIcons.put(
-            SpellType.WATER,
-            new AbilityIcon(
-                loadUiTexture("ui/bg_water_bolt.png"),
-                loadUiTexture("ui/rim_blue.png"),
-                "RMB"
-            )
-        );
-
-        abilityIcons.put(
-            SpellType.LIGHTNING,
-            new AbilityIcon(
-                loadUiTexture("ui/bg_lightning.png"),
-                loadUiTexture("ui/rim_yellow.png"),
-                "Q"
-            )
-        );
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
 
@@ -125,7 +97,7 @@ public class HudRenderer {
             );
         }
 
-        drawAbilityBackgrounds();
+        drawAbilityBackgrounds(player);
 
         batch.end();
 
@@ -135,20 +107,19 @@ public class HudRenderer {
         // Final layer: rims and input labels.
         batch.begin();
 
-        drawAbilityRims();
+        drawAbilityRims(player);
 
         batch.end();
     }
 
-    private void drawAbilityBackgrounds() {
-        for (int index = 0; index < HUD_SPELLS.length; index++) {
-            SpellType spellType = HUD_SPELLS[index];
-            AbilityIcon icon = abilityIcons.get(spellType);
+    private void drawAbilityBackgrounds(Player player) {
+        for (int index = 0; index < Loadout.SIZE; index++) {
+            Power power = player.getPower(index);
 
             float x = abilityX(index);
 
             batch.draw(
-                icon.background(),
+                iconTexture(power.iconPath()),
                 x,
                 ABILITY_BOTTOM,
                 ABILITY_WIDTH,
@@ -187,8 +158,8 @@ public class HudRenderer {
 
     private float abilityX(int index) {
         float totalWidth =
-            HUD_SPELLS.length * ABILITY_WIDTH
-            + (HUD_SPELLS.length - 1) * ABILITY_GAP;
+            Loadout.SIZE * ABILITY_WIDTH
+            + (Loadout.SIZE - 1) * ABILITY_GAP;
 
         float startX = (HUD_WIDTH - totalWidth) / 2f;
 
@@ -211,12 +182,11 @@ public class HudRenderer {
             0.65f
         );
 
-        for (int index = 0; index < HUD_SPELLS.length; index++) {
-            SpellType spellType = HUD_SPELLS[index];
+        for (int index = 0; index < Loadout.SIZE; index++) {
+            float remaining = player.getCooldownRemaining(index);
 
-            float remaining = player.getCooldownRemaining(spellType);
-
-            float remainingFraction = remaining / spellType.getCooldownSeconds();
+            float remainingFraction =
+                remaining / player.getPower(index).cooldownSeconds();
 
             remainingFraction = Math.max(
                 0f,
@@ -276,15 +246,14 @@ public class HudRenderer {
         }
     }
 
-    private void drawAbilityRims() {
-        for (int index = 0; index < HUD_SPELLS.length; index++) {
-            SpellType spellType = HUD_SPELLS[index];
-            AbilityIcon icon = abilityIcons.get(spellType);
+    private void drawAbilityRims(Player player) {
+        for (int index = 0; index < Loadout.SIZE; index++) {
+            Power power = player.getPower(index);
 
             float x = abilityX(index);
 
             batch.draw(
-                icon.rim(),
+                iconTexture(power.iconRimPath()),
                 x,
                 ABILITY_BOTTOM,
                 ABILITY_WIDTH,
@@ -293,7 +262,7 @@ public class HudRenderer {
 
             font.draw(
                 batch,
-                icon.binding(),
+                SLOT_BINDINGS[index],
                 x + 25f,
                 ABILITY_BOTTOM + 12f
             );
@@ -353,15 +322,8 @@ public class HudRenderer {
         return texture;
     }
 
-    private record AbilityIcon(
-        Texture background,
-        Texture rim,
-        String binding
-    ) {
-        private void dispose() {
-            background.dispose();
-            rim.dispose();
-        }
+    private Texture iconTexture(String path) {
+        return iconTextures.computeIfAbsent(path, this::loadUiTexture);
     }
 
     public void dispose() {
@@ -370,8 +332,8 @@ public class HudRenderer {
         pixelTexture.dispose();
         shapeRenderer.dispose();
 
-        for (AbilityIcon icon : abilityIcons.values()) {
-            icon.dispose();
+        for (Texture texture : iconTextures.values()) {
+            texture.dispose();
         }
     }
 }

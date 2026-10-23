@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Powers;
 
 class ArenaWorldTest {
 
@@ -223,7 +223,7 @@ class ArenaWorldTest {
 
         assertEquals(
             nearerHealth
-                - SpellType.LIGHTNING.getDamage(),
+                - Powers.LIGHTNING_BOLT.damage(),
             world.getDummies().get(1).getHealth(),
             EPSILON
         );
@@ -321,7 +321,7 @@ class ArenaWorldTest {
         // Leave exactly one Ember hit worth of health.
         target.takeDamage(
             target.getMaxHealth()
-                - SpellType.EMBER.getDamage()
+                - Powers.FIREBALL.damage()
         );
 
         world.step(
@@ -469,7 +469,7 @@ class ArenaWorldTest {
         assertEquals(1.75f, strike.startY(), EPSILON);
 
         assertEquals(
-            1f + SpellType.LIGHTNING.getRange(),
+            1f + Powers.LIGHTNING_BOLT.range(),
             strike.endX(),
             EPSILON
         );
@@ -541,7 +541,7 @@ class ArenaWorldTest {
         }
 
         assertEquals(casterHealthBefore, caster.getHealth(), EPSILON);
-        assertEquals(targetHealthBefore - SpellType.EMBER.getDamage(), target.getHealth(), EPSILON);
+        assertEquals(targetHealthBefore - Powers.FIREBALL.damage(), target.getHealth(), EPSILON);
     }
 
     @Test
@@ -570,7 +570,7 @@ class ArenaWorldTest {
             );
 
         assertEquals(
-            healthBefore - SpellType.LIGHTNING.getDamage(),
+            healthBefore - Powers.LIGHTNING_BOLT.damage(),
             target.getHealth(),
             EPSILON
         );

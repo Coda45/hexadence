@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Zone;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.netty.buffer.ByteBuf;
@@ -89,9 +90,11 @@ class GameCodecTest {
                     -1f,
                     3,
                     2,
-                    0.1f,
-                    0.2f,
-                    0.3f
+                    List.of(
+                        new WorldSnapshot.SlotState(Powers.FIREBALL, 0.1f),
+                        new WorldSnapshot.SlotState(Powers.WATER_PUDDLE, 0.2f),
+                        new WorldSnapshot.SlotState(Powers.LIGHTNING_BOLT, 0.3f)
+                    )
                 )
             ),
             List.of(
@@ -105,7 +108,7 @@ class GameCodecTest {
             List.of(
                 new WorldSnapshot.ProjectileState(
                     22,
-                    SpellType.EMBER,
+                    Powers.FIREBALL,
                     4,
                     5f,
                     6f,
@@ -119,6 +122,7 @@ class GameCodecTest {
                     Zone.Type.PUDDLE,
                     7f,
                     8f,
+                    0.8f,
                     true,
                     4
                 )
@@ -126,6 +130,20 @@ class GameCodecTest {
         );
 
         assertEquals(expected, roundTrip(expected));
+    }
+
+    @Test
+    void everyPowerSurvivesTheNetwork() {
+        for (Power power : Powers.ALL) {
+            WorldSnapshot.ProjectileState expected =
+                new WorldSnapshot.ProjectileState(1, power, 2, 3f, 4f, 1f, 0f);
+
+            WorldSnapshot snapshot = new WorldSnapshot(
+                1L, List.of(), List.of(), List.of(expected), List.of()
+            );
+
+            assertEquals(snapshot, roundTrip(snapshot), power.name());
+        }
     }
 
     @Test
