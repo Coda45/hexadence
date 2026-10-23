@@ -11,7 +11,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.render.animation.FacingDirection;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Power;
 
 public class GameTextures {
 
@@ -387,21 +387,18 @@ public class GameTextures {
         );
     }
 
+    // Projectile art is chosen by element, so a new power gets matching art
+    // without code changes here. Give a power its own art by checking for it
+    // above the element switch.
     public TextureRegion getProjectileFrame(
-        SpellType spellType,
+        Power power,
         float stateTime
     ) {
-        return switch (spellType) {
-            case EMBER ->
-                fireballAnimation.getKeyFrame(stateTime);
+        return switch (power.element()) {
+            case WATER -> waterBoltRegion;
 
-            case WATER ->
-                waterBoltRegion;
-
-            case LIGHTNING ->
-                throw new IllegalArgumentException(
-                    "Lightning does not use a projectile frame"
-                );
+            // Elements without projectile art yet borrow the fireball.
+            default -> fireballAnimation.getKeyFrame(stateTime);
         };
     }
 

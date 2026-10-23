@@ -4,7 +4,7 @@ import java.util.List;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Zone;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Power;
 
 // One simulation tick of world state, as the server sends it to every client.
 // Plain data only: no libGDX, no Netty, no behavior. The codec turns this into
@@ -38,17 +38,19 @@ public record WorldSnapshot(
         float respawnRemaining,
         int kills,
         int deaths,
-        float emberCooldown,
-        float waterCooldown,
-        float lightningCooldown
+        List<SlotState> slots
     ) {
-        public float cooldownFor(SpellType spellType) {
-            return switch (spellType) {
-                case EMBER -> emberCooldown;
-                case WATER -> waterCooldown;
-                case LIGHTNING -> lightningCooldown;
-            };
+        public PlayerState {
+            slots = List.copyOf(slots);
         }
+    }
+
+    // One loadout slot: which power it holds and how long until it is ready.
+    // Clients need the power to draw the right HUD icon.
+    public record SlotState(
+        Power power,
+        float cooldownRemaining
+    ) {
     }
 
     // Dummies never move, so only health changes between ticks.
@@ -63,7 +65,7 @@ public record WorldSnapshot(
     // The direction is fixed at cast time, so clients can draw it as-is.
     public record ProjectileState(
         int id,
-        SpellType spellType,
+        Power power,
         int ownerPlayerId,
         float x,
         float y,
@@ -78,6 +80,7 @@ public record WorldSnapshot(
         Zone.Type type,
         float x,
         float y,
+        float radius,
         boolean electrified,
         int damageOwnerPlayerId
     ) {

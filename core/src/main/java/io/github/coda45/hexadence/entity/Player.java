@@ -1,9 +1,11 @@
 package io.github.coda45.hexadence.entity;
 
-import java.util.EnumMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Loadout;
+import io.github.coda45.hexadence.power.Power;
 
 // Player state in world units. (x, y) centers the collision footprint;
 // the renderer also uses it as the bottom-center of the sprite.
@@ -36,8 +38,9 @@ public class Player {
     // Center of the 36-pixel-tall wizard sprite at 24 pixels per world unit.
     private static final float CAST_OFFSET_Y = 0.75f;
 
-    private final EnumMap<SpellType, Float> cooldowns =
-        new EnumMap<>(SpellType.class);
+    // The three powers this player brings, and each slot's remaining cooldown.
+    private Loadout loadout = Loadout.DEFAULT;
+    private final float[] cooldowns = new float[Loadout.SIZE];
 
     public Player(float x, float y) {
         this(x, y, PlayerColor.CYAN);
@@ -51,10 +54,6 @@ public class Player {
         this.x = x;
         this.y = y;
         this.color = Objects.requireNonNull(color);
-
-        for (SpellType spellType : SpellType.values()) {
-            cooldowns.put(spellType, 0f);
-        }
     }
 
     public void move(float dx, float dy) {
@@ -101,30 +100,43 @@ public class Player {
         return aimY;
     }
 
-    public void updateCooldowns(float deltaSeconds) {
-        for (SpellType spellType : SpellType.values()) {
-            float remaining = cooldowns.get(spellType);
+    public Loadout getLoadout() {
+        return loadout;
+    }
 
-            cooldowns.put(
-                spellType,
-                Math.max(0f, remaining - deltaSeconds)
-            );
+    // Changing powers resets every cooldown.
+    public void setLoadout(Loadout loadout) {
+        this.loadout = Objects.requireNonNull(loadout);
+        resetCooldowns();
+    }
+
+    // The power in a slot, numbered from 0.
+    public Power getPower(int slot) {
+        return loadout.get(slot);
+    }
+
+    public void updateCooldowns(float deltaSeconds) {
+        for (int slot = 0; slot < cooldowns.length; slot++) {
+            cooldowns[slot] = Math.max(0f, cooldowns[slot] - deltaSeconds);
         }
     }
 
-    public boolean isSpellReady(SpellType spellType) {
-        return cooldowns.get(spellType) <= 0f;
+    public boolean isSlotReady(int slot) {
+        return cooldowns[slot] <= 0f;
     }
 
-    public void startCooldown(SpellType spellType) {
-        cooldowns.put(
-            spellType,
-            spellType.getCooldownSeconds()
-        );
+    public void startCooldown(int slot) {
+        cooldowns[slot] = loadout.get(slot).cooldownSeconds();
     }
 
-    public float getCooldownRemaining(SpellType spellType) {
-        return cooldowns.get(spellType);
+    public float getCooldownRemaining(int slot) {
+        return cooldowns[slot];
+    }
+
+    private void resetCooldowns() {
+        for (int slot = 0; slot < cooldowns.length; slot++) {
+            cooldowns[slot] = 0f;
+        }
     }
 
     public void takeDamage(float amount) {
@@ -197,10 +209,7 @@ public class Player {
         aimX = 1f;
         aimY = 0f;
         setPosition(spawnX, spawnY);
-
-        for (SpellType spellType : SpellType.values()) {
-            cooldowns.put(spellType, 0f);
-        }
+        resetCooldowns();
     }
 
     public void recordKill() {
@@ -244,8 +253,15 @@ public class Player {
         this.color = Objects.requireNonNull(color);
     }
 
-    public void setCooldownRemaining(SpellType spellType, float seconds) {
-        cooldowns.put(spellType, seconds);
+    // Clients only: copies the server's loadout and cooldowns.
+    public void restoreSlot(int slot, Power power, float cooldownRemaining) {
+        if (!loadout.get(slot).equals(power)) {
+            List<Power> slots = new ArrayList<>(loadout.slots());
+            slots.set(slot, power);
+            loadout = new Loadout(slots);
+        }
+
+        cooldowns[slot] = cooldownRemaining;
     }
     
     public void setPosition(float x, float y) {

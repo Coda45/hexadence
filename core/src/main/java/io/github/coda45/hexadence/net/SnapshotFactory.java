@@ -8,7 +8,7 @@ import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.StepResult;
 
@@ -26,6 +26,14 @@ public final class SnapshotFactory {
 
         for (Map.Entry<Integer, Player> entry : world.getPlayers().entrySet()) {
             Player player = entry.getValue();
+            List<WorldSnapshot.SlotState> slots = new ArrayList<>(Loadout.SIZE);
+
+            for (int slot = 0; slot < Loadout.SIZE; slot++) {
+                slots.add(new WorldSnapshot.SlotState(
+                    player.getPower(slot),
+                    player.getCooldownRemaining(slot)
+                ));
+            }
 
             players.add(new WorldSnapshot.PlayerState(
                 entry.getKey(),
@@ -39,9 +47,7 @@ public final class SnapshotFactory {
                 player.getRespawnRemaining(),
                 player.getKills(),
                 player.getDeaths(),
-                player.getCooldownRemaining(SpellType.EMBER),
-                player.getCooldownRemaining(SpellType.WATER),
-                player.getCooldownRemaining(SpellType.LIGHTNING)
+                slots
             ));
         }
 
@@ -61,7 +67,7 @@ public final class SnapshotFactory {
         for (Projectile projectile : world.getProjectiles()) {
             projectiles.add(new WorldSnapshot.ProjectileState(
                 projectile.getId(),
-                projectile.getSpellType(),
+                projectile.getPower(),
                 projectile.getOwnerPlayerId(),
                 projectile.getX(),
                 projectile.getY(),
@@ -78,6 +84,7 @@ public final class SnapshotFactory {
                 zone.getType(),
                 zone.getX(),
                 zone.getY(),
+                zone.getRadius(),
                 zone.isElectrified(),
                 zone.getDamageOwnerPlayerId()
             ));

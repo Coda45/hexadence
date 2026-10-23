@@ -16,7 +16,10 @@ import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.net.WorldSnapshot;
-import io.github.coda45.hexadence.spell.SpellType;
+import io.github.coda45.hexadence.power.Element;
+import io.github.coda45.hexadence.power.Loadout;
+import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.PowerForm;
 
 // Owns gameplay state and applies commands at a fixed 60 Hz rate.
 public class ArenaWorld {
@@ -25,11 +28,8 @@ public class ArenaWorld {
 
     private static final float PLAYER_SPEED = 5f;
     private static final float PLAYER_RESPAWN_DELAY = 3f;
-    private static final float PROJECTILE_RADIUS = 0.12f;
-    private static final float MAX_PROJECTILE_SUBSTEP = PROJECTILE_RADIUS;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
     private static final float DISCHARGE_DAMAGE = 20f;
-    private static final float LIGHTNING_HALF_WIDTH = 0.1f;
 
     private final ArenaCollision collision;
     private final List<SpawnPoint> playerSpawns;
@@ -99,25 +99,27 @@ public class ArenaWorld {
             Projectile projectile =
                 projectileIterator.next();
 
-            SpellType spellType =
-                projectile.getSpellType();
+            Power power = projectile.getPower();
+            float radius = power.radius();
 
             float remainingRange = Math.max(
                 0f,
-                spellType.getRange()
+                power.range()
                     - projectile.getDistanceTraveled()
             );
 
             float movementDistance = Math.min(
-                spellType.getSpeed() * STEP,
+                power.speed() * STEP,
                 remainingRange
             );
 
+            // Move at most one radius per substep so it cannot skip
+            // past anything thinner than itself.
             int substepCount = Math.max(
                 1,
                 (int) Math.ceil(
                     movementDistance
-                        / MAX_PROJECTILE_SUBSTEP
+                        / radius
                 )
             );
 
@@ -136,13 +138,13 @@ public class ArenaWorld {
                 if (collision.overlaps(
                         projectile.getX(),
                         projectile.getY(),
-                        PROJECTILE_RADIUS,
-                        PROJECTILE_RADIUS
+                        radius,
+                        radius
                     )) {
 
                     // Terrain effects use the last clear position,
                     // not a position already penetrating the wall.
-                    createPuddleIfWater(
+                    leaveZoneIfAny(
                         projectile,
                         previousX,
                         previousY
@@ -159,7 +161,7 @@ public class ArenaWorld {
                 }
 
                 if (applyProjectilePlayerHit(projectile)) {
-                    createPuddleIfWater(
+                    leaveZoneIfAny(
                         projectile,
                         projectile.getX(),
                         projectile.getY()
@@ -170,7 +172,7 @@ public class ArenaWorld {
                 }
 
                 if (applyProjectileDummyHit(projectile)) {
-                    createPuddleIfWater(
+                    leaveZoneIfAny(
                         projectile,
                         projectile.getX(),
                         projectile.getY()
@@ -188,10 +190,10 @@ public class ArenaWorld {
 
             if (
                 projectile.hasReachedMaxRange(
-                    spellType.getRange()
+                    power.range()
                 )
             ) {
-                createPuddleIfWater(
+                leaveZoneIfAny(
                     projectile,
                     projectile.getX(),
                     projectile.getY()
@@ -248,9 +250,11 @@ public class ArenaWorld {
         player.updateCooldowns(STEP);
 
         // Spawn before player movement, using the aim chosen for this step.
-        tryCast(playerId, player, command.castEmber(), SpellType.EMBER);
-        tryCast(playerId, player, command.castWater(), SpellType.WATER);
-        castLightning(playerId, player, command.castLightning(), events);
+        for (int slot = 0; slot < Loadout.SIZE; slot++) {
+            if (command.casts(slot)) {
+                tryCast(playerId, player, slot, events);
+            }
+        }
     }
 
     private void movePlayer(Player player, PlayerCommand command) {
@@ -308,20 +312,27 @@ public class ArenaWorld {
         return Collections.unmodifiableMap(players);
     }
 
-    private void createPuddleIfWater(
+    // Powers whose behavior creates a zone leave it where they stop.
+    private void leaveZoneIfAny(
         Projectile projectile,
         float x,
         float y
     ) {
-        if (
-            projectile.getSpellType()
-                != SpellType.WATER
-        ) {
+        Power power = projectile.getPower();
+
+        if (!power.behavior().createsZone()) {
             return;
         }
 
-        zones.add(
-            Zone.createPuddle(nextZoneId++, x, y, projectile.getOwnerPlayerId()));
+        zones.add(Zone.create(
+            nextZoneId++,
+            power.zoneType(),
+            x,
+            y,
+            power.zoneRadius(),
+            power.zoneDuration(),
+            projectile.getOwnerPlayerId()
+        ));
     }
 
     public List<Zone> getZones() {
@@ -332,11 +343,13 @@ public class ArenaWorld {
         Projectile projectile,
         List<WorldEvent> events
     ) {
-        SpellType spellType = projectile.getSpellType();
+        Power power = projectile.getPower();
 
+        // For now, only basic Fire and Storm powers change zones. The planned
+        // reaction table will replace these checks.
         if (
-            spellType != SpellType.EMBER
-            && spellType != SpellType.LIGHTNING
+            power.form() != PowerForm.BASIC
+            || (power.element() != Element.FIRE && power.element() != Element.STORM)
         ) {
             return false;
         }
@@ -351,7 +364,7 @@ public class ArenaWorld {
             float dx = projectile.getX() - zone.getX();
             float dy = projectile.getY() - zone.getY();
             float interactionDistance =
-                PROJECTILE_RADIUS + zone.getRadius();
+                power.radius() + zone.getRadius();
 
             boolean overlaps =
                 dx * dx + dy * dy
@@ -361,7 +374,7 @@ public class ArenaWorld {
                 continue;
             }
 
-            if (spellType == SpellType.EMBER) {
+            if (power.element() == Element.FIRE) {
                 zones.set(
                     i,
                     Zone.createSteam(
@@ -376,7 +389,7 @@ public class ArenaWorld {
             }
 
             if (
-                spellType == SpellType.LIGHTNING
+                power.element() == Element.STORM
                 && !zone.isElectrified()
             ) {
                 zone.electrify(projectile.getOwnerPlayerId());
@@ -394,7 +407,7 @@ public class ArenaWorld {
     private boolean applyProjectileDummyHit(
         Projectile projectile
     ) {
-        SpellType spellType = projectile.getSpellType();
+        Power power = projectile.getPower();
 
         for (TargetDummy dummy : dummies) {
             if (!dummy.isAlive()) {
@@ -404,7 +417,7 @@ public class ArenaWorld {
             float dx = projectile.getX() - dummy.getX();
             float dy = projectile.getY() - dummy.getY();
 
-            float hitDistance = PROJECTILE_RADIUS + TargetDummy.RADIUS;
+            float hitDistance = power.radius() + TargetDummy.RADIUS;
 
             boolean overlaps = dx * dx + dy * dy <= hitDistance * hitDistance;
 
@@ -413,7 +426,7 @@ public class ArenaWorld {
             }
 
             dummy.takeDamage(
-                spellType.getDamage()
+                power.damage()
             );
 
             // A projectile damages only the first
@@ -424,13 +437,17 @@ public class ArenaWorld {
         return false;
     }
 
+    // The first thing a beam touches: terrain, a puddle (only for beams
+    // that react with puddles), another player, or a dummy.
     private LightningHit findLightningHit(
         int ownerPlayerId,
         float originX,
         float originY,
         float directionX,
         float directionY,
-        float maxDistance
+        float maxDistance,
+        float halfWidth,
+        boolean stopsAtPuddles
     ) {
         LightningHit nearest = LightningHit.none();
 
@@ -441,7 +458,7 @@ public class ArenaWorld {
                 directionX,
                 directionY,
                 maxDistance,
-                LIGHTNING_HALF_WIDTH
+                halfWidth
             );
 
         if (!Float.isInfinite(terrainDistance)) {
@@ -449,7 +466,7 @@ public class ArenaWorld {
         }
 
         for (Zone zone : zones) {
-            if (zone.getType() != Zone.Type.PUDDLE) {
+            if (!stopsAtPuddles || zone.getType() != Zone.Type.PUDDLE) {
                 continue;
             }
 
@@ -462,7 +479,7 @@ public class ArenaWorld {
                     maxDistance,
                     zone.getX(),
                     zone.getY(),
-                    zone.getRadius() + LIGHTNING_HALF_WIDTH
+                    zone.getRadius() + halfWidth
                 );
 
             if (Float.isInfinite(distance)) {
@@ -500,16 +517,16 @@ public class ArenaWorld {
                     maxDistance,
                     centerX
                         - Player.COMBAT_HALF_WIDTH
-                        - LIGHTNING_HALF_WIDTH,
+                        - halfWidth,
                     centerY
                         - Player.COMBAT_HALF_HEIGHT
-                        - LIGHTNING_HALF_WIDTH,
+                        - halfWidth,
                     centerX
                         + Player.COMBAT_HALF_WIDTH
-                        + LIGHTNING_HALF_WIDTH,
+                        + halfWidth,
                     centerY
                         + Player.COMBAT_HALF_HEIGHT
-                        + LIGHTNING_HALF_WIDTH
+                        + halfWidth
                 );
 
             if (Float.isInfinite(distance)) {
@@ -537,7 +554,7 @@ public class ArenaWorld {
                     maxDistance,
                     dummy.getX(),
                     dummy.getY(),
-                    TargetDummy.RADIUS + LIGHTNING_HALF_WIDTH
+                    TargetDummy.RADIUS + halfWidth
                 );
 
             if (Float.isInfinite(distance)) {
@@ -775,10 +792,13 @@ public class ArenaWorld {
                 state.color()
             );
 
-            for (SpellType spellType : SpellType.values()) {
-                player.setCooldownRemaining(
-                    spellType,
-                    state.cooldownFor(spellType)
+            for (int slot = 0; slot < state.slots().size(); slot++) {
+                WorldSnapshot.SlotState slotState = state.slots().get(slot);
+
+                player.restoreSlot(
+                    slot,
+                    slotState.power(),
+                    slotState.cooldownRemaining()
                 );
             }
         }
@@ -834,7 +854,7 @@ public class ArenaWorld {
                     state.y(),
                     state.directionX(),
                     state.directionY(),
-                    state.spellType(),
+                    state.power(),
                     state.ownerPlayerId()
                 );
             } else {
@@ -881,22 +901,20 @@ public class ArenaWorld {
         }
     }
 
+    // Clients never expire zones themselves; the server removes them from
+    // later snapshots. So the duration here only needs to be positive.
     private static Zone createZoneFromSnapshot(
         WorldSnapshot.ZoneState state
     ) {
-        return state.type() == Zone.Type.PUDDLE
-            ? Zone.createPuddle(
-                state.id(),
-                state.x(),
-                state.y(),
-                state.damageOwnerPlayerId()
-            )
-            : Zone.createSteam(
-                state.id(),
-                state.x(),
-                state.y(),
-                state.damageOwnerPlayerId()
-            );
+        return Zone.create(
+            state.id(),
+            state.type(),
+            state.x(),
+            state.y(),
+            state.radius(),
+            Float.MAX_VALUE,
+            state.damageOwnerPlayerId()
+        );
     }
 
     // Player 0 is the local player in single-player.
@@ -904,27 +922,21 @@ public class ArenaWorld {
         return players.get(0);
     }
 
-    private void castLightning(
+    // A beam hits the first thing in its path instantly.
+    private void castBeam(
         int playerId,
         Player player,
-        boolean requested,
+        Power power,
         List<WorldEvent> events
     ) {
-        SpellType lightning = SpellType.LIGHTNING;
-
-        if (
-            !player.isAlive()
-            || !requested
-            || !player.isSpellReady(lightning)
-        ) {
-            return;
-        }
-
         float originX = player.getCastX();
         float originY = player.getCastY();
 
         float directionX = player.getAimX();
         float directionY = player.getAimY();
+
+        // Until the reaction table exists, only Storm beams charge puddles.
+        boolean chargesPuddles = power.element() == Element.STORM;
 
         LightningHit hit =
             findLightningHit(
@@ -933,7 +945,9 @@ public class ArenaWorld {
                 originY,
                 directionX,
                 directionY,
-                lightning.getRange()
+                power.range(),
+                power.radius(),
+                chargesPuddles
             );
 
         switch (hit.kind()) {
@@ -952,13 +966,13 @@ public class ArenaWorld {
             case PLAYER ->
                 damagePlayer(
                     hit.playerId(),
-                    lightning.getDamage(),
+                    power.damage(),
                     playerId
                 );
 
             case DUMMY ->
                 hit.dummy().takeDamage(
-                    lightning.getDamage()
+                    power.damage()
                 );
 
             case NONE, TERRAIN -> {
@@ -966,10 +980,9 @@ public class ArenaWorld {
             }
         }
 
-        player.startCooldown(lightning);
         float strikeDistance =
             hit.kind() == LightningHit.Kind.NONE
-                ? lightning.getRange()
+                ? power.range()
                 : hit.distance();
 
         LightningStrikeEvent.EndReason endReason =
@@ -1021,7 +1034,7 @@ public class ArenaWorld {
 
             damagePlayer(
                 targetPlayerId,
-                projectile.getSpellType().getDamage(),
+                projectile.getPower().damage(),
                 projectile.getOwnerPlayerId()
             );
 
@@ -1057,37 +1070,45 @@ public class ArenaWorld {
         float dx = projectile.getX() - closestX;
         float dy = projectile.getY() - closestY;
 
+        float radius = projectile.getPower().radius();
+
         return dx * dx + dy * dy
-            <= PROJECTILE_RADIUS * PROJECTILE_RADIUS;
+            <= radius * radius;
     }
 
+    // Uses the power in one loadout slot, if the player can right now.
+    // This is the one place each Behavior is turned into gameplay.
     private void tryCast(
         int playerId,
         Player player,
-        boolean requested,
-        SpellType spellType
+        int slot,
+        List<WorldEvent> events
     ) {
-        if (
-            !player.isAlive()
-            || !requested
-            || !player.isSpellReady(spellType)
-        ) {
+        if (!player.isAlive() || !player.isSlotReady(slot)) {
             return;
         }
 
-        projectiles.add(
-            new Projectile(
-                nextProjectileId++,
-                player.getCastX(),
-                player.getCastY(),
-                player.getAimX(),
-                player.getAimY(),
-                spellType,
-                playerId
-            )
-        );
+        Power power = player.getPower(slot);
 
-        player.startCooldown(spellType);
+        switch (power.behavior()) {
+            case PROJECTILE, THROWN_ZONE ->
+                projectiles.add(
+                    new Projectile(
+                        nextProjectileId++,
+                        player.getCastX(),
+                        player.getCastY(),
+                        player.getAimX(),
+                        player.getAimY(),
+                        power,
+                        playerId
+                    )
+                );
+
+            case BEAM ->
+                castBeam(playerId, player, power, events);
+        }
+
+        player.startCooldown(slot);
     }
 
     public int getPlayerCapacity() {

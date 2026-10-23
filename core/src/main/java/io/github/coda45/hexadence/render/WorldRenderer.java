@@ -198,7 +198,7 @@ public class WorldRenderer {
         for (Projectile projectile : world.getProjectiles()) {
             TextureRegion projectileRegion =
                 textures.getProjectileFrame(
-                    projectile.getSpellType(),
+                    projectile.getPower(),
                     projectileAnimationTime
                 );
 
