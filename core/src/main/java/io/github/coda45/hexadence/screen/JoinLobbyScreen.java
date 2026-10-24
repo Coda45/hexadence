@@ -15,6 +15,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
@@ -36,15 +37,21 @@ public class JoinLobbyScreen implements Screen {
     private static final String ENTER_CODE_TEXT = "TYPE THE HOST'S ROOM CODE";
     private static final float MENU_WIDTH = 640f;
     private static final float MENU_HEIGHT = 360f;
+    private static final float INFO_WIDTH = 300f;
 
     private final HexadenceGame game;
+    // Large font for the title, room code and main buttons; normal size for
+    // everything else, so both columns fit the 640-wide screen.
     private final BitmapFont font;
+    private final BitmapFont smallFont;
     private final Texture image;
     private final Stage stage;
 
     private final Label codeLabel;
     private final Label statusLabel;
+    private final Label detailLabel;
     private final TextButton joinButton;
+    private final LoadoutPicker picker;
 
     private final StringBuilder typedCode = new StringBuilder();
     // Null while the player is typing a code; set once JOIN is pressed.
@@ -62,6 +69,7 @@ public class JoinLobbyScreen implements Screen {
         image = new Texture("host_lobbytest2.png");
         font = new BitmapFont();
         font.getData().setScale(1.5f);
+        smallFont = new BitmapFont();
 
         stage = new Stage(new FitViewport(MENU_WIDTH, MENU_HEIGHT));
 
@@ -71,9 +79,15 @@ public class JoinLobbyScreen implements Screen {
         buttonStyle.fontColor = Color.WHITE;
         buttonStyle.overFontColor = Color.GOLD;
 
-        Label.LabelStyle whiteText = new Label.LabelStyle(font, Color.WHITE);
-        Label.LabelStyle goldText = new Label.LabelStyle(font, Color.GOLD);
+        TextButton.TextButtonStyle smallButtonStyle = new TextButton.TextButtonStyle();
+        smallButtonStyle.font = smallFont;
+        smallButtonStyle.fontColor = Color.WHITE;
+        smallButtonStyle.overFontColor = Color.GOLD;
+
+        Label.LabelStyle titleText = new Label.LabelStyle(font, Color.WHITE);
         Label.LabelStyle cyanText = new Label.LabelStyle(font, Color.CYAN);
+        Label.LabelStyle whiteText = new Label.LabelStyle(smallFont, Color.WHITE);
+        Label.LabelStyle goldText = new Label.LabelStyle(smallFont, Color.GOLD);
 
         Table root = new Table();
         root.setFillParent(true);
@@ -81,15 +95,31 @@ public class JoinLobbyScreen implements Screen {
 
         codeLabel = new Label("", cyanText);
         statusLabel = new Label("", goldText);
+        detailLabel = new Label("", whiteText);
         joinButton = new TextButton(JOIN_TEXT, buttonStyle);
         TextButton leaveButton = new TextButton(LEAVE_TEXT, buttonStyle);
 
-        root.add(new Label(HEADER_TEXT, whiteText)).padBottom(8).row();
-        root.add(codeLabel).padBottom(8).row();
-        root.add(statusLabel).padBottom(8).row();
-        root.add(new Label(MAP_TEXT, whiteText)).padBottom(4).row();
-        root.add(joinButton).padTop(10).row();
-        root.add(leaveButton).padTop(4);
+        // Left column: the room. Right column: this player's power draft,
+        // shown once they are in a room.
+        Table info = new Table();
+
+        info.add(new Label(HEADER_TEXT, titleText)).padBottom(8).row();
+        info.add(codeLabel).padBottom(8).row();
+        // Status lines wrap instead of running past the column.
+        statusLabel.setWrap(true);
+        statusLabel.setAlignment(Align.center);
+        detailLabel.setWrap(true);
+        detailLabel.setAlignment(Align.center);
+        info.add(statusLabel).width(INFO_WIDTH).padBottom(4).row();
+        info.add(detailLabel).width(INFO_WIDTH).padBottom(8).row();
+        info.add(new Label(MAP_TEXT, whiteText)).padBottom(4).row();
+        info.add(joinButton).padTop(10).row();
+        info.add(leaveButton).padTop(4);
+
+        picker = new LoadoutPicker(smallButtonStyle, whiteText, goldText);
+
+        root.add(info).width(INFO_WIDTH);
+        root.add(picker).width(LoadoutPicker.WIDTH).padLeft(40f);
 
         stage.addActor(root);
         
@@ -161,6 +191,16 @@ public class JoinLobbyScreen implements Screen {
             endFailedAttempt();
         }
 
+        // The picker only matters once we are in a room.
+        boolean inLobby =
+            connection != null
+            && connection.status() == LobbyConnection.Status.IN_LOBBY;
+        picker.setVisible(inLobby);
+
+        if (inLobby && picker.takeLockChange()) {
+            connection.selectLoadout(picker.loadout(), picker.isLocked());
+        }
+
         updateLabels();
 
         ScreenUtils.clear(0.15f, 0.15f, 0.2f, 1f);
@@ -191,6 +231,8 @@ public class JoinLobbyScreen implements Screen {
         }
 
         lastProblem = "";
+        // A new room starts with this player unlocked.
+        picker.resetLock();
         connection = LobbyConnection.joinRoom(
             ServerAddress.fromSettings(),
             ArenaMaps.MULTIPLAYER,
@@ -226,6 +268,7 @@ public class JoinLobbyScreen implements Screen {
 
         if (connection == null) {
             statusLabel.setText(lastProblem.isEmpty() ? ENTER_CODE_TEXT : lastProblem);
+            detailLabel.setText("");
             joinButton.setVisible(true);
             return;
         }
@@ -233,11 +276,19 @@ public class JoinLobbyScreen implements Screen {
         joinButton.setVisible(false);
 
         statusLabel.setText(switch (connection.status()) {
-            case IN_LOBBY -> "CONNECTED - WAITING FOR HOST TO START ("
+            case IN_LOBBY -> "IN THE ROOM ("
                 + connection.playerCount() + "/" + connection.maxPlayers() + ")";
             case STARTED -> "STARTING...";
             default -> "CONNECTING...";
         });
+
+        if (connection.status() != LobbyConnection.Status.IN_LOBBY) {
+            detailLabel.setText("");
+        } else if (!picker.isLocked()) {
+            detailLabel.setText("PICK YOUR POWERS, THEN LOCK IN");
+        } else {
+            detailLabel.setText("LOCKED IN - WAITING FOR HOST");
+        }
     }
 
     @Override
@@ -262,6 +313,7 @@ public class JoinLobbyScreen implements Screen {
         }
         stage.dispose();
         font.dispose();
+        smallFont.dispose();
         image.dispose();
     }
 }

@@ -41,8 +41,9 @@ For scale: the map is 30 × 20 tiles and players move 5 tiles per second.
    the one-basic-and-one-zone-per-element rule. A broken definition also stops
    the game at startup with a message saying what is missing.
 
-5. **Try it:** put it in a slot of `Loadout.DEFAULT` (`power/Loadout.java`) and
-   run the game. Slot 1 is left mouse, slot 2 right mouse, slot 3 Q.
+5. **Try it:** host a room on a local server (see the README), pick it in the
+   lobby's power draft, lock in, and start. Every power in `Powers.ALL` shows
+   up in the draft. Slot 1 is left mouse, slot 2 right mouse, slot 3 Q.
 
 6. **Open a pull request.** After it merges, the server must be redeployed so it
    runs the same definitions as everyone's game.
@@ -96,4 +97,6 @@ add it to `ZoneKinds.ALL`), then add the line here. The tests check that:
 - Zone effects beyond damage and slow: steam blocking vision, Crystal Wall
   blocking movement, and Singularity pulling players. These zones exist, but
   for now they only show and expire.
-- Choosing a loadout in the lobby. Until then, everyone uses `Loadout.DEFAULT`.
+- The draft allows any three different powers for now. Once at least two
+  zone powers exist, set `REQUIRE_ONE_BASIC_TWO_ZONES` in
+  `power/LoadoutRules.java` to `true` to enforce one basic and two zone powers.

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,6 +15,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.github.coda45.hexadence.net.LobbyConnection.Status;
+import io.github.coda45.hexadence.power.Loadout;
+import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.world.ArenaCollision;
 import io.github.coda45.hexadence.world.ArenaDefinition;
 import io.github.coda45.hexadence.world.SpawnPoint;
@@ -89,6 +93,9 @@ class RoomsTest {
         assertEquals(Status.IN_LOBBY, host.status());
         assertEquals(Status.IN_LOBBY, joiner.status());
 
+        lockIn(host);
+        lockIn(joiner);
+        await(host::everyoneLocked);
         host.requestStart();
         awaitStatus(host, Status.STARTED);
         awaitStatus(joiner, Status.STARTED);
@@ -128,6 +135,8 @@ class RoomsTest {
     @Test
     void cannotJoinAMatchInProgress() {
         LobbyConnection host = createRoom();
+        lockIn(host);
+        await(host::everyoneLocked);
         host.requestStart();
         awaitStatus(host, Status.STARTED);
 
@@ -181,6 +190,97 @@ class RoomsTest {
         connections.add(nowhere);
 
         awaitStatus(nowhere, Status.UNREACHABLE);
+    }
+
+    // ---- Drafting ----
+
+    private static final Loadout BEAM_FIRST = new Loadout(List.of(
+        Powers.LIGHTNING_BOLT,
+        Powers.FIREBALL,
+        Powers.WATER_PUDDLE
+    ));
+
+    @Test
+    void startWaitsUntilEveryoneIsLockedIn() {
+        LobbyConnection host = createRoom();
+        LobbyConnection joiner = joinRoom(host.roomCode());
+        awaitStatus(joiner, Status.IN_LOBBY);
+
+        lockIn(host);
+        await(() -> host.lockedCount() == 1);
+        assertFalse(host.everyoneLocked());
+
+        host.requestStart();
+        pause(300);
+        assertEquals(Status.IN_LOBBY, host.status());
+
+        lockIn(joiner);
+        await(host::everyoneLocked);
+
+        host.requestStart();
+        awaitStatus(host, Status.STARTED);
+        awaitStatus(joiner, Status.STARTED);
+    }
+
+    @Test
+    void unlockingLowersTheCount() {
+        LobbyConnection host = createRoom();
+
+        lockIn(host);
+        await(() -> host.lockedCount() == 1);
+
+        host.selectLoadout(Loadout.DEFAULT, false);
+        await(() -> host.lockedCount() == 0);
+    }
+
+    @Test
+    void illegalLoadoutIsIgnored() {
+        LobbyConnection host = createRoom();
+
+        Loadout duplicates = new Loadout(List.of(
+            Powers.FIREBALL, Powers.FIREBALL, Powers.FIREBALL
+        ));
+        host.selectLoadout(duplicates, true);
+        pause(300);
+
+        assertEquals(0, host.lockedCount());
+    }
+
+    @Test
+    void draftedPowersAreUsedInTheMatchAndCannotChange() {
+        LobbyConnection host = createRoom();
+        host.selectLoadout(BEAM_FIRST, true);
+        await(host::everyoneLocked);
+
+        host.requestStart();
+        awaitStatus(host, Status.STARTED);
+
+        NetClient client = host.handOff().client();
+        await(client::isReady);
+        assertEquals(BEAM_FIRST.slots(), slotPowers(client));
+
+        // Changing powers after the start is ignored.
+        client.selectLoadout(Loadout.DEFAULT, true);
+        pause(300);
+        assertEquals(BEAM_FIRST.slots(), slotPowers(client));
+
+        client.close();
+    }
+
+    private static void lockIn(LobbyConnection connection) {
+        connection.selectLoadout(Loadout.DEFAULT, true);
+    }
+
+    private static List<Power> slotPowers(NetClient client) {
+        int me = client.getPlayerId();
+
+        return client.getLatestSnapshot().players().stream()
+            .filter(player -> player.id() == me)
+            .findFirst()
+            .orElseThrow()
+            .slots().stream()
+            .map(WorldSnapshot.SlotState::power)
+            .toList();
     }
 
     // ---- Helpers ----

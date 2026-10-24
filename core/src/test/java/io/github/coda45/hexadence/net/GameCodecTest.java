@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.zone.ZoneKind;
@@ -53,7 +54,11 @@ class GameCodecTest {
 
     @Test
     void roundTripsLobbyMessages() {
-        assertEquals(new LobbyState(3, 4), roundTrip(new LobbyState(3, 4)));
+        assertEquals(new LobbyState(3, 4, 2), roundTrip(new LobbyState(3, 4, 2)));
+        assertEquals(
+            new SelectLoadout(Loadout.DEFAULT, true),
+            roundTrip(new SelectLoadout(Loadout.DEFAULT, true))
+        );
         assertEquals(new StartGame(), roundTrip(new StartGame()));
         assertEquals(new GameStarted(), roundTrip(new GameStarted()));
         assertEquals(new RoomClosed(), roundTrip(new RoomClosed()));

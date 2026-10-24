@@ -46,6 +46,8 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
             server.receive(room, playerId, command);
         } else if (msg instanceof StartGame) {
             server.start(room, playerId);
+        } else if (msg instanceof SelectLoadout selection) {
+            server.selectLoadout(room, playerId, selection);
         } else if (msg instanceof KeepAlive) {
             // Nothing to do: receiving it already reset the read timeout.
         } else {

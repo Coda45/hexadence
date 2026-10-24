@@ -106,6 +106,10 @@ public class GameServer {
         room.start(playerId);
     }
 
+    void selectLoadout(GameRoom room, int playerId, SelectLoadout selection) {
+        room.selectLoadout(playerId, selection);
+    }
+
     void leave(GameRoom room, int playerId) {
         room.leave(playerId);
         forgetIfFinished(room);
