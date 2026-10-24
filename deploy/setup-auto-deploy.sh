@@ -49,4 +49,7 @@ printf 'restrict,command="sudo %s" %s\n' "$RECEIVER" "$(head -n 1 "$PUBKEY_FILE"
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
 
+echo "==> Installed key fingerprint (must match the one the GitHub deploy log prints):"
+ssh-keygen -lf /home/deploy/.ssh/authorized_keys
+
 echo "==> Done. GitHub can now deploy with: ssh deploy@<this server> < hexadence-server.jar"
