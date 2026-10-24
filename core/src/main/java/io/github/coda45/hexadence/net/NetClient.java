@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.world.WorldEvent;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -94,6 +95,13 @@ public class NetClient {
     public void send(PlayerCommand command) {
         if (isConnected()) {
             channel.writeAndFlush(command);
+        }
+    }
+
+    // Tells the server this player's powers, and whether they are locked in.
+    public void selectLoadout(Loadout loadout, boolean locked) {
+        if (isConnected()) {
+            channel.writeAndFlush(new SelectLoadout(loadout, locked));
         }
     }
 

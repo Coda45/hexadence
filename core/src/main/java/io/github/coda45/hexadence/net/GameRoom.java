@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.power.Loadout;
+import io.github.coda45.hexadence.power.LoadoutRules;
 import io.github.coda45.hexadence.world.ArenaDefinition;
 import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.StepResult;
@@ -17,10 +19,11 @@ import io.netty.channel.Channel;
 
 // One match: its own arena and up to four players, identified by a room code.
 //
-// A room starts in the LOBBY state, where players gather and the world does
-// not advance. The host (the player who created the room) sends StartGame to
-// switch it to PLAYING, after which it ticks at 60 Hz like the old
-// single-game server did.
+// A room starts in the LOBBY state, where players gather, draft their three
+// powers and lock them in, and the world does not advance. Once everyone is
+// locked in, the host (the player who created the room) can send StartGame to
+// switch it to PLAYING: each player's loadout is applied and it ticks at 60 Hz.
+// Loadouts cannot change after that.
 //
 // Threading: only touched from GameServer's game thread, so no locks.
 final class GameRoom {
@@ -37,6 +40,11 @@ final class GameRoom {
     private final Map<Integer, Channel> channels = new LinkedHashMap<>();
     private final Map<Integer, GameServer.PendingCommand> pending = new LinkedHashMap<>();
     private final Map<Integer, Deque<WorldEvent>> pendingEvents = new LinkedHashMap<>();
+    // Each player's drafted powers, and whether they have locked them in.
+    private final Map<Integer, Draft> drafts = new LinkedHashMap<>();
+
+    private record Draft(Loadout loadout, boolean locked) {
+    }
 
     private State state = State.LOBBY;
     private int hostPlayerId = -1;
@@ -79,6 +87,7 @@ final class GameRoom {
         channels.put(id, channel);
         pending.put(id, new GameServer.PendingCommand());
         pendingEvents.put(id, new ArrayDeque<>());
+        drafts.put(id, new Draft(Loadout.DEFAULT, false));
 
         if (hostPlayerId < 0) {
             hostPlayerId = id;
@@ -97,7 +106,7 @@ final class GameRoom {
             return;
         }
 
-        broadcast(new LobbyState(channels.size(), capacity));
+        broadcast(new LobbyState(channels.size(), capacity, lockedCount()));
     }
 
     void leave(int playerId) {
@@ -108,6 +117,7 @@ final class GameRoom {
         channels.remove(playerId);
         pending.remove(playerId);
         pendingEvents.remove(playerId);
+        drafts.remove(playerId);
         world.removePlayer(playerId);
 
         log("Player " + playerId + " left");
@@ -127,6 +137,7 @@ final class GameRoom {
         channels.clear();
         pending.clear();
         pendingEvents.clear();
+        drafts.clear();
 
         for (Channel channel : others) {
             channel.writeAndFlush(new RoomClosed()).addListener(
@@ -137,9 +148,42 @@ final class GameRoom {
         log("Closed because the host left the lobby");
     }
 
+    // ---- Drafting ----
+
+    // A player picked or locked in their powers. Only allowed in the lobby,
+    // and only for a loadout the rules allow; anything else is ignored.
+    void selectLoadout(int playerId, SelectLoadout selection) {
+        if (state != State.LOBBY || !drafts.containsKey(playerId)) {
+            return;
+        }
+
+        String problem = LoadoutRules.problem(selection.loadout());
+
+        if (problem != null) {
+            log("Ignored loadout from player " + playerId + ": " + problem);
+            return;
+        }
+
+        drafts.put(playerId, new Draft(selection.loadout(), selection.locked()));
+        broadcastLobbyState();
+    }
+
+    private int lockedCount() {
+        int locked = 0;
+
+        for (Draft draft : drafts.values()) {
+            if (draft.locked()) {
+                locked++;
+            }
+        }
+
+        return locked;
+    }
+
     // ---- Lobby to match ----
 
-    // Starts the match if the host asked and it has not started yet.
+    // Starts the match if the host asked, everyone is locked in, and it has
+    // not started yet.
     void start(int playerId) {
         if (state != State.LOBBY) {
             return;
@@ -148,6 +192,17 @@ final class GameRoom {
         if (playerId != hostPlayerId) {
             log("Ignored START from player " + playerId + ", who is not the host");
             return;
+        }
+
+        if (lockedCount() < channels.size()) {
+            log("Ignored START: " + lockedCount() + " of " + channels.size()
+                + " players locked in");
+            return;
+        }
+
+        // Everyone enters with the powers they drafted.
+        for (Map.Entry<Integer, Draft> entry : drafts.entrySet()) {
+            world.getPlayers().get(entry.getKey()).setLoadout(entry.getValue().loadout());
         }
 
         state = State.PLAYING;

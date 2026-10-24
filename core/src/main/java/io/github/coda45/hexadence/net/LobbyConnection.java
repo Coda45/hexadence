@@ -2,6 +2,8 @@ package io.github.coda45.hexadence.net;
 
 import java.util.concurrent.CompletableFuture;
 
+import io.github.coda45.hexadence.power.Loadout;
+
 // What a lobby screen needs from the network, in one place: start connecting,
 // then call poll() once per frame and read status().
 //
@@ -110,6 +112,26 @@ public final class LobbyConnection {
     public int maxPlayers() {
         LobbyState state = lobbyState();
         return state == null ? GameServer.MAX_PLAYERS : state.maxPlayers();
+    }
+
+    // How many players have locked in their powers.
+    public int lockedCount() {
+        LobbyState state = lobbyState();
+        return state == null ? 0 : state.lockedCount();
+    }
+
+    // True when every player in the room has locked in, so the host can start.
+    public boolean everyoneLocked() {
+        LobbyState state = lobbyState();
+        return state != null && state.everyoneLocked();
+    }
+
+    // Sends this player's powers, locked in or not. The server ignores a
+    // loadout the rules do not allow, so check LoadoutRules first.
+    public void selectLoadout(Loadout loadout, boolean locked) {
+        if (status() == Status.IN_LOBBY) {
+            session.client().selectLoadout(loadout, locked);
+        }
     }
 
     private LobbyState lobbyState() {

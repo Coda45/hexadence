@@ -13,6 +13,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
@@ -23,7 +24,8 @@ import io.github.coda45.hexadence.net.ServerAddress;
 import io.github.coda45.hexadence.world.ArenaMaps;
 
 // The host's lobby, using a Scene2D table layout. Opening it creates a room
-// on the server and shows its code; START begins the match for everyone in it.
+// on the server and shows its code. Everyone drafts and locks in their powers
+// (the picker on the right); once all are locked in, START begins the match.
 public class HostLobbyScreen implements Screen {
 
     private static final String START_TEXT = "[ START BATTLE ]";
@@ -35,9 +37,13 @@ public class HostLobbyScreen implements Screen {
     private static final int MAX_PLAYERS = GameServer.MAX_PLAYERS;
     private static final float MENU_WIDTH = 640f;
     private static final float MENU_HEIGHT = 360f;
+    private static final float INFO_WIDTH = 300f;
 
     private final HexadenceGame game;
+    // Large font for the title, room code and main buttons; normal size for
+    // everything else, so both columns fit the 640-wide screen.
     private final BitmapFont font;
+    private final BitmapFont smallFont;
     private final Texture image;
     private final Stage stage;
     private final LobbyConnection connection;
@@ -45,6 +51,8 @@ public class HostLobbyScreen implements Screen {
     // Updated every frame from the connection.
     private final Label roomLabel;
     private final Label playerLabel;
+    private final Label readyLabel;
+    private final LoadoutPicker picker;
     private final Label[] slotLabels = new Label[MAX_PLAYERS];
     private final Label.LabelStyle whiteText;
     private final Label.LabelStyle goldText;
@@ -59,6 +67,7 @@ public class HostLobbyScreen implements Screen {
         image = new Texture("host_lobbytest2.png");
         font = new BitmapFont();
         font.getData().setScale(1.5f);
+        smallFont = new BitmapFont();
 
         stage = new Stage(new FitViewport(MENU_WIDTH, MENU_HEIGHT));
 
@@ -68,26 +77,41 @@ public class HostLobbyScreen implements Screen {
         buttonStyle.fontColor = Color.WHITE;
         buttonStyle.overFontColor = Color.GOLD;
 
-        whiteText = new Label.LabelStyle(font, Color.WHITE);
-        goldText = new Label.LabelStyle(font, Color.GOLD);
+        TextButton.TextButtonStyle smallButtonStyle = new TextButton.TextButtonStyle();
+        smallButtonStyle.font = smallFont;
+        smallButtonStyle.fontColor = Color.WHITE;
+        smallButtonStyle.overFontColor = Color.GOLD;
+
+        Label.LabelStyle titleText = new Label.LabelStyle(font, Color.WHITE);
         Label.LabelStyle cyanText = new Label.LabelStyle(font, Color.CYAN);
+        whiteText = new Label.LabelStyle(smallFont, Color.WHITE);
+        goldText = new Label.LabelStyle(smallFont, Color.GOLD);
 
         Table root = new Table();
         root.setFillParent(true);
         root.setBackground(new TextureRegionDrawable(image));
 
+        // Left column: the room. Right column: this player's power draft.
+        Table info = new Table();
+
         roomLabel = new Label("", cyanText);
         playerLabel = new Label("", whiteText);
+        readyLabel = new Label("", whiteText);
 
-        root.add(new Label(HEADER_TEXT, whiteText)).padBottom(8).row();
-        root.add(roomLabel).padBottom(8).row();
-        root.add(playerLabel).padBottom(4).row();
+        info.add(new Label(HEADER_TEXT, titleText)).padBottom(6).row();
+        info.add(roomLabel).padBottom(8).row();
+        // Status lines wrap instead of running past the column.
+        playerLabel.setWrap(true);
+        playerLabel.setAlignment(Align.center);
+        info.add(playerLabel).width(INFO_WIDTH).padBottom(4).row();
 
         // Player slots: the host first, then everyone who joined, then open slots.
         for (int i = 0; i < MAX_PLAYERS; i++) {
             slotLabels[i] = new Label("", whiteText);
-            root.add(slotLabels[i]).row();
+            info.add(slotLabels[i]).row();
         }
+
+        info.add(readyLabel).padTop(6).row();
 
         TextButton startButton = new TextButton(START_TEXT, buttonStyle);
         TextButton leaveButton = new TextButton(LEAVE_TEXT, buttonStyle);
@@ -106,8 +130,13 @@ public class HostLobbyScreen implements Screen {
             }
         });
 
-        root.add(startButton).padTop(10).row();
-        root.add(leaveButton).padTop(4);
+        info.add(startButton).padTop(8).row();
+        info.add(leaveButton).padTop(4);
+
+        picker = new LoadoutPicker(smallButtonStyle, whiteText, goldText);
+
+        root.add(info).width(INFO_WIDTH);
+        root.add(picker).width(LoadoutPicker.WIDTH).padLeft(40f);
 
         stage.addActor(root);
 
@@ -136,6 +165,15 @@ public class HostLobbyScreen implements Screen {
         }
 
         connection.poll();
+
+        // The picker only matters once we are in the room.
+        boolean inLobby = connection.status() == LobbyConnection.Status.IN_LOBBY;
+        picker.setVisible(inLobby);
+
+        if (inLobby && picker.takeLockChange()) {
+            connection.selectLoadout(picker.loadout(), picker.isLocked());
+        }
+
         updateLabels();
 
         ScreenUtils.clear(0.15f, 0.15f, 0.2f, 1f);
@@ -143,9 +181,12 @@ public class HostLobbyScreen implements Screen {
         stage.draw();
 
         if (startRequested) {
-            // The server answers with GameStarted, which switches every
-            // player in the room, including this one, below.
-            connection.requestStart();
+            // Only once everyone is locked in. The server answers with
+            // GameStarted, which switches every player in the room, including
+            // this one, below. (The server checks the lock-ins too.)
+            if (connection.everyoneLocked()) {
+                connection.requestStart();
+            }
             startRequested = false;
         }
 
@@ -173,6 +214,16 @@ public class HostLobbyScreen implements Screen {
             case IN_LOBBY, STARTED ->
                 "CHAMPIONS ASSEMBLED (" + players + "/" + connection.maxPlayers() + ")";
         });
+
+        if (connection.status() != LobbyConnection.Status.IN_LOBBY) {
+            readyLabel.setText("");
+        } else if (connection.everyoneLocked()) {
+            readyLabel.setText("EVERYONE LOCKED IN");
+        } else {
+            readyLabel.setText(
+                "LOCKED IN: " + connection.lockedCount() + "/" + players
+            );
+        }
 
         for (int i = 0; i < MAX_PLAYERS; i++) {
             Label slot = slotLabels[i];
@@ -209,6 +260,7 @@ public class HostLobbyScreen implements Screen {
         connection.close();
         stage.dispose();
         font.dispose();
+        smallFont.dispose();
         image.dispose();
     }
 }

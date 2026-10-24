@@ -60,8 +60,9 @@ cd hexadence
 
 Up to four players play one match, called a room, on the team's dedicated server. From the main menu choose **Multiplayer**:
 
-* **Host Game** creates a room and shows its four-character room code. Share the code, wait for players to appear in the lobby, then press **Start Battle**.
-* **Join Game**: type the host's room code and press **Join Game** (or Enter). You wait in the lobby until the host starts.
+* **Host Game** creates a room and shows its four-character room code. Share the code and wait for players to appear in the lobby.
+* **Join Game**: type the host's room code and press **Join Game** (or Enter).
+* **Draft your powers:** in the lobby, everyone uses the arrows to pick the power in each slot (left mouse, right mouse, Q) and presses **Lock In**. Once every player is locked in, the host presses **Start Battle**. Powers can't change after the match starts.
 
 The server can run many rooms at once. If the host leaves the lobby before starting, the room closes and everyone in it returns to the code screen. Once a match has started, no one new can join it.
 

@@ -6,6 +6,7 @@ import java.util.List;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.zone.ZoneKind;
@@ -36,7 +37,8 @@ public final class GameCodec {
     //    tuning a power never changes this file.
     // 8: zones travel by ZoneKind ID, so adding a zone kind never changes
     //    this file either.
-    public static final int PROTOCOL_VERSION = 8;
+    // 9: lobby drafting (SelectLoadout, locked count in LobbyState).
+    public static final int PROTOCOL_VERSION = 9;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -50,6 +52,7 @@ public final class GameCodec {
     private static final byte TYPE_GAME_STARTED = 10;
     private static final byte TYPE_ROOM_CLOSED = 11;
     private static final byte TYPE_KEEP_ALIVE = 12;
+    private static final byte TYPE_SELECT_LOADOUT = 13;
 
     private static final int LENGTH_FIELD_BYTES = 4;
     private static final int MAX_MAP_ID_BYTES = 128;
@@ -120,6 +123,7 @@ public final class GameCodec {
                 out.writeByte(TYPE_LOBBY_STATE);
                 out.writeByte(lobby.playerCount());
                 out.writeByte(lobby.maxPlayers());
+                out.writeByte(lobby.lockedCount());
             } else if (message instanceof StartGame) {
                 out.writeByte(TYPE_START_GAME);
             } else if (message instanceof GameStarted) {
@@ -128,6 +132,13 @@ public final class GameCodec {
                 out.writeByte(TYPE_ROOM_CLOSED);
             } else if (message instanceof KeepAlive) {
                 out.writeByte(TYPE_KEEP_ALIVE);
+            } else if (message instanceof SelectLoadout select) {
+                out.writeByte(TYPE_SELECT_LOADOUT);
+                out.writeByte(select.loadout().slots().size());
+                for (Power power : select.loadout().slots()) {
+                    writePower(out, power);
+                }
+                out.writeBoolean(select.locked());
             } else {
                 throw new IllegalArgumentException(
                     "Unsupported message: " + message.getClass().getName()
@@ -167,12 +178,14 @@ public final class GameCodec {
                 ));
                 case TYPE_LOBBY_STATE -> out.add(new LobbyState(
                     in.readUnsignedByte(),
+                    in.readUnsignedByte(),
                     in.readUnsignedByte()
                 ));
                 case TYPE_START_GAME -> out.add(new StartGame());
                 case TYPE_GAME_STARTED -> out.add(new GameStarted());
                 case TYPE_ROOM_CLOSED -> out.add(new RoomClosed());
                 case TYPE_KEEP_ALIVE -> out.add(new KeepAlive());
+                case TYPE_SELECT_LOADOUT -> out.add(readSelectLoadout(in));
                 default -> throw new IllegalArgumentException(
                     "Unknown message type: " + type
                 );
@@ -460,6 +473,18 @@ public final class GameCodec {
         }
 
         return power;
+    }
+
+    // A malformed loadout (wrong size) throws, which closes the connection.
+    private static SelectLoadout readSelectLoadout(ByteBuf in) {
+        int count = in.readUnsignedByte();
+        List<Power> powers = new ArrayList<>(count);
+
+        for (int i = 0; i < count; i++) {
+            powers.add(readPower(in));
+        }
+
+        return new SelectLoadout(new Loadout(powers), in.readBoolean());
     }
 
     private static List<WorldSnapshot.SlotState> readSlots(ByteBuf in) {
