@@ -4,7 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.github.coda45.hexadence.entity.Zone;
+import io.github.coda45.hexadence.zone.ZoneKinds;
 
 // Every power in the game, defined in one place. Each definition mirrors a
 // column of its spell card. To tune a power, change its numbers here; to add
@@ -41,7 +41,7 @@ public final class Powers {
         .speed(10f)          // PLACEHOLDER
         .range(8f)           // PLACEHOLDER
         .radius(0.12f)       // PLACEHOLDER
-        .zone(Zone.Type.PUDDLE, 0.8f, 6f)   // PLACEHOLDER radius and duration
+        .zone(ZoneKinds.PUDDLE)
         .icon("ui/bg_water_bolt.png", "ui/rim_blue.png")
         .build();
 

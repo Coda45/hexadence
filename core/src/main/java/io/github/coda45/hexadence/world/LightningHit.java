@@ -15,6 +15,7 @@ record LightningHit(
     enum Kind {
         NONE,
         TERRAIN,
+        // Any zone the beam reacts with (named for the first one, the puddle).
         PUDDLE,
         DUMMY,
         PLAYER

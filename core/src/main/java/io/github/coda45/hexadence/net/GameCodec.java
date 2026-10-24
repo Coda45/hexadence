@@ -5,10 +5,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
-import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
+import io.github.coda45.hexadence.zone.ZoneKind;
+import io.github.coda45.hexadence.zone.ZoneKinds;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.netty.buffer.ByteBuf;
@@ -33,7 +34,9 @@ public final class GameCodec {
     //    StartGame, GameStarted, RoomClosed, KeepAlive).
     // 7: powers travel by ID and players by loadout slot, so adding or
     //    tuning a power never changes this file.
-    public static final int PROTOCOL_VERSION = 7;
+    // 8: zones travel by ZoneKind ID, so adding a zone kind never changes
+    //    this file either.
+    public static final int PROTOCOL_VERSION = 8;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -268,7 +271,7 @@ public final class GameCodec {
         out.writeShort(snapshot.zones().size());
         for (WorldSnapshot.ZoneState z : snapshot.zones()) {
             out.writeInt(z.id());
-            out.writeByte(zoneTypeId(z.type()));
+            out.writeByte(z.kind().id());
             out.writeFloat(z.x());
             out.writeFloat(z.y());
             out.writeFloat(z.radius());
@@ -330,7 +333,7 @@ public final class GameCodec {
         for (int i = 0; i < zoneCount; i++) {
             zones.add(new WorldSnapshot.ZoneState(
                 in.readInt(),
-                zoneTypeFromId(in.readUnsignedByte()),
+                readZoneKind(in),
                 in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),
@@ -470,21 +473,17 @@ public final class GameCodec {
         return slots;
     }
 
-    private static int zoneTypeId(Zone.Type type) {
-        return switch (type) {
-            case PUDDLE -> 1;
-            case STEAM -> 2;
-        };
-    }
+    private static ZoneKind readZoneKind(ByteBuf in) {
+        int id = in.readUnsignedByte();
+        ZoneKind kind = ZoneKinds.byId(id);
 
-    private static Zone.Type zoneTypeFromId(int id) {
-        return switch (id) {
-            case 1 -> Zone.Type.PUDDLE;
-            case 2 -> Zone.Type.STEAM;
-            default -> throw new IllegalArgumentException(
-                "Unknown Zone.Type ID: " + id
+        if (kind == null) {
+            throw new IllegalArgumentException(
+                "Unknown zone kind ID: " + id + " (is the other side running the same build?)"
             );
-        };
+        }
+
+        return kind;
     }
 
     private static int lightningEndReasonId(

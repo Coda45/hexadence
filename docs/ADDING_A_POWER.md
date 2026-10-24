@@ -16,7 +16,7 @@ Change its numbers in `Powers.java`. Units:
 | `speed` | How fast it travels (powers that travel) | tiles / second |
 | `range` | How far it travels or reaches | tiles |
 | `radius` | Projectile size, or half a beam's width | tiles |
-| `zone(type, radius, duration)` | Zone left behind (zone powers) | tiles, seconds |
+| `zone(kind)` | Zone left behind (zone powers); its size and lifetime live in `ZoneKinds` | |
 
 For scale: the map is 30 × 20 tiles and players move 5 tiles per second.
 
@@ -53,9 +53,47 @@ For scale: the map is 30 × 20 tiles and players move 5 tiles per second.
 - **Projectile sprite:** chosen by element in `GameTextures.getProjectileFrame()`.
   Elements without their own art use the fireball for now.
 
+## Zones and reactions
+
+Zones live in `zone/ZoneKinds.java`, and the interaction matrix lives in
+`zone/Reactions.java`.
+
+- **Base zones** are placed by zone powers, for example the Puddle from
+  Water Puddle. Basic powers react with them.
+- **Derived zones** are made by reactions, for example Steam or Lava. They
+  never react further.
+
+**Tuning a zone:** change its numbers in `ZoneKinds.java`.
+
+| Field | Meaning | Unit |
+|---|---|---|
+| `radius` | Size | tiles |
+| `duration` | How long it lasts | seconds |
+| `damagePerSecond` | Damage to anyone standing in it, creator included | HP / second |
+| `speedMultiplier` | Movement inside it (1 = normal, 0.5 = half) | |
+| `coversPlayers()` | Drawn over players, like a cloud | |
+| `tint` | Draw color, `0xRRGGBBAA` | |
+| `planned(...)` | A designed effect the engine doesn't do yet (notes only) | |
+
+Where zones overlap, only the **newest** one counts at that spot.
+
+**Changing a reaction:** each filled cell of the matrix is one line in
+`Reactions.ALL`:
+
+```java
+transform(FIRE, WATER, ZoneKinds.STEAM),   // Fire hits a Water zone -> Steam
+charge(STORM, WATER),                      // Storm hits a Water zone -> charged
+```
+
+To add a new result, define its derived zone in `ZoneKinds` (next unused ID,
+add it to `ZoneKinds.ALL`), then add the line here. The tests check that:
+- an element never reacts with its own field
+- each basic power reacts with at most two fields
+- every derived zone is produced by some reaction
+
 ## Not covered yet
 
-- Zone reactions (which basic power changes which zone, and how) are still
-  written by hand in `ArenaWorld`. They are moving into a reaction table built from
-  the interaction matrix.
+- Zone effects beyond damage and slow: steam blocking vision, Crystal Wall
+  blocking movement, and Singularity pulling players. These zones exist, but
+  for now they only show and expire.
 - Choosing a loadout in the lobby. Until then, everyone uses `Loadout.DEFAULT`.

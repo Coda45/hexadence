@@ -2,7 +2,8 @@ package io.github.coda45.hexadence.power;
 
 import java.util.Objects;
 
-import io.github.coda45.hexadence.entity.Zone;
+import io.github.coda45.hexadence.zone.ZoneKind;
+import io.github.coda45.hexadence.zone.ZoneOrigin;
 
 // One power's definition: what it is and its numbers. All powers are defined
 // in Powers, using the builder below, so each definition reads like its
@@ -29,9 +30,7 @@ public final class Power {
     private final float range;
     private final float radius;
 
-    private final Zone.Type zoneType;
-    private final float zoneRadius;
-    private final float zoneDuration;
+    private final ZoneKind zoneKind;
 
     private final String iconPath;
     private final String iconRimPath;
@@ -48,9 +47,7 @@ public final class Power {
         this.speed = b.speed;
         this.range = b.range;
         this.radius = b.radius;
-        this.zoneType = b.zoneType;
-        this.zoneRadius = b.zoneRadius;
-        this.zoneDuration = b.zoneDuration;
+        this.zoneKind = b.zoneKind;
         this.iconPath = b.iconPath;
         this.iconRimPath = b.iconRimPath;
     }
@@ -79,10 +76,9 @@ public final class Power {
     // Projectile radius, or half the width of a beam, in tiles.
     public float radius() { return radius; }
 
-    // Zone left behind, for powers that create one; otherwise null.
-    public Zone.Type zoneType() { return zoneType; }
-    public float zoneRadius() { return zoneRadius; }
-    public float zoneDuration() { return zoneDuration; }
+    // Zone left behind, for powers that create one; otherwise null. Its size
+    // and lifetime are part of the zone's own definition in ZoneKinds.
+    public ZoneKind zoneKind() { return zoneKind; }
 
     // HUD icon images, relative to the assets folder.
     public String iconPath() { return iconPath; }
@@ -116,9 +112,7 @@ public final class Power {
         private float speed;
         private float range;
         private float radius;
-        private Zone.Type zoneType;
-        private float zoneRadius;
-        private float zoneDuration;
+        private ZoneKind zoneKind;
         private String iconPath = "ui/bg_fireball.png";
         private String iconRimPath = "ui/rim_orange.png";
 
@@ -137,10 +131,8 @@ public final class Power {
         public Builder range(float tiles) { this.range = tiles; return this; }
         public Builder radius(float tiles) { this.radius = tiles; return this; }
 
-        public Builder zone(Zone.Type type, float radiusTiles, float durationSeconds) {
-            this.zoneType = type;
-            this.zoneRadius = radiusTiles;
-            this.zoneDuration = durationSeconds;
+        public Builder zone(ZoneKind kind) {
+            this.zoneKind = kind;
             return this;
         }
 
@@ -170,11 +162,17 @@ public final class Power {
             }
 
             if (behavior.createsZone()) {
-                require(zoneType != null, "zone(...) is required for " + behavior);
-                require(zoneRadius > 0f, "zone radius must be above 0");
-                require(zoneDuration > 0f, "zone duration must be above 0");
+                require(zoneKind != null, "zone(...) is required for " + behavior);
+                require(
+                    zoneKind.origin() == ZoneOrigin.BASE,
+                    "a power places a base zone, not a derived one"
+                );
+                require(
+                    zoneKind.element() == element,
+                    "its zone must be the same element as the power"
+                );
             } else {
-                require(zoneType == null, "only zone-creating behaviors may set zone(...)");
+                require(zoneKind == null, "only zone-creating behaviors may set zone(...)");
             }
 
             return new Power(this);

@@ -6,8 +6,8 @@ package io.github.coda45.hexadence.power;
 // Each behavior reads different fields from its Power:
 //   PROJECTILE   damage, speed, range, radius (size of the projectile)
 //   BEAM         damage, range, radius (half the beam's width); hits instantly
-//   THROWN_ZONE  like PROJECTILE, then leaves a zone where it stops:
-//                zoneType, zoneRadius, zoneDuration
+//   THROWN_ZONE  like PROJECTILE, then leaves its zone (a ZoneKind) where
+//                it stops
 //
 // A power that needs a mechanic none of these cover gets a new value here
 // and a matching case in ArenaWorld.cast().
