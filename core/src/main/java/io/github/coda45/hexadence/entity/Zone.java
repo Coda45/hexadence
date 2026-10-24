@@ -1,33 +1,32 @@
 package io.github.coda45.hexadence.entity;
 
-public class Zone {
+import java.util.Objects;
 
-    public enum Type {
-        PUDDLE,
-        STEAM
-    }
+import io.github.coda45.hexadence.zone.ZoneKind;
+import io.github.coda45.hexadence.zone.ZoneKinds;
+
+// One zone in the arena: a circle of some ZoneKind that lasts a while.
+// What the kind does (damage, slow, reactions) is handled by ArenaWorld.
+public class Zone {
 
     public static final int UNASSIGNED_ID = -1;
     public static final int NO_PLAYER = -1;
 
-    private static final float PUDDLE_RADIUS = 0.8f;
-    private static final float PUDDLE_DURATION = 6f;
-    private static final float STEAM_RADIUS = 1f;
-    private static final float STEAM_DURATION = 3f;
-
     private final int id;
-    private final Type type;
+    private final ZoneKind kind;
     private final float x;
     private final float y;
     private final float radius;
 
     private float remainingSeconds;
+    // Who gets credit for damage this zone deals.
     private int damageOwnerPlayerId;
+    // Set by a CHARGE reaction; cleared when the charge discharges.
     private boolean electrified;
 
     private Zone(
         int id,
-        Type type,
+        ZoneKind kind,
         float x,
         float y,
         float radius,
@@ -35,7 +34,7 @@ public class Zone {
         int damageOwnerPlayerId
     ) {
         this.id = id;
-        this.type = type;
+        this.kind = Objects.requireNonNull(kind);
         this.x = x;
         this.y = y;
         this.radius = radius;
@@ -43,17 +42,28 @@ public class Zone {
         this.damageOwnerPlayerId = damageOwnerPlayerId;
     }
 
-    // A zone with explicit size and lifetime, as a power's definition gives them.
+    // A zone with its kind's own size and lifetime.
     public static Zone create(
         int id,
-        Type type,
+        ZoneKind kind,
+        float x,
+        float y,
+        int ownerPlayerId
+    ) {
+        return new Zone(id, kind, x, y, kind.radius(), kind.duration(), ownerPlayerId);
+    }
+
+    // A zone with an explicit size and lifetime, as a snapshot gives them.
+    public static Zone create(
+        int id,
+        ZoneKind kind,
         float x,
         float y,
         float radius,
         float duration,
         int ownerPlayerId
     ) {
-        return new Zone(id, type, x, y, radius, duration, ownerPlayerId);
+        return new Zone(id, kind, x, y, radius, duration, ownerPlayerId);
     }
 
     public static Zone createPuddle(float x, float y) {
@@ -61,40 +71,12 @@ public class Zone {
     }
 
     public static Zone createPuddle(
-        float x,
-        float y,
-        int ownerPlayerId
-    ) {
-        return createPuddle(UNASSIGNED_ID, x, y, ownerPlayerId);
-    }
-
-    public static Zone createPuddle(
         int id,
         float x,
         float y,
         int ownerPlayerId
     ) {
-        return new Zone(
-            id,
-            Type.PUDDLE,
-            x,
-            y,
-            PUDDLE_RADIUS,
-            PUDDLE_DURATION,
-            ownerPlayerId
-        );
-    }
-
-    public static Zone createSteam(float x, float y) {
-        return createSteam(UNASSIGNED_ID, x, y, NO_PLAYER);
-    }
-
-    public static Zone createSteam(
-        float x,
-        float y,
-        int ownerPlayerId
-    ) {
-        return createSteam(UNASSIGNED_ID, x, y, ownerPlayerId);
+        return create(id, ZoneKinds.PUDDLE, x, y, ownerPlayerId);
     }
 
     public static Zone createSteam(
@@ -103,15 +85,7 @@ public class Zone {
         float y,
         int ownerPlayerId
     ) {
-        return new Zone(
-            id,
-            Type.STEAM,
-            x,
-            y,
-            STEAM_RADIUS,
-            STEAM_DURATION,
-            ownerPlayerId
-        );
+        return create(id, ZoneKinds.STEAM, x, y, ownerPlayerId);
     }
 
     public boolean isElectrified() {
@@ -119,15 +93,17 @@ public class Zone {
     }
 
     public void electrify(int ownerPlayerId) {
-        if (type == Type.PUDDLE) {
-            electrified = true;
-            damageOwnerPlayerId = ownerPlayerId;
-        }
+        electrified = true;
+        damageOwnerPlayerId = ownerPlayerId;
     }
 
     // Keeps existing tests and client-side code usable.
     public void electrify() {
         electrify(damageOwnerPlayerId);
+    }
+
+    public void discharge() {
+        electrified = false;
     }
 
     public int getId() {
@@ -142,12 +118,6 @@ public class Zone {
         damageOwnerPlayerId = playerId;
     }
 
-    public void discharge() {
-        if (electrified) {
-            electrified = false;
-        }
-    }
-
     public void update(float deltaSeconds) {
         remainingSeconds = Math.max(0f, remainingSeconds - deltaSeconds);
     }
@@ -156,8 +126,8 @@ public class Zone {
         return remainingSeconds <= 0f;
     }
 
-    public Type getType() {
-        return type;
+    public ZoneKind getKind() {
+        return kind;
     }
 
     public float getX() {

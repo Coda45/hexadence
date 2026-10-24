@@ -16,10 +16,9 @@ import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.net.WorldSnapshot;
-import io.github.coda45.hexadence.power.Element;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
-import io.github.coda45.hexadence.power.PowerForm;
+import io.github.coda45.hexadence.zone.Reactions;
 
 // Owns gameplay state and applies commands at a fixed 60 Hz rate.
 public class ArenaWorld {
@@ -29,7 +28,6 @@ public class ArenaWorld {
     private static final float PLAYER_SPEED = 5f;
     private static final float PLAYER_RESPAWN_DELAY = 3f;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
-    private static final float DISCHARGE_DAMAGE = 20f;
 
     private final ArenaCollision collision;
     private final List<SpawnPoint> playerSpawns;
@@ -211,6 +209,7 @@ public class ArenaWorld {
             );
         }
  
+        applyZoneEffects();
         applyChargedPuddleDischarges(events);
         updatePlayerRespawns();
         updateDummyRespawns();
@@ -277,8 +276,13 @@ public class ArenaWorld {
             moveY /= length;
         }
 
-        float dx = moveX * PLAYER_SPEED * STEP;
-        float dy = moveY * PLAYER_SPEED * STEP;
+        // A zone like quicksand slows whoever stands in it.
+        Zone underfoot = topZoneOverlapping(player);
+        float speed = PLAYER_SPEED
+            * (underfoot == null ? 1f : underfoot.getKind().speedMultiplier());
+
+        float dx = moveX * speed * STEP;
+        float dy = moveY * speed * STEP;
 
         float[] resolved =
                 collision.resolveMovement(
@@ -326,11 +330,9 @@ public class ArenaWorld {
 
         zones.add(Zone.create(
             nextZoneId++,
-            power.zoneType(),
+            power.zoneKind(),
             x,
             y,
-            power.zoneRadius(),
-            power.zoneDuration(),
             projectile.getOwnerPlayerId()
         ));
     }
@@ -339,27 +341,18 @@ public class ArenaWorld {
         return zones;
     }
 
+    // A projectile reacts with the newest zone it touches, if the reaction
+    // table says that power and zone react. Returns true if the projectile
+    // was used up by the reaction.
     private boolean applyProjectileZoneReaction(
         Projectile projectile,
         List<WorldEvent> events
     ) {
         Power power = projectile.getPower();
 
-        // For now, only basic Fire and Storm powers change zones. The planned
-        // reaction table will replace these checks.
-        if (
-            power.form() != PowerForm.BASIC
-            || (power.element() != Element.FIRE && power.element() != Element.STORM)
-        ) {
-            return false;
-        }
-
-        for (int i = 0; i < zones.size(); i++) {
+        // Zones later in the list are newer, and the newest one counts.
+        for (int i = zones.size() - 1; i >= 0; i--) {
             Zone zone = zones.get(i);
-
-            if (zone.getType() != Zone.Type.PUDDLE) {
-                continue;
-            }
 
             float dx = projectile.getX() - zone.getX();
             float dy = projectile.getY() - zone.getY();
@@ -374,29 +367,45 @@ public class ArenaWorld {
                 continue;
             }
 
-            if (power.element() == Element.FIRE) {
-                zones.set(
-                    i,
-                    Zone.createSteam(
-                        zone.getId(),
-                        zone.getX(),
-                        zone.getY(),
-                        projectile.getOwnerPlayerId()
-                    )
-                );
+            Reactions.Reaction reaction = Reactions.find(power, zone.getKind());
 
+            return reaction != null
+                && applyReaction(zone, reaction, projectile.getOwnerPlayerId(), events);
+        }
+
+        return false;
+    }
+
+    // Carries out one cell of the interaction matrix on a zone. Returns
+    // false if it changed nothing (charging an already charged zone).
+    private boolean applyReaction(
+        Zone zone,
+        Reactions.Reaction reaction,
+        int casterPlayerId,
+        List<WorldEvent> events
+    ) {
+        switch (reaction.result()) {
+            case TRANSFORM -> {
+                // Same spot and ID, new kind. It moves to the end of the list
+                // because it is now the newest zone there.
+                zones.remove(zone);
+                zones.add(Zone.create(
+                    zone.getId(),
+                    reaction.into(),
+                    zone.getX(),
+                    zone.getY(),
+                    casterPlayerId
+                ));
                 return true;
             }
 
-            if (
-                power.element() == Element.STORM
-                && !zone.isElectrified()
-            ) {
-                zone.electrify(projectile.getOwnerPlayerId());
+            case CHARGE -> {
+                if (zone.isElectrified()) {
+                    return false;
+                }
 
-                events.add(
-                    new ZoneChargeChangedEvent(zone.getId(), true)
-                );
+                zone.electrify(casterPlayerId);
+                events.add(new ZoneChargeChangedEvent(zone.getId(), true));
                 return true;
             }
         }
@@ -437,8 +446,8 @@ public class ArenaWorld {
         return false;
     }
 
-    // The first thing a beam touches: terrain, a puddle (only for beams
-    // that react with puddles), another player, or a dummy.
+    // The first thing a beam touches: terrain, a zone this beam reacts with
+    // (reported as Kind.PUDDLE), another player, or a dummy.
     private LightningHit findLightningHit(
         int ownerPlayerId,
         float originX,
@@ -447,7 +456,7 @@ public class ArenaWorld {
         float directionY,
         float maxDistance,
         float halfWidth,
-        boolean stopsAtPuddles
+        Power beam
     ) {
         LightningHit nearest = LightningHit.none();
 
@@ -466,7 +475,7 @@ public class ArenaWorld {
         }
 
         for (Zone zone : zones) {
-            if (!stopsAtPuddles || zone.getType() != Zone.Type.PUDDLE) {
+            if (Reactions.find(beam, zone.getKind()) == null) {
                 continue;
             }
 
@@ -572,14 +581,47 @@ public class ArenaWorld {
         return nearest;
     }
 
+    // Ongoing zone effects: damage per second for anyone standing in a zone.
+    // Only the newest zone at a spot counts. (Slow is applied in movePlayer.)
+    private void applyZoneEffects() {
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            Player target = entry.getValue();
+
+            if (!target.isAlive()) {
+                continue;
+            }
+
+            Zone zone = topZoneOverlapping(target);
+
+            if (zone != null && zone.getKind().damagePerSecond() > 0f) {
+                damagePlayer(
+                    entry.getKey(),
+                    zone.getKind().damagePerSecond() * STEP,
+                    zone.getDamageOwnerPlayerId()
+                );
+            }
+        }
+
+        for (TargetDummy dummy : dummies) {
+            if (!dummy.isAlive()) {
+                continue;
+            }
+
+            Zone zone = topZoneOverlapping(dummy);
+
+            if (zone != null && zone.getKind().damagePerSecond() > 0f) {
+                dummy.takeDamage(zone.getKind().damagePerSecond() * STEP);
+            }
+        }
+    }
+
+    // A charged zone shocks the players and dummies it is the newest zone
+    // under, then loses its charge.
     private void applyChargedPuddleDischarges(
         List<WorldEvent> events
     ) {
         for (Zone zone : zones) {
-            if (
-                zone.getType() != Zone.Type.PUDDLE
-                || !zone.isElectrified()
-            ) {
+            if (!zone.isElectrified()) {
                 continue;
             }
 
@@ -590,24 +632,24 @@ public class ArenaWorld {
 
                 if (
                     target.isAlive()
-                    && zoneOverlapsPlayer(zone, target)
+                    && topZoneOverlapping(target) == zone
                 ) {
                     damagePlayer(
                         entry.getKey(),
-                        DISCHARGE_DAMAGE,
+                        Reactions.CHARGE_DISCHARGE_DAMAGE,
                         zone.getDamageOwnerPlayerId()
                     );
 
                     discharged = true;
                 }
             }
-            
+
             for (TargetDummy dummy : dummies) {
                 if (
                     dummy.isAlive()
-                    && zoneOverlapsDummy(zone, dummy)
+                    && topZoneOverlapping(dummy) == zone
                 ) {
-                    dummy.takeDamage(DISCHARGE_DAMAGE);
+                    dummy.takeDamage(Reactions.CHARGE_DISCHARGE_DAMAGE);
                     discharged = true;
                 }
             }
@@ -619,6 +661,27 @@ public class ArenaWorld {
                 );
             }
         }
+    }
+
+    // The newest zone touching this player's feet, or null.
+    private Zone topZoneOverlapping(Player player) {
+        for (int i = zones.size() - 1; i >= 0; i--) {
+            if (zoneOverlapsPlayer(zones.get(i), player)) {
+                return zones.get(i);
+            }
+        }
+
+        return null;
+    }
+
+    private Zone topZoneOverlapping(TargetDummy dummy) {
+        for (int i = zones.size() - 1; i >= 0; i--) {
+            if (zoneOverlapsDummy(zones.get(i), dummy)) {
+                return zones.get(i);
+            }
+        }
+
+        return null;
     }
 
     private boolean zoneOverlapsDummy(
@@ -880,7 +943,7 @@ public class ArenaWorld {
         for (WorldSnapshot.ZoneState state : snapshot.zones()) {
             Zone zone = previousZones.remove(state.id());
 
-            if (zone == null || zone.getType() != state.type()) {
+            if (zone == null || !zone.getKind().equals(state.kind())) {
                 zone = createZoneFromSnapshot(state);
             }
 
@@ -908,7 +971,7 @@ public class ArenaWorld {
     ) {
         return Zone.create(
             state.id(),
-            state.type(),
+            state.kind(),
             state.x(),
             state.y(),
             state.radius(),
@@ -935,9 +998,6 @@ public class ArenaWorld {
         float directionX = player.getAimX();
         float directionY = player.getAimY();
 
-        // Until the reaction table exists, only Storm beams charge puddles.
-        boolean chargesPuddles = power.element() == Element.STORM;
-
         LightningHit hit =
             findLightningHit(
                 playerId,
@@ -947,20 +1007,19 @@ public class ArenaWorld {
                 directionY,
                 power.range(),
                 power.radius(),
-                chargesPuddles
+                power
             );
 
         switch (hit.kind()) {
             case PUDDLE -> {
-                Zone puddle = hit.zone();
+                Zone zone = hit.zone();
 
-                if (!puddle.isElectrified()) {
-                    puddle.electrify(playerId);
-
-                    events.add(
-                        new ZoneChargeChangedEvent(puddle.getId(), true)
-                    );
-                }
+                applyReaction(
+                    zone,
+                    Reactions.find(power, zone.getKind()),
+                    playerId,
+                    events
+                );
             }
 
             case PLAYER ->

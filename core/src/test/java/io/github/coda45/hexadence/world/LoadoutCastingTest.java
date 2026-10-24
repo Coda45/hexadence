@@ -88,7 +88,7 @@ class LoadoutCastingTest {
 
         assertEquals(1, world.getZones().size());
         assertEquals(
-            Powers.WATER_PUDDLE.zoneRadius(),
+            Powers.WATER_PUDDLE.zoneKind().radius(),
             world.getZones().get(0).getRadius(),
             EPSILON
         );

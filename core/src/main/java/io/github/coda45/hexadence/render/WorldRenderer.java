@@ -122,8 +122,9 @@ public class WorldRenderer {
 
         batch.begin();
 
+        // Ground zones, oldest first, so the newest is drawn on top.
         for (Zone zone : world.getZones()) {
-            if (zone.getType() == Zone.Type.PUDDLE) {
+            if (!zone.getKind().coversPlayers()) {
                 renderZone(zone);
 
                 ChargedPuddleVisual visual =
@@ -249,8 +250,9 @@ public class WorldRenderer {
             renderPlayerHealthBar(player, playerSpriteHeight);
         }
 
+        // Cloud-like zones (steam) are drawn over players.
         for (Zone zone : world.getZones()) {
-            if (zone.getType() == Zone.Type.STEAM) {
+            if (zone.getKind().coversPlayers()) {
                 renderZone(zone);
             }
         }
@@ -478,8 +480,7 @@ public class WorldRenderer {
         // A newly charged puddle begins its first variation immediately.
         for (Zone zone : world.getZones()) {
             if (
-                zone.getType() != Zone.Type.PUDDLE
-                || !zone.isElectrified()
+                !zone.isElectrified()
                 || chargedPuddleVisuals.containsKey(zone)
             ) {
                 continue;
@@ -507,36 +508,22 @@ public class WorldRenderer {
         float left = zone.getX() - zone.getRadius();
         float bottom = zone.getY() - zone.getRadius();
 
-        switch (zone.getType()) {
-            case PUDDLE -> {
-                if (zoneFlashRemaining.containsKey(zone.getId())) {
-                    // Brief yellow hit/damage feedback.
-                    batch.setColor(
-                        0.9f,
-                        0.95f,
-                        0.2f,
-                        0.75f
-                    );
-                } else if (zone.isElectrified()) {
-                    // Persistent muted teal charged state.
-                    batch.setColor(
-                        0.25f,
-                        0.68f,
-                        0.72f,
-                        0.68f
-                    );
-                } else {
-                    // Normal water.
-                    batch.setColor(
-                        0.2f,
-                        0.55f,
-                        1f,
-                        0.6f
-                    );
-                }
-            }
-            case STEAM ->
-                batch.setColor(0.8f, 0.8f, 0.8f, 0.85f);
+        if (zoneFlashRemaining.containsKey(zone.getId())) {
+            // Brief yellow hit/damage feedback.
+            batch.setColor(0.9f, 0.95f, 0.2f, 0.75f);
+        } else if (zone.isElectrified()) {
+            // Persistent muted teal charged state.
+            batch.setColor(0.25f, 0.68f, 0.72f, 0.68f);
+        } else {
+            // The zone kind's own color, from its definition in ZoneKinds.
+            int tint = zone.getKind().tint();
+
+            batch.setColor(
+                ((tint >>> 24) & 0xFF) / 255f,
+                ((tint >>> 16) & 0xFF) / 255f,
+                ((tint >>> 8) & 0xFF) / 255f,
+                (tint & 0xFF) / 255f
+            );
         }
 
         batch.draw(

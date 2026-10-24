@@ -81,7 +81,7 @@ public final class SnapshotFactory {
         for (Zone zone : world.getZones()) {
             zones.add(new WorldSnapshot.ZoneState(
                 zone.getId(),
-                zone.getType(),
+                zone.getKind(),
                 zone.getX(),
                 zone.getY(),
                 zone.getRadius(),
