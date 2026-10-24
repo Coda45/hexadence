@@ -38,7 +38,8 @@ public final class GameCodec {
     // 8: zones travel by ZoneKind ID, so adding a zone kind never changes
     //    this file either.
     // 9: lobby drafting (SelectLoadout, locked count in LobbyState).
-    public static final int PROTOCOL_VERSION = 9;
+    // 10: ClientHello carries a content fingerprint (see ContentFingerprint).
+    public static final int PROTOCOL_VERSION = 10;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -101,6 +102,7 @@ public final class GameCodec {
                 out.writeInt(hello.protocolVersion());
                 writeMapId(out, hello.mapId());
                 writeRoomCode(out, hello.roomCode());
+                out.writeInt(hello.contentFingerprint());
             } else if (message instanceof PlayerCommand command) {
                 writeCommand(out, command);
             } else if (message instanceof Welcome welcome) {
@@ -162,7 +164,8 @@ public final class GameCodec {
                 case TYPE_CLIENT_HELLO -> out.add(new ClientHello(
                     in.readInt(),
                     readMapId(in),
-                    readRoomCode(in)
+                    readRoomCode(in),
+                    in.readInt()
                 ));
                 case TYPE_COMMAND -> out.add(readCommand(in));
                 case TYPE_WELCOME -> out.add(new Welcome(
@@ -417,6 +420,7 @@ public final class GameCodec {
             case SERVER_FULL -> 4;
             case WRONG_VERSION -> 5;
             case WRONG_MAP -> 6;
+            case WRONG_CONTENT -> 7;
         };
     }
 
@@ -428,6 +432,7 @@ public final class GameCodec {
             case 4 -> JoinRejected.Reason.SERVER_FULL;
             case 5 -> JoinRejected.Reason.WRONG_VERSION;
             case 6 -> JoinRejected.Reason.WRONG_MAP;
+            case 7 -> JoinRejected.Reason.WRONG_CONTENT;
             default -> throw new IllegalArgumentException(
                 "Unknown JoinRejected reason ID: " + id
             );

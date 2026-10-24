@@ -185,7 +185,8 @@ public final class LobbyConnection {
             case ROOM_FULL -> "THAT ROOM IS FULL";
             case GAME_IN_PROGRESS -> "THAT MATCH HAS ALREADY STARTED";
             case SERVER_FULL -> "SERVER IS FULL, TRY AGAIN LATER";
-            case WRONG_VERSION, WRONG_MAP -> "GAME VERSION DOES NOT MATCH THE SERVER";
+            case WRONG_VERSION, WRONG_MAP, WRONG_CONTENT ->
+                "GAME VERSION DOES NOT MATCH THE SERVER - PULL MAIN AND REBUILD";
         };
     }
 }

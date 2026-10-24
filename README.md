@@ -84,7 +84,9 @@ On Windows, use `.\gradlew.bat` and quote the option: `.\gradlew.bat lwjgl3:run 
 
 `./gradlew server:jar` builds `server/build/libs/hexadence-server.jar`, a single file with the maps bundled. Options: `-Dhexadence.port=` (or the `HEXADENCE_PORT` environment variable) and `-Dhexadence.map=`. The server and every client must run the same build, because clients are only accepted when their protocol version and map match the server's, so redeploy after changing anything the server runs.
 
-**Deploying to the VPS** (Ubuntu, from Linux, macOS, or Git Bash on Windows):
+**Automatic deploys:** every pull request is built and tested on GitHub, and a red X means something broke. When a pull request merges into `main`, the server is rebuilt, tested, and deployed to the VPS automatically. If the new server fails to start, the VPS keeps the previous one. After a merge, pull `main` and rebuild your game: a build from older code is told it doesn't match the server. A deploy can also be rerun from the **Actions** tab (**Deploy server** → **Run workflow**).
+
+**Deploying by hand** (Ubuntu, from Linux, macOS, or Git Bash on Windows):
 
 ```bash
 ./deploy/deploy.sh ubuntu@40.160.225.76 --setup   # first time: installs Java, the service, and the firewall rules

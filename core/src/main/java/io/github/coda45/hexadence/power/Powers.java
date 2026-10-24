@@ -12,8 +12,9 @@ import io.github.coda45.hexadence.zone.ZoneKinds;
 //
 // Values marked PLACEHOLDER are working numbers waiting on the spell cards.
 //
-// The server and every client must run the same definitions, so after changing
-// this file, the server is redeployed with the new build.
+// The server and every client must run the same definitions. Merging into main
+// redeploys the server automatically; players then pull and rebuild (a game
+// with different definitions is turned away with "update your game").
 public final class Powers {
 
     // ---- Fire ----

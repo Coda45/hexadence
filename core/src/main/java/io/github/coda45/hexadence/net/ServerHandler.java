@@ -80,6 +80,14 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
+        if (hello.contentFingerprint() != ContentFingerprint.CURRENT) {
+            System.err.println(
+                "Rejected client built from different game content"
+            );
+            reject(ctx, JoinRejected.Reason.WRONG_CONTENT);
+            return;
+        }
+
         if (!server.usesMap(hello.mapId())) {
             System.err.println(
                 "Rejected client using incompatible map: "
