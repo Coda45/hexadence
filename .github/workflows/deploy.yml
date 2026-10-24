@@ -1,0 +1,67 @@
+# Deploys the game server to the VPS whenever something merges into main, or
+# when someone presses "Run workflow" on the Actions tab. It only deploys if
+# the build and every test pass. If the new server fails to start, the VPS
+# puts the previous one back and this run shows as failed.
+#
+# Needs three repository secrets (Settings > Secrets and variables > Actions):
+#   DEPLOY_SSH_KEY   private half of the deploy key (the VPS only lets it
+#                    hand over a server jar; see deploy/setup-auto-deploy.sh)
+#   VPS_HOST         the VPS address
+#   VPS_KNOWN_HOSTS  the VPS's SSH host key line, so GitHub can tell it is
+#                    really our server
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer merge waits for the current deploy to finish.
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and run tests
+        run: ./gradlew build server:jar --console=plain
+
+      - name: Send the new server to the VPS
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$VPS_HOST" ] || [ -z "$VPS_KNOWN_HOSTS" ]; then
+            echo "Deploy secrets are not set up yet; see .github/workflows/deploy.yml." >&2
+            exit 1
+          fi
+
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+          # The VPS runs its update receiver for this key no matter what
+          # command is sent, so all we do is hand it the jar.
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "deploy@$VPS_HOST" < server/build/libs/hexadence-server.jar
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

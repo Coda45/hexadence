@@ -7,10 +7,14 @@ import java.util.Objects;
 //
 // An empty roomCode asks the server to create a new room, and the client
 // becomes that room's host. Otherwise the client joins the room with that code.
+//
+// contentFingerprint identifies this build's powers, zones and reactions; the
+// server refuses a game whose content does not match its own.
 public record ClientHello(
     int protocolVersion,
     String mapId,
-    String roomCode
+    String roomCode,
+    int contentFingerprint
 ) {
     public ClientHello {
         Objects.requireNonNull(mapId);
@@ -21,6 +25,11 @@ public record ClientHello(
                 "Map ID cannot be blank"
             );
         }
+    }
+
+    // A hello from this build, carrying its own content fingerprint.
+    public ClientHello(int protocolVersion, String mapId, String roomCode) {
+        this(protocolVersion, mapId, roomCode, ContentFingerprint.CURRENT);
     }
 
     // A hello without a room code asks for a new room. Kept so code written

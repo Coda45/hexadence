@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Installs a new Hexadence server jar sent on standard input, then restarts the
+# server. If the new server does not come up, the previous jar is put back.
+#
+# setup-auto-deploy.sh installs this as /usr/local/bin/hexadence-receive-update.
+# It is the only thing the GitHub deploy key can run on the VPS:
+#   ssh deploy@<vps> < hexadence-server.jar
+set -euo pipefail
+
+# The override is only for testing this script; sudo clears it in real use.
+INSTALL_DIR="${HEXADENCE_INSTALL_DIR:-/opt/hexadence}"
+JAR="$INSTALL_DIR/hexadence-server.jar"
+PREVIOUS="$INSTALL_DIR/hexadence-server.previous.jar"
+SERVICE=hexadence-server
+MAX_BYTES=$((200 * 1024 * 1024))
+
+upload="$(mktemp /tmp/hexadence-upload.XXXXXX)"
+trap 'rm -f "$upload"' EXIT
+
+# Read at most MAX_BYTES, so a runaway upload cannot fill the disk.
+head -c "$MAX_BYTES" > "$upload"
+
+size=$(stat -c %s "$upload")
+if [[ "$size" -eq 0 ]]; then
+  echo "No jar received." >&2
+  exit 1
+fi
+if [[ "$size" -ge "$MAX_BYTES" ]]; then
+  echo "Upload too large (over $MAX_BYTES bytes)." >&2
+  exit 1
+fi
+
+# Only accept something that really is the Hexadence server jar.
+if ! python3 - "$upload" <<'EOF'
+import sys, zipfile
+try:
+    names = zipfile.ZipFile(sys.argv[1]).namelist()
+except zipfile.BadZipFile:
+    sys.exit(1)
+sys.exit(0 if "io/github/coda45/hexadence/net/ServerLauncher.class" in names else 1)
+EOF
+then
+  echo "That is not a Hexadence server jar." >&2
+  exit 1
+fi
+
+echo "Received $size bytes; installing."
+
+if [[ -f "$JAR" ]]; then
+  cp "$JAR" "$PREVIOUS"
+fi
+install -m 644 "$upload" "$JAR"
+
+systemctl restart "$SERVICE"
+sleep 4
+
+if systemctl is-active --quiet "$SERVICE"; then
+  echo "Deployed. Server is running."
+  journalctl -u "$SERVICE" -n 5 --no-pager || true
+  exit 0
+fi
+
+echo "New server failed to start. Rolling back to the previous jar." >&2
+journalctl -u "$SERVICE" -n 30 --no-pager >&2 || true
+
+if [[ -f "$PREVIOUS" ]]; then
+  install -m 644 "$PREVIOUS" "$JAR"
+  systemctl restart "$SERVICE"
+  sleep 4
+  if systemctl is-active --quiet "$SERVICE"; then
+    echo "Rolled back; the previous server is running again." >&2
+  else
+    echo "Rollback also failed to start. Check the VPS by hand." >&2
+  fi
+fi
+
+exit 1

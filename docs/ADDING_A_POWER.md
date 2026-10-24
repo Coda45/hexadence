@@ -45,8 +45,10 @@ For scale: the map is 30 × 20 tiles and players move 5 tiles per second.
    lobby's power draft, lock in, and start. Every power in `Powers.ALL` shows
    up in the draft. Slot 1 is left mouse, slot 2 right mouse, slot 3 Q.
 
-6. **Open a pull request.** After it merges, the server must be redeployed so it
-   runs the same definitions as everyone's game.
+6. **Open a pull request.** GitHub builds it and runs the tests; fix anything
+   with a red X. When it merges into `main`, the server redeploys automatically.
+   Everyone then pulls `main` and rebuilds, because a game built from older
+   definitions is told it doesn't match the server.
 
 ## Art
 

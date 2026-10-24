@@ -182,6 +182,21 @@ class RoomsTest {
     }
 
     @Test
+    void gameWithDifferentContentIsRejected() throws InterruptedException {
+        NetClient outdated = new NetClient(
+            address.host(),
+            address.port(),
+            new ClientHello(GameCodec.PROTOCOL_VERSION, MAP, "", ContentFingerprint.CURRENT + 1)
+        );
+
+        outdated.connect();
+        await(() -> outdated.getRejection() != null);
+
+        assertEquals(JoinRejected.Reason.WRONG_CONTENT, outdated.getRejection());
+        outdated.close();
+    }
+
+    @Test
     void unreachableServerIsReported() {
         LobbyConnection nowhere = LobbyConnection.createRoom(
             new ServerAddress("127.0.0.1", 1),

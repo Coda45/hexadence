@@ -10,6 +10,9 @@ public record JoinRejected(Reason reason) {
         GAME_IN_PROGRESS,
         SERVER_FULL,
         WRONG_VERSION,
-        WRONG_MAP
+        WRONG_MAP,
+        // Same protocol, but different powers, zones or reactions: the game
+        // was built from older (or newer) code than the server.
+        WRONG_CONTENT
     }
 }
