@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
-import io.github.coda45.hexadence.entity.Zone;
+import io.github.coda45.hexadence.zone.ZoneKinds;
 
 // Checks the power definitions follow the rules, so a mistake in Powers
 // fails a test instead of showing up in a match.
@@ -86,13 +86,33 @@ class PowersTest {
                 .build()
         );
 
+        // A zone power placing a derived zone
+        assertThrows(IllegalStateException.class, () ->
+            Power.define(203, "Steam Thrower")
+                .element(Element.WATER).form(PowerForm.ZONE)
+                .behavior(Behavior.THROWN_ZONE)
+                .cooldown(1f).speed(5f).range(5f).radius(0.1f)
+                .zone(ZoneKinds.STEAM)
+                .build()
+        );
+
+        // A zone power placing another element's zone
+        assertThrows(IllegalStateException.class, () ->
+            Power.define(204, "Wrong Puddle")
+                .element(Element.FIRE).form(PowerForm.ZONE)
+                .behavior(Behavior.THROWN_ZONE)
+                .cooldown(1f).speed(5f).range(5f).radius(0.1f)
+                .zone(ZoneKinds.PUDDLE)
+                .build()
+        );
+
         // A beam that sets a zone
         assertThrows(IllegalStateException.class, () ->
             Power.define(202, "Zone Beam")
                 .element(Element.LIGHT).form(PowerForm.BASIC)
                 .behavior(Behavior.BEAM)
                 .cooldown(1f).range(5f).radius(0.1f)
-                .zone(Zone.Type.PUDDLE, 1f, 1f)
+                .zone(ZoneKinds.PUDDLE)
                 .build()
         );
     }

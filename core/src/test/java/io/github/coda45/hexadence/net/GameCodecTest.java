@@ -7,9 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
-import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
+import io.github.coda45.hexadence.zone.ZoneKind;
+import io.github.coda45.hexadence.zone.ZoneKinds;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.netty.buffer.ByteBuf;
@@ -119,7 +120,7 @@ class GameCodecTest {
             List.of(
                 new WorldSnapshot.ZoneState(
                     33,
-                    Zone.Type.PUDDLE,
+                    ZoneKinds.PUDDLE,
                     7f,
                     8f,
                     0.8f,
@@ -143,6 +144,20 @@ class GameCodecTest {
             );
 
             assertEquals(snapshot, roundTrip(snapshot), power.name());
+        }
+    }
+
+    @Test
+    void everyZoneKindSurvivesTheNetwork() {
+        for (ZoneKind kind : ZoneKinds.ALL) {
+            WorldSnapshot.ZoneState expected =
+                new WorldSnapshot.ZoneState(1, kind, 2f, 3f, kind.radius(), false, 4);
+
+            WorldSnapshot snapshot = new WorldSnapshot(
+                1L, List.of(), List.of(), List.of(), List.of(expected)
+            );
+
+            assertEquals(snapshot, roundTrip(snapshot), kind.name());
         }
     }
 

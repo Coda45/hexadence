@@ -3,8 +3,8 @@ package io.github.coda45.hexadence.net;
 import java.util.List;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
-import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.zone.ZoneKind;
 
 // One simulation tick of world state, as the server sends it to every client.
 // Plain data only: no libGDX, no Netty, no behavior. The codec turns this into
@@ -77,7 +77,7 @@ public record WorldSnapshot(
     // Zones never move. The stable ID, not coordinates or list order, is identity.
     public record ZoneState(
         int id,
-        Zone.Type type,
+        ZoneKind kind,
         float x,
         float y,
         float radius,
