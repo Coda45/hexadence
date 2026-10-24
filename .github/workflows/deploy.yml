@@ -53,9 +53,19 @@ jobs:
           fi
 
           install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          # Strip Windows line endings, which can sneak in when a key is
+          # copied on Windows and make SSH reject it.
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$VPS_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+
+          # Show which key GitHub holds. A fingerprint is safe to show and
+          # can be compared with the key on the VPS (see setup-auto-deploy.sh).
+          echo "Deploy key fingerprint (compare with the VPS):"
+          ssh-keygen -lf ~/.ssh/deploy_key || {
+            echo "DEPLOY_SSH_KEY is not a valid private key. Paste the whole file, BEGIN and END lines included." >&2
+            exit 1
+          }
 
           # The VPS runs its update receiver for this key no matter what
           # command is sent, so all we do is hand it the jar.
