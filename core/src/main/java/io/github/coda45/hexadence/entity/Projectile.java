@@ -11,6 +11,7 @@ public class Projectile {
     private final int ownerPlayerId;
     private final float directionX;
     private final float directionY;
+    private final float travelLimit;
 
     private float x;
     private float y;
@@ -23,6 +24,7 @@ public class Projectile {
         float y,
         float directionX,
         float directionY,
+        float travelLimit,
         Power power,
         int ownerPlayerId
     ) {
@@ -31,8 +33,32 @@ public class Projectile {
         this.y = y;
         this.directionX = directionX;
         this.directionY = directionY;
+        this.travelLimit = travelLimit;
         this.power = power;
         this.ownerPlayerId = ownerPlayerId;
+    }
+
+    // Client replicas do not advance projectiles, so their per-cast limit is
+    // not currently replicated. Keep this constructor for snapshot restore.
+    public Projectile(
+        int id,
+        float x,
+        float y,
+        float directionX,
+        float directionY,
+        Power power,
+        int ownerPlayerId
+    ) {
+        this(
+            id,
+            x,
+            y,
+            directionX,
+            directionY,
+            power.range(),
+            power,
+            ownerPlayerId
+        );
     }
 
     // Moves by a world-unit distance and records distance traveled, including the spawn step.
@@ -46,8 +72,12 @@ public class Projectile {
         return power;
     }
 
-    public boolean hasReachedMaxRange(float maxRange) {
-        return distanceTraveled >= maxRange;
+    public float getRemainingTravel() {
+        return Math.max(0f, travelLimit - distanceTraveled);
+    }
+
+    public boolean hasReachedTravelLimit() {
+        return distanceTraveled >= travelLimit;
     }
 
     public int getId() {

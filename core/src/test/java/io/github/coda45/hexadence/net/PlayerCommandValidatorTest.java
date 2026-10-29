@@ -1,10 +1,13 @@
 package io.github.coda45.hexadence.net;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
+import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
 
 class PlayerCommandValidatorTest {
@@ -51,6 +54,36 @@ class PlayerCommandValidatorTest {
             () -> assertFalse(validatesWithMoveX(-1.01f)),
             () -> assertFalse(validatesWithMoveY(1.01f)),
             () -> assertFalse(validatesWithMoveY(-1.01f))
+        );
+    }
+
+    @Test
+    void rejectsInvalidCastRequests() {
+        assertAll(
+            () -> assertFalse(PlayerCommandValidator.isValid(commandWith(
+                new CastRequest(-1, 1f, 0f)
+            ))),
+            () -> assertFalse(PlayerCommandValidator.isValid(commandWith(
+                new CastRequest(3, 1f, 0f)
+            ))),
+            () -> assertFalse(PlayerCommandValidator.isValid(commandWith(
+                new CastRequest(0, Float.NaN, 0f)
+            ))),
+            () -> assertFalse(PlayerCommandValidator.isValid(new PlayerCommand(
+                0f, 0f, 1f, 0f,
+                List.of(
+                    new CastRequest(0, 1f, 0f),
+                    new CastRequest(0, 2f, 0f)
+                )
+            )))
+        );
+    }
+
+    private static PlayerCommand commandWith(CastRequest cast) {
+        return new PlayerCommand(
+            0f, 0f,
+            1f, 0f,
+            List.of(cast)
         );
     }
 

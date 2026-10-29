@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
+import io.github.coda45.hexadence.input.CastRequest;
+import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
@@ -18,6 +20,22 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 
 class GameCodecTest {
+
+    @Test
+    void roundTripsCommandTargetsForEachRequestedSlot() {
+        PlayerCommand expected = new PlayerCommand(
+            1f,
+            -1f,
+            4f,
+            5f,
+            List.of(
+                new CastRequest(0, 2f, 3f),
+                new CastRequest(2, -4f, 1f)
+            )
+        );
+
+        assertEquals(expected, roundTrip(expected));
+    }
 
     @Test
     void roundTripsClientHelloThatCreatesARoom() {

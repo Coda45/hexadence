@@ -3,7 +3,8 @@
 Every power is defined in one file:
 `core/src/main/java/io/github/coda45/hexadence/power/Powers.java`
 
-You never need to touch the networking code (`net/`) to add or tune a power.
+You never need to touch the networking code (`net/`) to add or tune a power
+that uses an existing behavior.
 
 ## Tuning a power
 
@@ -20,12 +21,21 @@ Change its numbers in `Powers.java`. Units:
 
 For scale: the map is 30 × 20 tiles and players move 5 tiles per second.
 
+For every zone-producing behavior, the zone is centered where its small
+projectile or placement probe first touches terrain, or at the selected point
+when the path remains clear. The larger zone footprint is allowed to overlap a
+blocked tile. A target beyond the power's range is clamped to range. Terrain
+tests sweep the complete projectile path, including diagonal tile corners.
+
 ## Adding a power
 
 1. **Pick its behavior** (`power/Behavior.java`):
    - `PROJECTILE`: travels in a line and hits the first thing it touches (Fireball)
    - `BEAM`: hits the first thing in its path instantly (Lightning Bolt)
-   - `THROWN_ZONE`: travels like a projectile, then leaves a zone where it stops (Water Puddle)
+   - `THROWN_ZONE`: travels toward the cursor (clamped to range), collides like
+     a projectile, then leaves a zone where it stops (Water Puddle)
+   - `PLACED_ZONE`: creates a zone immediately at the cursor target, clamped
+     to range, or at the first terrain contact along that path
 
    If none fit, the power needs a new behavior. That is a code change in
    `ArenaWorld.tryCast()`, so ask before starting.

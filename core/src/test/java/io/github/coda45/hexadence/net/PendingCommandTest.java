@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
 
 class PendingCommandTest {
@@ -86,6 +87,46 @@ class PendingCommandTest {
 
         assertTrue(pending.take().castSlot1());
         assertFalse(pending.take().castSlot1());
+    }
+
+    @Test
+    void castKeepsTheTargetFromThePacketThatRequestedIt() {
+        GameServer.PendingCommand pending =
+            new GameServer.PendingCommand();
+
+        pending.merge(new PlayerCommand(
+            0f, 0f,
+            2f, 3f,
+            true, false, false
+        ));
+        pending.merge(movingCommand(0f, 1f));
+
+        CastRequest cast = pending.take().castFor(0);
+
+        assertEquals(2f, cast.targetOffsetX());
+        assertEquals(3f, cast.targetOffsetY());
+    }
+
+    @Test
+    void differentSlotsKeepDifferentTargets() {
+        GameServer.PendingCommand pending =
+            new GameServer.PendingCommand();
+
+        pending.merge(new PlayerCommand(
+            0f, 0f,
+            2f, 0f,
+            true, false, false
+        ));
+        pending.merge(new PlayerCommand(
+            0f, 0f,
+            0f, 4f,
+            false, true, false
+        ));
+
+        PlayerCommand merged = pending.take();
+
+        assertEquals(2f, merged.castFor(0).targetOffsetX());
+        assertEquals(4f, merged.castFor(1).targetOffsetY());
     }
 
     private static PlayerCommand movingCommand(

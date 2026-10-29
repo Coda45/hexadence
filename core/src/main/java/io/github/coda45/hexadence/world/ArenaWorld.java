@@ -14,11 +14,13 @@ import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
+import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.net.WorldSnapshot;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.zone.Reactions;
+import io.github.coda45.hexadence.zone.ZoneKind;
 
 // Owns gameplay state and applies commands at a fixed 60 Hz rate.
 public class ArenaWorld {
@@ -100,11 +102,7 @@ public class ArenaWorld {
             Power power = projectile.getPower();
             float radius = power.radius();
 
-            float remainingRange = Math.max(
-                0f,
-                power.range()
-                    - projectile.getDistanceTraveled()
-            );
+            float remainingRange = projectile.getRemainingTravel();
 
             float movementDistance = Math.min(
                 power.speed() * STEP,
@@ -127,30 +125,30 @@ public class ArenaWorld {
             boolean terminated = false;
 
             for (int step = 0; step < substepCount; step++) {
-                float previousX = projectile.getX();
-                float previousY = projectile.getY();
+                // Sweep the whole substep so a diagonal path cannot tunnel
+                // through the tiny region around a blocked tile corner.
+                float terrainDistance = collision.raycastTerrain(
+                    projectile.getX(),
+                    projectile.getY(),
+                    projectile.getDirectionX(),
+                    projectile.getDirectionY(),
+                    substepDistance,
+                    radius
+                );
 
-                projectile.update(substepDistance);
-
-                // Terrain takes priority at every substep.
-                if (collision.overlaps(
-                        projectile.getX(),
-                        projectile.getY(),
-                        radius,
-                        radius
-                    )) {
-
-                    // Terrain effects use the last clear position,
-                    // not a position already penetrating the wall.
+                if (Float.isFinite(terrainDistance)) {
+                    projectile.update(terrainDistance);
                     leaveZoneIfAny(
                         projectile,
-                        previousX,
-                        previousY
+                        projectile.getX(),
+                        projectile.getY()
                     );
 
                     terminated = true;
                     break;
                 }
+
+                projectile.update(substepDistance);
 
                 // Zone reactions take priority over player and dummy hits.
                 if (applyProjectileZoneReaction(projectile, events)) {
@@ -187,9 +185,7 @@ public class ArenaWorld {
             }
 
             if (
-                projectile.hasReachedMaxRange(
-                    power.range()
-                )
+                projectile.hasReachedTravelLimit()
             ) {
                 leaveZoneIfAny(
                     projectile,
@@ -234,15 +230,13 @@ public class ArenaWorld {
         float aimX = command.aimX();
         float aimY = command.aimY();
 
-        float aimLengthSquared = (aimX * aimX) + (aimY * aimY);
+        double aimLength = Math.hypot((double) aimX, (double) aimY);
 
         // Keep the last direction when the cursor is too close to the cast point.
-        if (player.isAlive() && aimLengthSquared > 0.0001f) {
-            float aimLength = (float) Math.sqrt(aimLengthSquared);
-
+        if (player.isAlive() && aimLength > 0.0001) {
             player.setAim(
-                aimX / aimLength,
-                aimY / aimLength
+                (float) (aimX / aimLength),
+                (float) (aimY / aimLength)
             );
         }
 
@@ -250,8 +244,10 @@ public class ArenaWorld {
 
         // Spawn before player movement, using the aim chosen for this step.
         for (int slot = 0; slot < Loadout.SIZE; slot++) {
-            if (command.casts(slot)) {
-                tryCast(playerId, player, slot, events);
+            CastRequest cast = command.castFor(slot);
+
+            if (cast != null) {
+                tryCast(playerId, player, cast, events);
             }
         }
     }
@@ -328,12 +324,57 @@ public class ArenaWorld {
             return;
         }
 
-        zones.add(Zone.create(
-            nextZoneId++,
+        placeZone(
             power.zoneKind(),
             x,
             y,
             projectile.getOwnerPlayerId()
+        );
+    }
+
+    // An instant zone follows the same terrain path rule as a projectile. Its
+    // center stops where its point/probe first touches terrain; the larger zone
+    // itself may overlap the blocked tile after appearing.
+    private void placeZoneAtTargetOrTerrain(
+        ZoneKind kind,
+        float originX,
+        float originY,
+        CastTarget target,
+        float probeRadius,
+        int ownerPlayerId
+    ) {
+        float terrainDistance = collision.raycastTerrain(
+            originX,
+            originY,
+            target.directionX(),
+            target.directionY(),
+            target.distance(),
+            probeRadius
+        );
+        float distance = Float.isFinite(terrainDistance)
+            ? terrainDistance
+            : target.distance();
+
+        placeZone(
+            kind,
+            originX + target.directionX() * distance,
+            originY + target.directionY() * distance,
+            ownerPlayerId
+        );
+    }
+
+    private void placeZone(
+        ZoneKind kind,
+        float x,
+        float y,
+        int ownerPlayerId
+    ) {
+        zones.add(Zone.create(
+            nextZoneId++,
+            kind,
+            x,
+            y,
+            ownerPlayerId
         ));
     }
 
@@ -990,13 +1031,12 @@ public class ArenaWorld {
         int playerId,
         Player player,
         Power power,
+        float directionX,
+        float directionY,
         List<WorldEvent> events
     ) {
         float originX = player.getCastX();
         float originY = player.getCastY();
-
-        float directionX = player.getAimX();
-        float directionY = player.getAimY();
 
         LightningHit hit =
             findLightningHit(
@@ -1140,34 +1180,94 @@ public class ArenaWorld {
     private void tryCast(
         int playerId,
         Player player,
-        int slot,
+        CastRequest request,
         List<WorldEvent> events
     ) {
+        int slot = request.slot();
+
         if (!player.isAlive() || !player.isSlotReady(slot)) {
             return;
         }
 
         Power power = player.getPower(slot);
+        CastTarget target = Targeting.resolveOffset(
+            player.getCastX(),
+            player.getCastY(),
+            request.targetOffsetX(),
+            request.targetOffsetY(),
+            power.range(),
+            player.getAimX(),
+            player.getAimY()
+        );
+
+        boolean accepted = false;
 
         switch (power.behavior()) {
-            case PROJECTILE, THROWN_ZONE ->
+            case PROJECTILE -> {
                 projectiles.add(
                     new Projectile(
                         nextProjectileId++,
                         player.getCastX(),
                         player.getCastY(),
-                        player.getAimX(),
-                        player.getAimY(),
+                        target.directionX(),
+                        target.directionY(),
+                        power.range(),
                         power,
                         playerId
                     )
                 );
+                accepted = true;
+            }
 
-            case BEAM ->
-                castBeam(playerId, player, power, events);
+            case THROWN_ZONE -> {
+                if (target.distance() <= 0.0001f) {
+                    accepted = false;
+                    break;
+                }
+
+                projectiles.add(
+                    new Projectile(
+                        nextProjectileId++,
+                        player.getCastX(),
+                        player.getCastY(),
+                        target.directionX(),
+                        target.directionY(),
+                        target.distance(),
+                        power,
+                        playerId
+                    )
+                );
+                accepted = true;
+            }
+
+            case PLACED_ZONE -> {
+                placeZoneAtTargetOrTerrain(
+                    power.zoneKind(),
+                    player.getCastX(),
+                    player.getCastY(),
+                    target,
+                    power.radius(),
+                    playerId
+                );
+                accepted = true;
+            }
+
+            case BEAM -> {
+                castBeam(
+                    playerId,
+                    player,
+                    power,
+                    target.directionX(),
+                    target.directionY(),
+                    events
+                );
+                accepted = true;
+            }
         }
 
-        player.startCooldown(slot);
+        if (accepted) {
+            player.startCooldown(slot);
+        }
     }
 
     public int getPlayerCapacity() {

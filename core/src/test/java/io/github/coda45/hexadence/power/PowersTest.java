@@ -115,6 +115,16 @@ class PowersTest {
                 .zone(ZoneKinds.PUDDLE)
                 .build()
         );
+
+        // A placed zone uses its ZoneKind's radius and needs no travel speed.
+        Power placed = Power.define(205, "Placed Puddle")
+            .element(Element.WATER).form(PowerForm.ZONE)
+            .behavior(Behavior.PLACED_ZONE)
+            .cooldown(1f).range(5f)
+            .zone(ZoneKinds.PUDDLE)
+            .build();
+
+        assertEquals(Behavior.PLACED_ZONE, placed.behavior());
     }
 
     @Test
