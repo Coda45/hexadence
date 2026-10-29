@@ -72,23 +72,32 @@ public class ArenaCollision {
         return false;
     }
 
-    // Returns the distance to the first blocked tile touched by a beam.
-    // Direction must be normalized. No collision returns NO_HIT.
+    // Returns the distance to the first blocked tile touched by a swept square
+    // footprint. A zero half-size is a point ray. Direction must be normalized;
+    // no collision returns NO_HIT.
     public float raycastTerrain(
         float originX,
         float originY,
         float directionX,
         float directionY,
         float maxDistance,
-        float beamHalfWidth
+        float footprintHalfSize
     ) {
         float endX = originX + directionX * maxDistance;
         float endY = originY + directionY * maxDistance;
 
-        int minTileX = (int) Math.floor(Math.min(originX, endX) - beamHalfWidth);
-        int maxTileX = (int) Math.floor(Math.max(originX, endX) + beamHalfWidth);
-        int minTileY = (int) Math.floor(Math.min(originY, endY) - beamHalfWidth);
-        int maxTileY = (int) Math.floor(Math.max(originY, endY) + beamHalfWidth);
+        int minTileX = (int) Math.floor(
+            Math.min(originX, endX) - footprintHalfSize
+        );
+        int maxTileX = (int) Math.floor(
+            Math.max(originX, endX) + footprintHalfSize
+        );
+        int minTileY = (int) Math.floor(
+            Math.min(originY, endY) - footprintHalfSize
+        );
+        int maxTileY = (int) Math.floor(
+            Math.max(originY, endY) + footprintHalfSize
+        );
 
         float nearestDistance = CombatGeometry.NO_HIT;
 
@@ -117,10 +126,10 @@ public class ArenaCollision {
                         directionX,
                         directionY,
                         currentLimit,
-                        tileX - beamHalfWidth,
-                        tileY - beamHalfWidth,
-                        tileX + 1f + beamHalfWidth,
-                        tileY + blockedHeight + beamHalfWidth
+                        tileX - footprintHalfSize,
+                        tileY - footprintHalfSize,
+                        tileX + 1f + footprintHalfSize,
+                        tileY + blockedHeight + footprintHalfSize
                     );
 
                 if (hitDistance < nearestDistance) {

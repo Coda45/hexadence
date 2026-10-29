@@ -8,7 +8,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
+import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.world.ArenaDefinition;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -224,9 +226,9 @@ public class GameServer {
     }
 
     // Combines every command received from one client since the last tick.
-    // Movement and aim keep the newest value; cast requests are OR-ed so a
-    // click is never lost if two commands arrive before one tick. This is the
-    // same latching PlayerInputController does for mouse clicks.
+    // Movement and aim keep the newest value; the first cast request for each
+    // slot is retained so a click is never lost or redirected if two commands
+    // arrive before one tick. This matches PlayerInputController's latching.
     static final class PendingCommand {
         // At 60 Hz this allows approximately 250 ms without a new command.
         static final int TIMEOUT_TICKS = 15;
@@ -235,9 +237,7 @@ public class GameServer {
         private float moveY;
         private float aimX;
         private float aimY;
-        private boolean castSlot1;
-        private boolean castSlot2;
-        private boolean castSlot3;
+        private final CastRequest[] casts = new CastRequest[Loadout.SIZE];
         private boolean receivedSinceLastTake;
         private int ticksWithoutCommand = TIMEOUT_TICKS;
 
@@ -247,9 +247,13 @@ public class GameServer {
             aimX = command.aimX();
             aimY = command.aimY();
 
-            castSlot1 |= command.castSlot1();
-            castSlot2 |= command.castSlot2();
-            castSlot3 |= command.castSlot3();
+            for (CastRequest cast : command.casts()) {
+                // Preserve the target associated with the first request for
+                // this slot. Later movement-only packets cannot redirect it.
+                if (casts[cast.slot()] == null) {
+                    casts[cast.slot()] = cast;
+                }
+            }
             receivedSinceLastTake = true;
         }
 
@@ -268,21 +272,27 @@ public class GameServer {
             if (ticksWithoutCommand >= TIMEOUT_TICKS) {
                 command = PlayerCommand.IDLE;
             } else {
+                List<CastRequest> requestedCasts = new ArrayList<>(Loadout.SIZE);
+
+                for (int slot = 0; slot < casts.length; slot++) {
+                    if (casts[slot] != null) {
+                        requestedCasts.add(casts[slot]);
+                    }
+                }
+
                 command = new PlayerCommand(
                     moveX,
                     moveY,
                     aimX,
                     aimY,
-                    castSlot1,
-                    castSlot2,
-                    castSlot3
+                    requestedCasts
                 );
             }
             receivedSinceLastTake = false;
             // Cast requests are one-shot. Movement receives the timeout grace.
-            castSlot1 = false;
-            castSlot2 = false;
-            castSlot3 = false;
+            for (int slot = 0; slot < casts.length; slot++) {
+                casts[slot] = null;
+            }
 
             return command;
         }

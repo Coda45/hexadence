@@ -155,10 +155,14 @@ public final class Power {
             require(cooldownSeconds > 0f, "cooldown must be above 0");
             require(damage >= 0f, "damage cannot be negative");
             require(range > 0f, "range must be above 0");
-            require(radius > 0f, "radius must be above 0");
+            require(radius >= 0f, "radius cannot be negative");
 
             if (behavior.travels()) {
                 require(speed > 0f, "speed must be above 0 for a power that travels");
+            }
+
+            if (behavior.needsProjectileRadius()) {
+                require(radius > 0f, "radius must be above 0 for " + behavior);
             }
 
             if (behavior.createsZone()) {

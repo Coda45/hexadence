@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
+import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
@@ -39,7 +40,8 @@ public final class GameCodec {
     //    this file either.
     // 9: lobby drafting (SelectLoadout, locked count in LobbyState).
     // 10: ClientHello carries a content fingerprint (see ContentFingerprint).
-    public static final int PROTOCOL_VERSION = 10;
+    // 11: commands carry bounded per-slot cast requests with preserved targets.
+    public static final int PROTOCOL_VERSION = 11;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -58,8 +60,6 @@ public final class GameCodec {
     private static final int LENGTH_FIELD_BYTES = 4;
     private static final int MAX_MAP_ID_BYTES = 128;
     private static final int MAX_ROOM_CODE_BYTES = 16;
-    private static final int KNOWN_COMMAND_FLAGS = 0b111;
-
     // Far larger than any real snapshot; guards against garbage length values.
     private static final int MAX_FRAME_BYTES = 1 << 20;
 
@@ -205,13 +205,17 @@ public final class GameCodec {
         out.writeFloat(command.aimX());
         out.writeFloat(command.aimY());
 
-        // The three cast booleans share one byte.
-        int flags =
-            (command.castSlot1() ? 1 : 0)
-            | (command.castSlot2() ? 2 : 0)
-            | (command.castSlot3() ? 4 : 0);
+        if (command.casts().size() > Loadout.SIZE) {
+            throw new IllegalArgumentException("Too many cast requests");
+        }
 
-        out.writeByte(flags);
+        out.writeByte(command.casts().size());
+
+        for (CastRequest cast : command.casts()) {
+            out.writeByte(cast.slot());
+            out.writeFloat(cast.targetOffsetX());
+            out.writeFloat(cast.targetOffsetY());
+        }
     }
 
     private static PlayerCommand readCommand(ByteBuf in) {
@@ -219,12 +223,22 @@ public final class GameCodec {
         float moveY = in.readFloat();
         float aimX = in.readFloat();
         float aimY = in.readFloat();
-        int flags = in.readUnsignedByte();
+        int castCount = in.readUnsignedByte();
 
-        if ((flags & ~KNOWN_COMMAND_FLAGS) != 0) {
+        if (castCount > Loadout.SIZE) {
             throw new IllegalArgumentException(
-                "Unknown PlayerCommand flags: " + flags
+                "Too many cast requests: " + castCount
             );
+        }
+
+        List<CastRequest> casts = new ArrayList<>(castCount);
+
+        for (int i = 0; i < castCount; i++) {
+            casts.add(new CastRequest(
+                in.readUnsignedByte(),
+                in.readFloat(),
+                in.readFloat()
+            ));
         }
 
         return new PlayerCommand(
@@ -232,9 +246,7 @@ public final class GameCodec {
             moveY,
             aimX,
             aimY,
-            (flags & 1) != 0,
-            (flags & 2) != 0,
-            (flags & 4) != 0
+            casts
         );
     }
 

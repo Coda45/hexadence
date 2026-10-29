@@ -1,6 +1,11 @@
 package io.github.coda45.hexadence.net;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.power.Loadout;
 
 final class PlayerCommandValidator {
 
@@ -24,8 +29,30 @@ final class PlayerCommandValidator {
             return false;
         }
 
-        return isValidMovementComponent(command.moveX())
-            && isValidMovementComponent(command.moveY());
+        if (
+            !isValidMovementComponent(command.moveX())
+            || !isValidMovementComponent(command.moveY())
+            || command.casts().size() > Loadout.SIZE
+        ) {
+            return false;
+        }
+
+        Set<Integer> slots = new HashSet<>();
+
+        for (CastRequest cast : command.casts()) {
+            if (
+                cast == null
+                || cast.slot() < 0
+                || cast.slot() >= Loadout.SIZE
+                || !slots.add(cast.slot())
+                || !Float.isFinite(cast.targetOffsetX())
+                || !Float.isFinite(cast.targetOffsetY())
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static boolean isValidMovementComponent(float value) {
