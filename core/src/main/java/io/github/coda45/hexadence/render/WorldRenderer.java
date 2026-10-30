@@ -31,6 +31,7 @@ import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
 import io.github.coda45.hexadence.world.WorldEvent;
 import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
+import io.github.coda45.hexadence.zone.ZoneKinds;
 
 // Draws world state and owns drawing resources. The TiledMap stays owned by ArenaMap.
 public class WorldRenderer {
@@ -601,7 +602,37 @@ public class WorldRenderer {
                 (tint & 0xFF) / 255f
             );
         }
+        
+        if (zone.getKind() == ZoneKinds.NULL_ZONE) {
 
+            batch.setColor(0.08f, 0.02f, 0.12f, 0.10f);
+
+            for (int i = 0; i < 10; i++) {
+
+                float offsetX =
+                    MathUtils.sin(
+                        projectileAnimationTime * 0.8f + i
+                    ) * 0.25f;
+
+                float offsetY =
+                    MathUtils.cos(
+                        projectileAnimationTime * 0.7f + i
+                    ) * 0.25f;
+
+                float smokeRadius =
+                    zone.getRadius() * (
+                        1.2f + i * 0.08f
+                    );
+
+                batch.draw(
+                    textures.getZoneCircle(),
+                    zone.getX() - smokeRadius + offsetX,
+                    zone.getY() - smokeRadius + offsetY,
+                    smokeRadius * 2f,
+                    smokeRadius * 2f
+                );
+            }
+        }
         batch.draw(
             textures.getZoneCircle(),
             left,

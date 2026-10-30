@@ -30,6 +30,21 @@ public final class Powers {
         .radius(0.12f)       // PLACEHOLDER
         .icon("ui/bg_fireball.png", "ui/rim_orange.png")
         .build();
+        
+    // ---- Light ----
+
+    public static final Power RADIANT_CIRCLE =
+        Power.define(7, "Radiant Circle")
+        .element(Element.LIGHT)
+        .form(PowerForm.ZONE)
+        .behavior(Behavior.THROWN_ZONE)
+        .damage(0f)
+        .cooldown(1.2f)
+        .speed(12f)
+        .range(8f)
+        .radius(0.12f)
+        .zone(ZoneKinds.RADIANT_CIRCLE)
+        .build();
 
     // ---- Water ----
 
@@ -59,6 +74,19 @@ public final class Powers {
         .icon("ui/bg_water_bolt.png", "ui/rim_blue.png")
         .build();
 
+    // ---- Stone ----
+
+    public static final Power ROCK_SHARDS = Power.define(8, "Rock Shards")
+        .element(Element.STONE)
+        .form(PowerForm.BASIC)
+        .behavior(Behavior.PROJECTILE)
+        .damage(18f)
+        .cooldown(1f)
+        .speed(10f)
+        .range(6f)
+        .radius(0.16f)
+        .build();
+
     // ---- Storm ----
 
     public static final Power LIGHTNING_BOLT = Power.define(3, "Lightning Bolt")
@@ -86,6 +114,18 @@ public final class Powers {
         .radius(0.12f)
         .damageOverTime(2f, 0.5f, 2f)
         .build();
+    
+    public static final Power NULL_ZONE = Power.define(6, "Null Zone")
+        .element(Element.VOID)
+        .form(PowerForm.ZONE)
+        .behavior(Behavior.THROWN_ZONE)
+        .damage(0f)
+        .cooldown(1f)
+        .speed(12f)
+        .range(8f)
+        .radius(0.12f)
+        .zone(ZoneKinds.NULL_ZONE)
+        .build();
 
     // ---- Registry ----
 
@@ -94,8 +134,11 @@ public final class Powers {
         FIREBALL,
         WATER_PUDDLE,
         WATER_SHOTGUN,
+        ROCK_SHARDS,
         LIGHTNING_BOLT,
-        VOID_ROT
+        VOID_ROT,
+        NULL_ZONE,
+        RADIANT_CIRCLE
     );
 
     private static final Map<Integer, Power> BY_ID = indexById();

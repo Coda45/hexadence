@@ -15,15 +15,34 @@ import io.github.coda45.hexadence.power.Element;
 public final class ZoneKinds {
 
     // ---- Base zones (placed by zone powers) ----
-
+    
     public static final ZoneKind PUDDLE = ZoneKind.base(1, "Puddle", Element.WATER)
         .radius(0.8f)               // PLACEHOLDER
         .duration(6f)               // PLACEHOLDER
         .tint(0x338CFF99)
         .build();
 
-    // ---- Derived zones (produced by reactions; never react further) ----
+    // Void zone power
+    public static final ZoneKind NULL_ZONE =
+    ZoneKind.base(10, "Null Zone", Element.VOID)
+        .radius(0.8f)
+        .duration(3f)
+        .tint(0x551A8BCC)
+        .planned("Future Void field effects")
+        .build();
 
+    // Light zone power
+    public static final ZoneKind RADIANT_CIRCLE =
+        ZoneKind.base(11, "Radiant Circle", Element.LIGHT)
+        .radius(0.8f)
+        .duration(3f)
+        .tint(0xFFF8CCB3)
+        .planned("Buff allies standing inside")
+        .build();
+
+    // ---- Derived zones (produced by reactions; never react further) ----
+    
+    
     // Fire on Water
     public static final ZoneKind STEAM = ZoneKind.derived(2, "Steam")
         .radius(1f)                 // PLACEHOLDER
@@ -95,6 +114,8 @@ public final class ZoneKinds {
     // Every zone kind must be listed here to exist in the game.
     public static final List<ZoneKind> ALL = List.of(
         PUDDLE,
+        NULL_ZONE,
+        RADIANT_CIRCLE,
         STEAM,
         LAVA,
         QUICKSAND,

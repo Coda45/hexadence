@@ -19,6 +19,8 @@ public class GameTextures {
     private final Texture voidBolt;
     private final Texture zoneCircle;
     private final Texture targetDummy;
+    private final Texture rockShard;
+    private final Texture radiantBolt;
 
     private static final int PLAYER_FRAME_WIDTH = 24;
     private static final int PLAYER_FRAME_HEIGHT = 36;
@@ -51,6 +53,8 @@ public class GameTextures {
     private final Animation<TextureRegion> fireballAnimation;
     private final TextureRegion waterBoltRegion;
     private final TextureRegion voidBoltRegion;
+    private final Animation<TextureRegion> rockShardAnimation;
+    private final Animation<TextureRegion> radiantBoltAnimation;
 
 
     // Directional sheet rows follow FacingDirection order, columns are frames.
@@ -90,6 +94,19 @@ public class GameTextures {
         chargedPuddleAnimations = createChargedPuddleAnimations(chargedPuddleSheet);
         waterBolt = loadPixelArt("spells/water_bolt.png");
         waterBoltRegion = new TextureRegion(waterBolt);
+        rockShard = loadPixelArt("spells/rock_shard.png");
+        rockShardAnimation =
+            createProjectileAnimation(
+                rockShard,
+                "spells/rock_shard.png"
+            );
+
+        radiantBolt = loadPixelArt("spells/radiant_bolt.png");
+        radiantBoltAnimation =
+            createProjectileAnimation(
+                radiantBolt,
+                "spells/radiant_bolt.png"
+            );
         voidBolt = createVoidBolt();
         voidBoltRegion = new TextureRegion(voidBolt);
         zoneCircle = createZoneCircle();
@@ -276,6 +293,39 @@ public class GameTextures {
 
         return animation;
     }
+    private Animation<TextureRegion> createProjectileAnimation(
+        Texture sheet,
+        String path
+    ) {
+        TextureRegion[][] split =
+            TextureRegion.split(
+                sheet,
+                FIREBALL_FRAME_SIZE,
+                FIREBALL_FRAME_SIZE
+            );
+
+        if (
+            split.length != 1
+            || split[0].length != FIREBALL_FRAME_COUNT
+        ) {
+            sheet.dispose();
+
+            throw new IllegalStateException(
+                "Expected eight horizontal 24x24 frames in: "
+                    + path
+            );
+        }
+
+        Animation<TextureRegion> animation =
+            new Animation<>(
+                FIREBALL_FRAME_DURATION,
+                split[0]
+            );
+
+        animation.setPlayMode(Animation.PlayMode.LOOP);
+
+        return animation;
+    }
 
     public TextureRegion getLightningFrame(
         int variantIndex,
@@ -405,8 +455,12 @@ public class GameTextures {
         return switch (power.element()) {
             case WATER -> waterBoltRegion;
             case VOID -> voidBoltRegion;
+            case STONE ->
+                rockShardAnimation.getKeyFrame(stateTime);
 
-            // Elements without projectile art yet borrow the fireball.
+            case LIGHT ->
+                radiantBoltAnimation.getKeyFrame(stateTime);
+
             default -> fireballAnimation.getKeyFrame(stateTime);
         };
     }
@@ -515,6 +569,10 @@ public class GameTextures {
         }
         waterBolt.dispose();
         voidBolt.dispose();
+        waterBolt.dispose();
+        voidBolt.dispose();
+        rockShard.dispose();
+        radiantBolt.dispose();
         lightningSheet.dispose();
         chargedPuddleSheet.dispose();
         zoneCircle.dispose();
