@@ -32,6 +32,13 @@ public final class Power {
 
     private final ZoneKind zoneKind;
 
+    private final int pelletCount;
+    private final float spreadDegrees;
+
+    private final float dotDamagePerTick;
+    private final float dotTickSeconds;
+    private final float dotDurationSeconds;
+
     private final String iconPath;
     private final String iconRimPath;
 
@@ -48,6 +55,11 @@ public final class Power {
         this.range = b.range;
         this.radius = b.radius;
         this.zoneKind = b.zoneKind;
+        this.pelletCount = b.pelletCount;
+        this.spreadDegrees = b.spreadDegrees;
+        this.dotDamagePerTick = b.dotDamagePerTick;
+        this.dotTickSeconds = b.dotTickSeconds;
+        this.dotDurationSeconds = b.dotDurationSeconds;
         this.iconPath = b.iconPath;
         this.iconRimPath = b.iconRimPath;
     }
@@ -79,6 +91,18 @@ public final class Power {
     // Zone left behind, for powers that create one; otherwise null. Its size
     // and lifetime are part of the zone's own definition in ZoneKinds.
     public ZoneKind zoneKind() { return zoneKind; }
+
+    // Projectiles fired per cast, spread evenly across spreadDegrees(). 1 and
+    // 0 for a power that fires a single projectile straight at its target.
+    public int pelletCount() { return pelletCount; }
+    public float spreadDegrees() { return spreadDegrees; }
+
+    // Extra damage applied once per tick after the initial hit, for a power
+    // with a damage-over-time effect; 0 for a power without one. A later hit
+    // from the same power refreshes the effect instead of stacking it.
+    public float dotDamagePerTick() { return dotDamagePerTick; }
+    public float dotTickSeconds() { return dotTickSeconds; }
+    public float dotDurationSeconds() { return dotDurationSeconds; }
 
     // HUD icon images, relative to the assets folder.
     public String iconPath() { return iconPath; }
@@ -113,6 +137,11 @@ public final class Power {
         private float range;
         private float radius;
         private ZoneKind zoneKind;
+        private int pelletCount = 1;
+        private float spreadDegrees;
+        private float dotDamagePerTick;
+        private float dotTickSeconds;
+        private float dotDurationSeconds;
         private String iconPath = "ui/bg_fireball.png";
         private String iconRimPath = "ui/rim_orange.png";
 
@@ -133,6 +162,26 @@ public final class Power {
 
         public Builder zone(ZoneKind kind) {
             this.zoneKind = kind;
+            return this;
+        }
+
+        // Fires count projectiles per cast instead of one, evenly spread
+        // across a cone of spreadDegrees in front of the aimed direction.
+        public Builder pellets(int count, float spreadDegrees) {
+            this.pelletCount = count;
+            this.spreadDegrees = spreadDegrees;
+            return this;
+        }
+
+        // Adds a damage-over-time effect that starts on the power's hit.
+        public Builder damageOverTime(
+            float damagePerTick,
+            float tickSeconds,
+            float durationSeconds
+        ) {
+            this.dotDamagePerTick = damagePerTick;
+            this.dotTickSeconds = tickSeconds;
+            this.dotDurationSeconds = durationSeconds;
             return this;
         }
 
@@ -177,6 +226,27 @@ public final class Power {
                 );
             } else {
                 require(zoneKind == null, "only zone-creating behaviors may set zone(...)");
+            }
+
+            require(pelletCount >= 1, "pellet count must be at least 1");
+
+            if (pelletCount > 1) {
+                require(behavior == Behavior.PROJECTILE, "pellets(...) needs behavior PROJECTILE");
+                require(spreadDegrees > 0f, "spreadDegrees must be above 0 for more than one pellet");
+            } else {
+                require(spreadDegrees == 0f, "spreadDegrees is only for more than one pellet");
+            }
+
+            boolean hasDot =
+                dotDamagePerTick > 0f
+                    || dotTickSeconds > 0f
+                    || dotDurationSeconds > 0f;
+
+            if (hasDot) {
+                require(behavior == Behavior.PROJECTILE, "damageOverTime(...) needs behavior PROJECTILE");
+                require(dotDamagePerTick > 0f, "dotDamagePerTick must be above 0");
+                require(dotTickSeconds > 0f, "dotTickSeconds must be above 0");
+                require(dotDurationSeconds > 0f, "dotDurationSeconds must be above 0");
             }
 
             return new Power(this);

@@ -39,6 +39,9 @@ public class ArenaWorld {
     private final ArrayList<Projectile> projectiles = new ArrayList<>();
     private final List<TargetDummy> dummies = new ArrayList<>();
     private final List<Zone> zones = new ArrayList<>();
+    // Damage-over-time started by a hit, independent of standing in a zone.
+    private final Map<Integer, DotEffect> playerDotEffects = new LinkedHashMap<>();
+    private final Map<TargetDummy, DotEffect> dummyDotEffects = new LinkedHashMap<>();
 
     private long tick;
     private int nextPlayerId = 1;
@@ -207,6 +210,7 @@ public class ArenaWorld {
  
         applyZoneEffects();
         applyChargedPuddleDischarges(events);
+        applyDotEffects();
         updatePlayerRespawns();
         updateDummyRespawns();
         return new StepResult(tick, events);
@@ -305,6 +309,7 @@ public class ArenaWorld {
     public void removePlayer(int id) {
         players.remove(id);
         assignedPlayerSpawns.remove(id);
+        playerDotEffects.remove(id);
     }
  
     // Read-only view, in join order; the Player objects are live.
@@ -478,6 +483,8 @@ public class ArenaWorld {
             dummy.takeDamage(
                 power.damage()
             );
+
+            applyDotIfAny(power, dummy, projectile.getOwnerPlayerId());
 
             // A projectile damages only the first
             // live dummy it overlaps.
@@ -702,6 +709,87 @@ public class ArenaWorld {
                 );
             }
         }
+    }
+
+    // Ticks every active damage-over-time effect and removes it once expired.
+    private void applyDotEffects() {
+        Iterator<Map.Entry<Integer, DotEffect>> playerIterator =
+            playerDotEffects.entrySet().iterator();
+
+        while (playerIterator.hasNext()) {
+            Map.Entry<Integer, DotEffect> entry = playerIterator.next();
+            DotEffect effect = entry.getValue();
+
+            if (effect.update(STEP)) {
+                damagePlayer(
+                    entry.getKey(),
+                    effect.damagePerTick(),
+                    effect.attackerPlayerId()
+                );
+            }
+
+            if (effect.hasExpired()) {
+                playerIterator.remove();
+            }
+        }
+
+        Iterator<Map.Entry<TargetDummy, DotEffect>> dummyIterator =
+            dummyDotEffects.entrySet().iterator();
+
+        while (dummyIterator.hasNext()) {
+            Map.Entry<TargetDummy, DotEffect> entry = dummyIterator.next();
+            DotEffect effect = entry.getValue();
+
+            if (effect.update(STEP)) {
+                entry.getKey().takeDamage(effect.damagePerTick());
+            }
+
+            if (effect.hasExpired()) {
+                dummyIterator.remove();
+            }
+        }
+    }
+
+    // Starts (or refreshes) the power's damage-over-time effect on a target
+    // it just hit. Does nothing for a power without one.
+    private void applyDotIfAny(
+        Power power,
+        int targetPlayerId,
+        int attackerPlayerId
+    ) {
+        if (power.dotDamagePerTick() <= 0f) {
+            return;
+        }
+
+        playerDotEffects.put(
+            targetPlayerId,
+            new DotEffect(
+                power.dotDamagePerTick(),
+                power.dotTickSeconds(),
+                power.dotDurationSeconds(),
+                attackerPlayerId
+            )
+        );
+    }
+
+    private void applyDotIfAny(
+        Power power,
+        TargetDummy dummy,
+        int attackerPlayerId
+    ) {
+        if (power.dotDamagePerTick() <= 0f) {
+            return;
+        }
+
+        dummyDotEffects.put(
+            dummy,
+            new DotEffect(
+                power.dotDamagePerTick(),
+                power.dotTickSeconds(),
+                power.dotDurationSeconds(),
+                attackerPlayerId
+            )
+        );
     }
 
     // The newest zone touching this player's feet, or null.
@@ -1137,6 +1225,12 @@ public class ArenaWorld {
                 projectile.getOwnerPlayerId()
             );
 
+            applyDotIfAny(
+                projectile.getPower(),
+                targetPlayerId,
+                projectile.getOwnerPlayerId()
+            );
+
             return true;
         }
 
@@ -1204,18 +1298,35 @@ public class ArenaWorld {
 
         switch (power.behavior()) {
             case PROJECTILE -> {
-                projectiles.add(
-                    new Projectile(
-                        nextProjectileId++,
-                        player.getCastX(),
-                        player.getCastY(),
+                int pelletCount = power.pelletCount();
+                float spreadRadians =
+                    (float) Math.toRadians(power.spreadDegrees());
+
+                for (int pellet = 0; pellet < pelletCount; pellet++) {
+                    float angle = pelletCount <= 1
+                        ? 0f
+                        : -spreadRadians / 2f
+                            + spreadRadians * pellet / (pelletCount - 1);
+
+                    float[] direction = rotateDirection(
                         target.directionX(),
                         target.directionY(),
-                        power.range(),
-                        power,
-                        playerId
-                    )
-                );
+                        angle
+                    );
+
+                    projectiles.add(
+                        new Projectile(
+                            nextProjectileId++,
+                            player.getCastX(),
+                            player.getCastY(),
+                            direction[0],
+                            direction[1],
+                            power.range(),
+                            power,
+                            playerId
+                        )
+                    );
+                }
                 accepted = true;
             }
 
@@ -1268,6 +1379,22 @@ public class ArenaWorld {
         if (accepted) {
             player.startCooldown(slot);
         }
+    }
+
+    // Rotates a normalized direction by an angle in radians, for spreading a
+    // cast's pellets across a cone around its aimed direction.
+    private static float[] rotateDirection(
+        float directionX,
+        float directionY,
+        float radians
+    ) {
+        float cos = (float) Math.cos(radians);
+        float sin = (float) Math.sin(radians);
+
+        return new float[] {
+            directionX * cos - directionY * sin,
+            directionX * sin + directionY * cos
+        };
     }
 
     public int getPlayerCapacity() {

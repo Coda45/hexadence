@@ -4,7 +4,9 @@ package io.github.coda45.hexadence.power;
 // so a new power usually needs only a definition in Powers, not new code.
 //
 // Each behavior reads different fields from its Power:
-//   PROJECTILE   damage, speed, range, radius (size of the projectile)
+//   PROJECTILE   damage, speed, range, radius (size of the projectile), and
+//                optionally pellets(...) (more than one projectile per cast)
+//                and damageOverTime(...) (a timed effect that starts on hit)
 //   BEAM         damage, range, radius (half the beam's width); hits instantly
 //   THROWN_ZONE  travels toward a range-clamped cursor target, then leaves its
 //                zone where it arrives or first collides

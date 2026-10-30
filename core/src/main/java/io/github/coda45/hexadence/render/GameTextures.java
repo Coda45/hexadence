@@ -16,6 +16,7 @@ import io.github.coda45.hexadence.power.Power;
 public class GameTextures {
 
     private final Texture waterBolt;
+    private final Texture voidBolt;
     private final Texture zoneCircle;
     private final Texture targetDummy;
 
@@ -38,6 +39,10 @@ public class GameTextures {
     private static final int CHARGED_PUDDLE_FRAME_COUNT = 8;
     private static final float CHARGED_PUDDLE_FRAME_DURATION = 0.08f;
 
+    // Void has no art yet, so its projectile is a small generated circle,
+    // the same trick createZoneCircle() uses.
+    private static final int VOID_BOLT_SIZE = 8;
+
     private final Texture lightningSheet;
     private final List<Animation<TextureRegion>> lightningAnimations;
     private final Texture chargedPuddleSheet;
@@ -45,6 +50,7 @@ public class GameTextures {
     private final Texture fireballSheet;
     private final Animation<TextureRegion> fireballAnimation;
     private final TextureRegion waterBoltRegion;
+    private final TextureRegion voidBoltRegion;
 
 
     // Directional sheet rows follow FacingDirection order, columns are frames.
@@ -84,6 +90,8 @@ public class GameTextures {
         chargedPuddleAnimations = createChargedPuddleAnimations(chargedPuddleSheet);
         waterBolt = loadPixelArt("spells/water_bolt.png");
         waterBoltRegion = new TextureRegion(waterBolt);
+        voidBolt = createVoidBolt();
+        voidBoltRegion = new TextureRegion(voidBolt);
         zoneCircle = createZoneCircle();
         targetDummy = loadPixelArt("sprites/target_dummy.png");
     }
@@ -396,10 +404,36 @@ public class GameTextures {
     ) {
         return switch (power.element()) {
             case WATER -> waterBoltRegion;
+            case VOID -> voidBoltRegion;
 
             // Elements without projectile art yet borrow the fireball.
             default -> fireballAnimation.getKeyFrame(stateTime);
         };
+    }
+
+    // A small solid dark-purple circle, standing in for Void art until some exists.
+    private Texture createVoidBolt() {
+        Pixmap pixmap =
+            new Pixmap(VOID_BOLT_SIZE, VOID_BOLT_SIZE, Pixmap.Format.RGBA8888);
+
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        pixmap.setColor(0.22f, 0.05f, 0.33f, 1f);
+        pixmap.fillCircle(
+            VOID_BOLT_SIZE / 2,
+            VOID_BOLT_SIZE / 2,
+            VOID_BOLT_SIZE / 2
+        );
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(
+            Texture.TextureFilter.Nearest,
+            Texture.TextureFilter.Nearest
+        );
+
+        pixmap.dispose();
+        return texture;
     }
 
     private Texture createZoneCircle() {
@@ -480,6 +514,7 @@ public class GameTextures {
             animations.dispose();
         }
         waterBolt.dispose();
+        voidBolt.dispose();
         lightningSheet.dispose();
         chargedPuddleSheet.dispose();
         zoneCircle.dispose();

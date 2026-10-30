@@ -46,6 +46,19 @@ public final class Powers {
         .icon("ui/bg_water_bolt.png", "ui/rim_blue.png")
         .build();
 
+    public static final Power WATER_SHOTGUN = Power.define(4, "Water Shotgun")
+        .element(Element.WATER)
+        .form(PowerForm.BASIC)
+        .behavior(Behavior.PROJECTILE)
+        .damage(3f)
+        .cooldown(1f)
+        .speed(12f)
+        .range(4f)
+        .radius(0.12f)
+        .pellets(8, 40f)
+        .icon("ui/bg_water_bolt.png", "ui/rim_blue.png")
+        .build();
+
     // ---- Storm ----
 
     public static final Power LIGHTNING_BOLT = Power.define(3, "Lightning Bolt")
@@ -59,13 +72,30 @@ public final class Powers {
         .icon("ui/bg_lightning.png", "ui/rim_yellow.png")
         .build();
 
+    // ---- Void ----
+
+    // No Void art yet; uses the default icon until one exists.
+    public static final Power VOID_ROT = Power.define(5, "Void Rot")
+        .element(Element.VOID)
+        .form(PowerForm.BASIC)
+        .behavior(Behavior.PROJECTILE)
+        .damage(4f)
+        .cooldown(0.5f)
+        .speed(12f)
+        .range(4f)
+        .radius(0.12f)
+        .damageOverTime(2f, 0.5f, 2f)
+        .build();
+
     // ---- Registry ----
 
     // Every power must be listed here to exist in the game.
     public static final List<Power> ALL = List.of(
         FIREBALL,
         WATER_PUDDLE,
-        LIGHTNING_BOLT
+        WATER_SHOTGUN,
+        LIGHTNING_BOLT,
+        VOID_ROT
     );
 
     private static final Map<Integer, Power> BY_ID = indexById();
