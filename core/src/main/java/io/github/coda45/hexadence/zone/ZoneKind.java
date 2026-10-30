@@ -22,6 +22,7 @@ public final class ZoneKind {
     private final Weapon weapon;
 
     private final float radius;
+    private final float innerRadius;
     private final float duration;
 
     private final float damagePerSecond;
@@ -38,6 +39,7 @@ public final class ZoneKind {
         this.element = b.element;
         this.weapon = b.weapon;
         this.radius = b.radius;
+        this.innerRadius = b.innerRadius;
         this.duration = b.duration;
         this.damagePerSecond = b.damagePerSecond;
         this.speedMultiplier = b.speedMultiplier;
@@ -64,6 +66,9 @@ public final class ZoneKind {
     public Weapon weapon() { return weapon; }
 
     public float radius() { return radius; }
+    // Visual hollow center radius: 0 draws a solid disk; above 0 draws a
+    // ring instead. Its effects (damage, slow) still cover the whole disk.
+    public float innerRadius() { return innerRadius; }
     public float duration() { return duration; }
 
     // Health removed per second from anyone standing in it.
@@ -105,6 +110,7 @@ public final class ZoneKind {
         private final Element element;
         private Weapon weapon = Weapon.STAFF;
         private float radius;
+        private float innerRadius;
         private float duration;
         private float damagePerSecond;
         private float speedMultiplier = 1f;
@@ -121,6 +127,7 @@ public final class ZoneKind {
 
         public Builder weapon(Weapon weapon) { this.weapon = weapon; return this; }
         public Builder radius(float tiles) { this.radius = tiles; return this; }
+        public Builder innerRadius(float tiles) { this.innerRadius = tiles; return this; }
         public Builder duration(float seconds) { this.duration = seconds; return this; }
         public Builder damagePerSecond(float hp) { this.damagePerSecond = hp; return this; }
         public Builder speedMultiplier(float multiplier) { this.speedMultiplier = multiplier; return this; }
@@ -135,6 +142,8 @@ public final class ZoneKind {
             require(!name.isBlank(), "name is required");
             require(weapon != null, "weapon is required");
             require(radius > 0f, "radius must be above 0");
+            require(innerRadius >= 0f, "inner radius cannot be negative");
+            require(innerRadius < radius, "inner radius must be less than radius");
             require(duration > 0f, "duration must be above 0");
             require(damagePerSecond >= 0f, "damage per second cannot be negative");
             require(

@@ -22,6 +22,18 @@ public final class ZoneKinds {
         .tint(0x338CFF99)
         .build();
 
+    // Ember Circle's tint: a burning red, named since the zone is drawn as a
+    // plain runtime circle rather than custom art.
+    private static final int EMBER_RED = 0xE63300B3;
+
+    public static final ZoneKind EMBER_CIRCLE = ZoneKind.base(10, "Ember Circle", Element.FIRE)
+        .radius(0.8f)
+        .innerRadius(0.4f)          // hollow center: only the outer ring burns
+        .duration(5f)
+        .damagePerSecond(5f)
+        .tint(EMBER_RED)
+        .build();
+
     // ---- Derived zones (produced by reactions; never react further) ----
 
     // Fire on Water
@@ -95,6 +107,7 @@ public final class ZoneKinds {
     // Every zone kind must be listed here to exist in the game.
     public static final List<ZoneKind> ALL = List.of(
         PUDDLE,
+        EMBER_CIRCLE,
         STEAM,
         LAVA,
         QUICKSAND,
