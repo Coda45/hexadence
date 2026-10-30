@@ -128,6 +128,70 @@ class PowersTest {
     }
 
     @Test
+    void pelletAndDamageOverTimeDefinitionsAreValidated() {
+        // Pellets only make sense for a power that fires via PROJECTILE.
+        assertThrows(IllegalStateException.class, () ->
+            Power.define(206, "Beam Shotgun")
+                .element(Element.LIGHT).form(PowerForm.BASIC)
+                .behavior(Behavior.BEAM)
+                .cooldown(1f).range(5f).radius(0.1f)
+                .pellets(5, 30f)
+                .build()
+        );
+
+        // More than one pellet needs a spread to fan out across.
+        assertThrows(IllegalStateException.class, () ->
+            Power.define(207, "Spreadless Shotgun")
+                .element(Element.WATER).form(PowerForm.BASIC)
+                .behavior(Behavior.PROJECTILE)
+                .cooldown(1f).speed(5f).range(5f).radius(0.1f)
+                .pellets(5, 0f)
+                .build()
+        );
+
+        // Damage over time only makes sense for a power that hits via PROJECTILE.
+        assertThrows(IllegalStateException.class, () ->
+            Power.define(208, "Rotting Beam")
+                .element(Element.VOID).form(PowerForm.BASIC)
+                .behavior(Behavior.BEAM)
+                .cooldown(1f).range(5f).radius(0.1f)
+                .damageOverTime(1f, 0.5f, 2f)
+                .build()
+        );
+
+        // A half-specified damage-over-time effect is rejected.
+        assertThrows(IllegalStateException.class, () ->
+            Power.define(209, "Half Rot")
+                .element(Element.VOID).form(PowerForm.BASIC)
+                .behavior(Behavior.PROJECTILE)
+                .cooldown(1f).speed(5f).range(5f).radius(0.1f)
+                .damageOverTime(1f, 0f, 2f)
+                .build()
+        );
+
+        Power shotgun = Power.define(210, "Test Shotgun")
+            .element(Element.WATER).form(PowerForm.BASIC)
+            .behavior(Behavior.PROJECTILE)
+            .cooldown(1f).speed(5f).range(5f).radius(0.1f)
+            .pellets(6, 45f)
+            .build();
+
+        assertEquals(6, shotgun.pelletCount());
+        assertEquals(45f, shotgun.spreadDegrees(), 0.0001f);
+
+        Power rot = Power.define(211, "Test Rot")
+            .element(Element.VOID).form(PowerForm.BASIC)
+            .behavior(Behavior.PROJECTILE)
+            .cooldown(1f).speed(5f).range(5f).radius(0.1f)
+            .damageOverTime(2f, 0.5f, 2f)
+            .build();
+
+        assertEquals(2f, rot.dotDamagePerTick(), 0.0001f);
+        assertEquals(0.5f, rot.dotTickSeconds(), 0.0001f);
+        assertEquals(2f, rot.dotDurationSeconds(), 0.0001f);
+    }
+
+    @Test
     void loadoutsHoldExactlyThreePowers() {
         assertThrows(IllegalArgumentException.class, () ->
             new Loadout(List.of(Powers.FIREBALL))

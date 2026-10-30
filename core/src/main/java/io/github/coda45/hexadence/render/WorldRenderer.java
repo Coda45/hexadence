@@ -2,10 +2,12 @@ package io.github.coda45.hexadence.render;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -19,9 +21,11 @@ import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
+import io.github.coda45.hexadence.power.Element;
 import io.github.coda45.hexadence.render.animation.ChargedPuddleVisual;
 import io.github.coda45.hexadence.render.animation.FacingDirection;
 import io.github.coda45.hexadence.render.animation.LightningStrikeVisual;
+import io.github.coda45.hexadence.render.animation.VoidTrailVisual;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.LightningStrikeEvent;
@@ -43,6 +47,7 @@ public class WorldRenderer {
     private final List<LightningStrikeVisual> lightningStrikes = new ArrayList<>();
     private final Map<Zone, ChargedPuddleVisual> chargedPuddleVisuals = new IdentityHashMap<>();
     private final Map<Integer, Float> zoneFlashRemaining = new HashMap<>();
+    private final Map<Integer, VoidTrailVisual> voidTrails = new HashMap<>();
 
     private float projectileAnimationTime;
     private float playerMoveTime;
@@ -108,6 +113,11 @@ public class WorldRenderer {
         projectileAnimationTime += presentationDelta;
 
         updateChargedPuddleVisuals(
+            world,
+            presentationDelta
+        );
+
+        updateVoidTrails(
             world,
             presentationDelta
         );
@@ -202,6 +212,14 @@ public class WorldRenderer {
                     projectile.getPower(),
                     projectileAnimationTime
                 );
+
+            if (projectile.getPower().element() == Element.VOID) {
+                VoidTrailVisual trail = voidTrails.get(projectile.getId());
+
+                if (trail != null) {
+                    renderVoidTrail(trail, projectileRegion);
+                }
+            }
 
             float projectileWidth =
                 projectileRegion.getRegionWidth()
@@ -501,6 +519,64 @@ public class WorldRenderer {
                 )
             );
         }
+    }
+
+    // Samples each live Void projectile's position for its fading trail, and
+    // drops trails for projectiles that are gone.
+    private void updateVoidTrails(
+        ArenaWorld world,
+        float presentationDelta
+    ) {
+        Set<Integer> present = new HashSet<>();
+
+        for (Projectile projectile : world.getProjectiles()) {
+            if (projectile.getPower().element() != Element.VOID) {
+                continue;
+            }
+
+            present.add(projectile.getId());
+
+            VoidTrailVisual trail =
+                voidTrails.computeIfAbsent(
+                    projectile.getId(),
+                    id -> new VoidTrailVisual()
+                );
+
+            trail.update(
+                presentationDelta,
+                projectile.getX(),
+                projectile.getY()
+            );
+        }
+
+        voidTrails.keySet().retainAll(present);
+    }
+
+    private void renderVoidTrail(
+        VoidTrailVisual trail,
+        TextureRegion region
+    ) {
+        float width = region.getRegionWidth() / ArenaMap.TILE_SIZE;
+        float height = region.getRegionHeight() / ArenaMap.TILE_SIZE;
+
+        for (VoidTrailVisual.Sample sample : trail.getSamples()) {
+            float alpha = Math.max(
+                0f,
+                1f - sample.getAge() / VoidTrailVisual.getTrailSeconds()
+            );
+
+            batch.setColor(0.2f, 0.05f, 0.3f, alpha * 0.6f);
+
+            batch.draw(
+                region,
+                sample.getX() - width / 2f,
+                sample.getY() - height / 2f,
+                width,
+                height
+            );
+        }
+
+        batch.setColor(Color.WHITE);
     }
 
     private void renderZone(Zone zone) {

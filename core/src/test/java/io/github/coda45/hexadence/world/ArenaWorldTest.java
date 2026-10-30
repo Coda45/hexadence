@@ -9,8 +9,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import io.github.coda45.hexadence.entity.Player;
+import io.github.coda45.hexadence.entity.Projectile;
+import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Powers;
 
 class ArenaWorldTest {
@@ -582,6 +585,211 @@ class ArenaWorldTest {
             );
 
         assertEquals(LightningStrikeEvent.EndReason.PLAYER, strike.endReason());
+    }
+
+    @Test
+    void waterShotgunFiresPelletsEvenlySpreadAcrossTheCone() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of()
+        );
+
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.WATER_SHOTGUN,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+
+        PlayerCommand castShotgun = new PlayerCommand(
+            0f, 0f,
+            1f, 0f,
+            true, false, false
+        );
+
+        world.step(castShotgun);
+
+        List<Projectile> pellets = world.getProjectiles();
+        assertEquals(Powers.WATER_SHOTGUN.pelletCount(), pellets.size());
+
+        float halfSpreadRadians =
+            (float) Math.toRadians(Powers.WATER_SHOTGUN.spreadDegrees() / 2f);
+
+        Projectile first = pellets.get(0);
+        assertEquals((float) Math.cos(-halfSpreadRadians), first.getDirectionX(), EPSILON);
+        assertEquals((float) Math.sin(-halfSpreadRadians), first.getDirectionY(), EPSILON);
+
+        Projectile last = pellets.get(pellets.size() - 1);
+        assertEquals((float) Math.cos(halfSpreadRadians), last.getDirectionX(), EPSILON);
+        assertEquals((float) Math.sin(halfSpreadRadians), last.getDirectionY(), EPSILON);
+    }
+
+    @Test
+    void waterShotgunPelletsCanEachDamageTheSameNearbyTarget() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(new SpawnPoint(1.3f, 1.75f))
+        );
+
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.WATER_SHOTGUN,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+
+        TargetDummy dummy = world.getDummies().get(0);
+        float healthBefore = dummy.getHealth();
+
+        PlayerCommand castShotgun = new PlayerCommand(
+            0f, 0f,
+            1f, 0f,
+            true, false, false
+        );
+
+        world.step(castShotgun);
+
+        assertEquals(
+            healthBefore
+                - Powers.WATER_SHOTGUN.pelletCount() * Powers.WATER_SHOTGUN.damage(),
+            dummy.getHealth(),
+            EPSILON,
+            "A target standing close to the caster can be hit by more than one pellet"
+        );
+
+        assertTrue(
+            world.getProjectiles().isEmpty(),
+            "Every pellet should have hit or been consumed this step"
+        );
+    }
+
+    @Test
+    void voidRotDealsInitialHitThenFourTicksOfDamageOverTime() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(new SpawnPoint(1.3f, 1.75f))
+        );
+
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.VOID_ROT,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+
+        TargetDummy dummy = world.getDummies().get(0);
+        float healthBeforeCast = dummy.getHealth();
+
+        PlayerCommand castVoidRot = new PlayerCommand(
+            0f, 0f,
+            1f, 0f,
+            true, false, false
+        );
+
+        world.step(castVoidRot);
+
+        assertEquals(
+            healthBeforeCast - Powers.VOID_ROT.damage(),
+            dummy.getHealth(),
+            EPSILON,
+            "Void Rot should deal its direct hit damage immediately"
+        );
+
+        float healthAfterHit = dummy.getHealth();
+
+        for (int i = 0; i < 29; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            healthAfterHit - 2f,
+            dummy.getHealth(),
+            EPSILON,
+            "The first damage-over-time tick should land 0.5s after the hit"
+        );
+
+        for (int i = 0; i < 90; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            healthAfterHit - 8f,
+            dummy.getHealth(),
+            EPSILON,
+            "Four ticks of 2 damage should land over the 2-second duration"
+        );
+
+        float healthAfterDot = dummy.getHealth();
+
+        for (int i = 0; i < 60; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            healthAfterDot,
+            dummy.getHealth(),
+            EPSILON,
+            "Damage over time should stop once its duration ends"
+        );
+    }
+
+    @Test
+    void voidRotReapplyRefreshesInsteadOfStackingDamageOverTime() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(new SpawnPoint(1.3f, 1.75f))
+        );
+
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.VOID_ROT,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+
+        TargetDummy dummy = world.getDummies().get(0);
+
+        PlayerCommand castVoidRot = new PlayerCommand(
+            0f, 0f,
+            1f, 0f,
+            true, false, false
+        );
+
+        world.step(castVoidRot);
+
+        for (int i = 0; i < 29; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(100f - 4f - 2f, dummy.getHealth(), EPSILON);
+
+        for (int i = 0; i < 14; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        world.step(castVoidRot);
+
+        float healthAfterSecondHit = dummy.getHealth();
+
+        assertEquals(100f - 4f - 2f - 4f, healthAfterSecondHit, EPSILON);
+
+        for (int i = 0; i < 15; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            healthAfterSecondHit,
+            dummy.getHealth(),
+            EPSILON,
+            "Reapplying Void Rot should refresh its timer, not stack a second one"
+        );
+
+        for (int i = 0; i < 14; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            healthAfterSecondHit - 2f,
+            dummy.getHealth(),
+            EPSILON,
+            "The refreshed timer's first tick lands 0.5s after the second hit"
+        );
     }
 
     private ArenaWorld createEmptyWorld(
