@@ -91,6 +91,13 @@ class ReactionsTest {
     }
 
     @Test
+    void lightningTransformsEmberCircleIntoInferno() {
+        Reactions.Reaction inferno = Reactions.find(Powers.LIGHTNING_BOLT, ZoneKinds.EMBER_CIRCLE);
+        assertEquals(Reactions.Result.TRANSFORM, inferno.result());
+        assertSame(ZoneKinds.INFERNO, inferno.into());
+    }
+
+    @Test
     void derivedZonesNeverReact() {
         for (ZoneKind kind : ZoneKinds.ALL) {
             if (kind.isDerived()) {

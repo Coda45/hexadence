@@ -342,6 +342,35 @@ class LoadoutCastingTest {
         assertTrue(player.getCooldownRemaining(0) > 0f);
     }
 
+    @Test
+    void emberCircleClampsToItsMaximumPlacementDistance() {
+        ArenaWorld world = worldWithDummyAt(19f, 9f);
+        Player player = world.getPlayer();
+        player.setLoadout(new Loadout(List.of(
+            Powers.EMBER_CIRCLE,
+            Powers.FIREBALL,
+            Powers.LIGHTNING_BOLT
+        )));
+
+        world.step(new PlayerCommand(
+            0f, 0f,
+            20f, 0f,
+            true, false, false
+        ));
+
+        assertEquals(1, world.getZones().size());
+        assertEquals(
+            player.getCastX() + Powers.EMBER_CIRCLE.range(),
+            world.getZones().get(0).getX(),
+            EPSILON
+        );
+        assertEquals(
+            Powers.EMBER_CIRCLE.zoneKind().radius(),
+            world.getZones().get(0).getRadius(),
+            EPSILON
+        );
+    }
+
     private static Power placedPuddle() {
         return Power.define(200, "Placed Puddle")
             .element(Element.WATER)

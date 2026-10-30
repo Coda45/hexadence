@@ -37,6 +37,67 @@ class ZoneEffectsTest {
     }
 
     @Test
+    void emberCircleBurnsItsOwnCasterToo() {
+        ArenaWorld world = world();
+        Player player = world.getPlayer();
+        float ringDistance = midRingDistance();
+        Zone circle = addZone(
+            world, 1, ZoneKinds.EMBER_CIRCLE,
+            player.getCollisionX() + ringDistance, player.getCollisionY()
+        );
+        circle.setDamageOwnerPlayerId(0);
+
+        stepIdle(world, ONE_SECOND);
+
+        assertEquals(
+            player.getMaxHealth() - ZoneKinds.EMBER_CIRCLE.damagePerSecond(),
+            player.getHealth(),
+            EPSILON
+        );
+    }
+
+    // The hollow center is a visual only: the whole disk still burns, so
+    // standing dead-center is no safer than standing in the ring.
+    @Test
+    void emberCircleBurnsThroughItsHollowCenterToo() {
+        ArenaWorld world = world();
+        TargetDummy dummy = world.getDummies().get(0);
+        addZone(world, 1, ZoneKinds.EMBER_CIRCLE, dummy.getX(), dummy.getY());
+
+        stepIdle(world, ONE_SECOND);
+
+        assertEquals(
+            dummy.getMaxHealth() - ZoneKinds.EMBER_CIRCLE.damagePerSecond(),
+            dummy.getHealth(),
+            EPSILON
+        );
+    }
+
+    @Test
+    void emberCircleRingBurnsAroundTheHollowCenter() {
+        ArenaWorld world = world();
+        TargetDummy dummy = world.getDummies().get(0);
+        addZone(
+            world, 1, ZoneKinds.EMBER_CIRCLE,
+            dummy.getX() + midRingDistance(), dummy.getY()
+        );
+
+        stepIdle(world, ONE_SECOND);
+
+        assertEquals(
+            dummy.getMaxHealth() - ZoneKinds.EMBER_CIRCLE.damagePerSecond(),
+            dummy.getHealth(),
+            EPSILON
+        );
+    }
+
+    // Halfway between the hollow center and the outer edge, safely inside
+    // the burning ring.
+    private static float midRingDistance() {
+        return (ZoneKinds.EMBER_CIRCLE.innerRadius() + ZoneKinds.EMBER_CIRCLE.radius()) / 2f;
+    }
+
+    @Test
     void slowZoneSlowsMovement() {
         ArenaWorld world = world();
         Player player = world.getPlayer();

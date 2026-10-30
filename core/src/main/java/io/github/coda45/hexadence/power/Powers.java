@@ -31,6 +31,16 @@ public final class Powers {
         .icon("ui/bg_fireball.png", "ui/rim_orange.png")
         .build();
 
+    public static final Power EMBER_CIRCLE = Power.define(6, "Ember Circle")
+        .element(Element.FIRE)
+        .form(PowerForm.ZONE)
+        .behavior(Behavior.PLACED_ZONE)
+        .cooldown(1.5f)
+        .range(8f)            // max placement distance
+        .zone(ZoneKinds.EMBER_CIRCLE)
+        .icon("ui/bg_amber_circle.png", "ui/rim_orange.png")
+        .build();
+
     // ---- Water ----
 
     public static final Power WATER_PUDDLE = Power.define(2, "Water Puddle")
@@ -56,7 +66,7 @@ public final class Powers {
         .range(4f)
         .radius(0.12f)
         .pellets(8, 40f)
-        .icon("ui/bg_water_bolt.png", "ui/rim_blue.png")
+        .icon("ui/bg_water_shotgun.png", "ui/rim_blue.png")
         .build();
 
     // ---- Storm ----
@@ -74,7 +84,6 @@ public final class Powers {
 
     // ---- Void ----
 
-    // No Void art yet; uses the default icon until one exists.
     public static final Power VOID_ROT = Power.define(5, "Void Rot")
         .element(Element.VOID)
         .form(PowerForm.BASIC)
@@ -85,6 +94,7 @@ public final class Powers {
         .range(4f)
         .radius(0.12f)
         .damageOverTime(2f, 0.5f, 2f)
+        .icon("ui/bg_void_rot.png", "ui/rim_none.png")
         .build();
 
     // ---- Registry ----
@@ -92,6 +102,7 @@ public final class Powers {
     // Every power must be listed here to exist in the game.
     public static final List<Power> ALL = List.of(
         FIREBALL,
+        EMBER_CIRCLE,
         WATER_PUDDLE,
         WATER_SHOTGUN,
         LIGHTNING_BOLT,
