@@ -18,6 +18,7 @@ public class GameTextures {
     private final Texture waterBolt;
     private final Texture voidBolt;
     private final Texture zoneCircle;
+    private final Texture zoneRing;
     private final Texture targetDummy;
 
     private static final int PLAYER_FRAME_WIDTH = 24;
@@ -38,10 +39,6 @@ public class GameTextures {
     private static final int CHARGED_PUDDLE_FRAME_SIZE = 48;
     private static final int CHARGED_PUDDLE_FRAME_COUNT = 8;
     private static final float CHARGED_PUDDLE_FRAME_DURATION = 0.08f;
-
-    // Void has no art yet, so its projectile is a small generated circle,
-    // the same trick createZoneCircle() uses.
-    private static final int VOID_BOLT_SIZE = 8;
 
     private final Texture lightningSheet;
     private final List<Animation<TextureRegion>> lightningAnimations;
@@ -90,9 +87,10 @@ public class GameTextures {
         chargedPuddleAnimations = createChargedPuddleAnimations(chargedPuddleSheet);
         waterBolt = loadPixelArt("spells/water_bolt.png");
         waterBoltRegion = new TextureRegion(waterBolt);
-        voidBolt = createVoidBolt();
+        voidBolt = loadPixelArt("spells/void_rot.png");
         voidBoltRegion = new TextureRegion(voidBolt);
         zoneCircle = createZoneCircle();
+        zoneRing = createZoneRing();
         targetDummy = loadPixelArt("sprites/target_dummy.png");
     }
 
@@ -411,29 +409,10 @@ public class GameTextures {
         };
     }
 
-    // A small solid dark-purple circle, standing in for Void art until some exists.
-    private Texture createVoidBolt() {
-        Pixmap pixmap =
-            new Pixmap(VOID_BOLT_SIZE, VOID_BOLT_SIZE, Pixmap.Format.RGBA8888);
-
-        pixmap.setColor(0f, 0f, 0f, 0f);
-        pixmap.fill();
-
-        pixmap.setColor(0.22f, 0.05f, 0.33f, 1f);
-        pixmap.fillCircle(
-            VOID_BOLT_SIZE / 2,
-            VOID_BOLT_SIZE / 2,
-            VOID_BOLT_SIZE / 2
-        );
-
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(
-            Texture.TextureFilter.Nearest,
-            Texture.TextureFilter.Nearest
-        );
-
-        pixmap.dispose();
-        return texture;
+    // The same flame animation, for flame shapes drawn elsewhere (e.g.
+    // around a ring zone) rather than on a traveling projectile.
+    public TextureRegion getFireballFrame(float stateTime) {
+        return fireballAnimation.getKeyFrame(stateTime);
     }
 
     private Texture createZoneCircle() {
@@ -466,6 +445,47 @@ public class GameTextures {
 
     public Texture getZoneCircle() {
         return zoneCircle;
+    }
+
+    private Texture createZoneRing() {
+        int size = 33;
+
+        Pixmap pixmap =
+            new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Transparent square canvas.
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        // White ring that WorldRenderer can tint. The hole matches Ember
+        // Circle's innerRadius-to-radius ratio (half the outer radius).
+        pixmap.setColor(1f, 1f, 1f, 1f);
+        pixmap.fillCircle(
+            size / 2,
+            size / 2,
+            size / 2
+        );
+
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fillCircle(
+            size / 2,
+            size / 2,
+            size / 4
+        );
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(
+            Texture.TextureFilter.Nearest,
+            Texture.TextureFilter.Nearest
+        );
+
+        pixmap.dispose();
+        return texture;
+    }
+
+    public Texture getZoneRing() {
+        return zoneRing;
     }
 
     public Texture getTargetDummy() {
@@ -518,6 +538,7 @@ public class GameTextures {
         lightningSheet.dispose();
         chargedPuddleSheet.dispose();
         zoneCircle.dispose();
+        zoneRing.dispose();
         targetDummy.dispose();
         fireballSheet.dispose();
     }

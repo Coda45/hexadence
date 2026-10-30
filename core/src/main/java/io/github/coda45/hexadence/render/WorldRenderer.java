@@ -36,6 +36,8 @@ import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 public class WorldRenderer {
 
     private static final float ZONE_FLASH_DURATION = 0.12f;
+    private static final int RING_FLAME_COUNT = 8;
+    private static final float RING_FLAME_SIZE = 0.35f;
 
     private final OrthogonalTiledMapRenderer mapRenderer;
     private final SpriteBatch batch;
@@ -602,8 +604,14 @@ public class WorldRenderer {
             );
         }
 
+        // A ring zone (hollow center) is drawn with a hole; others are a
+        // plain filled circle.
+        Texture zoneSprite = zone.getKind().innerRadius() > 0f
+            ? textures.getZoneRing()
+            : textures.getZoneCircle();
+
         batch.draw(
-            textures.getZoneCircle(),
+            zoneSprite,
             left,
             bottom,
             diameter,
@@ -611,6 +619,35 @@ public class WorldRenderer {
         );
 
         batch.setColor(Color.WHITE);
+
+        if (zone.getKind().innerRadius() > 0f) {
+            renderRingFlames(zone);
+        }
+    }
+
+    // Flame shapes spaced evenly around a ring zone's band, reusing the
+    // fireball animation so a ring reads as fire without new art.
+    private void renderRingFlames(Zone zone) {
+        float midRadius =
+            (zone.getKind().innerRadius() + zone.getRadius()) / 2f;
+
+        for (int i = 0; i < RING_FLAME_COUNT; i++) {
+            float angle = i * 360f / RING_FLAME_COUNT;
+            float flameX = zone.getX() + midRadius * MathUtils.cosDeg(angle);
+            float flameY = zone.getY() + midRadius * MathUtils.sinDeg(angle);
+
+            TextureRegion flame = textures.getFireballFrame(
+                projectileAnimationTime + i * 0.05f
+            );
+
+            batch.draw(
+                flame,
+                flameX - RING_FLAME_SIZE / 2f,
+                flameY - RING_FLAME_SIZE / 2f,
+                RING_FLAME_SIZE,
+                RING_FLAME_SIZE
+            );
+        }
     }
 
     private void renderPlayerHealthBar(
