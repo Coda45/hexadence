@@ -46,7 +46,7 @@ public final class Powers {
         .zone(ZoneKinds.RADIANT_CIRCLE)
         .build();
 
-    public static final Power EMBER_CIRCLE = Power.define(6, "Ember Circle")
+    public static final Power EMBER_CIRCLE = Power.define(9, "Ember Circle")
         .element(Element.FIRE)
         .form(PowerForm.ZONE)
         .behavior(Behavior.PLACED_ZONE)

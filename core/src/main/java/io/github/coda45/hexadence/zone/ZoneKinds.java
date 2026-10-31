@@ -35,7 +35,7 @@ public final class ZoneKinds {
     // plain runtime circle rather than custom art.
     private static final int EMBER_RED = 0xE63300B3;
 
-    public static final ZoneKind EMBER_CIRCLE = ZoneKind.base(10, "Ember Circle", Element.FIRE)
+    public static final ZoneKind EMBER_CIRCLE = ZoneKind.base(12, "Ember Circle", Element.FIRE)
         .radius(0.8f)
         .innerRadius(0.4f)
         .duration(5f)

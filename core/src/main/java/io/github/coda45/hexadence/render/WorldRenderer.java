@@ -605,7 +605,6 @@ public class WorldRenderer {
             );
         }
         
-        if (zone.getKind() == ZoneKinds.NULL_ZONE) {
 
 
         // A ring zone (hollow center) is drawn with a hole; others are a
