@@ -31,6 +31,20 @@ public final class ZoneKinds {
         .planned("Future Void field effects")
         .build();
 
+    // Ember Circle's tint: a burning red, named since the zone is drawn as a
+    // plain runtime circle rather than custom art.
+    private static final int EMBER_RED = 0xE63300B3;
+
+    public static final ZoneKind EMBER_CIRCLE = ZoneKind.base(10, "Ember Circle", Element.FIRE)
+        .radius(0.8f)
+        .innerRadius(0.4f)
+        .duration(5f)
+        .damagePerSecond(5f)
+        .tint(EMBER_RED)
+        .build();
+
+    // ---- Derived zones (produced by reactions; never react further) ----
+
     // Light zone power
     public static final ZoneKind RADIANT_CIRCLE =
         ZoneKind.base(11, "Radiant Circle", Element.LIGHT)
@@ -116,6 +130,7 @@ public final class ZoneKinds {
         PUDDLE,
         NULL_ZONE,
         RADIANT_CIRCLE,
+        EMBER_CIRCLE,
         STEAM,
         LAVA,
         QUICKSAND,
@@ -124,7 +139,7 @@ public final class ZoneKinds {
         INFERNO,
         CRYSTAL_WALL,
         SINGULARITY
-    );
+        );
 
     private static final Map<Integer, ZoneKind> BY_ID = indexById();
 
