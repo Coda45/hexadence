@@ -73,7 +73,7 @@ class PendingCommandTest {
     }
 
     @Test
-    void castRequestsAreConsumedOnlyOnce() {
+    void keepsHeldCastDuringShortCommandGap() {
         GameServer.PendingCommand pending =
             new GameServer.PendingCommand();
 
@@ -84,6 +84,24 @@ class PendingCommandTest {
                 true, false, false
             )
         );
+
+        assertTrue(pending.take().castSlot1());
+        assertTrue(pending.take().castSlot1());
+    }
+
+    @Test
+    void releaseStopsHeldCastAfterLatchedPressIsObserved() {
+        GameServer.PendingCommand pending =
+            new GameServer.PendingCommand();
+
+        pending.merge(
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                true, false, false
+            )
+        );
+        pending.merge(movingCommand(0f, 0f));
 
         assertTrue(pending.take().castSlot1());
         assertFalse(pending.take().castSlot1());

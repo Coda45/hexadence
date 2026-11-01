@@ -226,9 +226,9 @@ public class GameServer {
     }
 
     // Combines every command received from one client since the last tick.
-    // Movement and aim keep the newest value; the first cast request for each
-    // slot is retained so a click is never lost or redirected if two commands
-    // arrive before one tick. This matches PlayerInputController's latching.
+    // Movement, aim, and held casts keep the newest state. The first cast
+    // request for each slot is also latched so a quick press and release is not
+    // lost if both packets arrive before one server tick.
     static final class PendingCommand {
         // At 60 Hz this allows approximately 250 ms without a new command.
         static final int TIMEOUT_TICKS = 15;
@@ -237,7 +237,8 @@ public class GameServer {
         private float moveY;
         private float aimX;
         private float aimY;
-        private final CastRequest[] casts = new CastRequest[Loadout.SIZE];
+        private final CastRequest[] latestCasts = new CastRequest[Loadout.SIZE];
+        private final CastRequest[] latchedCasts = new CastRequest[Loadout.SIZE];
         private boolean receivedSinceLastTake;
         private int ticksWithoutCommand = TIMEOUT_TICKS;
 
@@ -247,11 +248,14 @@ public class GameServer {
             aimX = command.aimX();
             aimY = command.aimY();
 
-            for (CastRequest cast : command.casts()) {
+            for (int slot = 0; slot < latestCasts.length; slot++) {
+                CastRequest cast = command.castFor(slot);
+                latestCasts[slot] = cast;
+
                 // Preserve the target associated with the first request for
-                // this slot. Later movement-only packets cannot redirect it.
-                if (casts[cast.slot()] == null) {
-                    casts[cast.slot()] = cast;
+                // this slot until the simulation has observed that press.
+                if (cast != null && latchedCasts[slot] == null) {
+                    latchedCasts[slot] = cast;
                 }
             }
             receivedSinceLastTake = true;
@@ -274,9 +278,13 @@ public class GameServer {
             } else {
                 List<CastRequest> requestedCasts = new ArrayList<>(Loadout.SIZE);
 
-                for (int slot = 0; slot < casts.length; slot++) {
-                    if (casts[slot] != null) {
-                        requestedCasts.add(casts[slot]);
+                for (int slot = 0; slot < latestCasts.length; slot++) {
+                    CastRequest cast = latchedCasts[slot] != null
+                        ? latchedCasts[slot]
+                        : latestCasts[slot];
+
+                    if (cast != null) {
+                        requestedCasts.add(cast);
                     }
                 }
 
@@ -289,9 +297,10 @@ public class GameServer {
                 );
             }
             receivedSinceLastTake = false;
-            // Cast requests are one-shot. Movement receives the timeout grace.
-            for (int slot = 0; slot < casts.length; slot++) {
-                casts[slot] = null;
+            // The observed press is consumed, while the newest held state gets
+            // the same short packet-gap grace as movement and aim.
+            for (int slot = 0; slot < latchedCasts.length; slot++) {
+                latchedCasts[slot] = null;
             }
 
             return command;
