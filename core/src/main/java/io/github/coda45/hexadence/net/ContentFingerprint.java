@@ -38,7 +38,13 @@ public final class ContentFingerprint {
                 .append(' ').append(p.damage()).append(' ').append(p.cooldownSeconds())
                 .append(' ').append(p.speed()).append(' ').append(p.range())
                 .append(' ').append(p.radius())
+                .append(" channelTick=").append(p.channelTickSeconds())
                 .append(' ').append(p.zoneKind() == null ? 0 : p.zoneKind().id())
+                .append(" pellets=").append(p.pelletCount())
+                .append(" spread=").append(p.spreadDegrees())
+                .append(" dotDamage=").append(p.dotDamagePerTick())
+                .append(" dotTick=").append(p.dotTickSeconds())
+                .append(" dotDuration=").append(p.dotDurationSeconds())
                 .append(' ').append(p.iconPath()).append(' ').append(p.iconRimPath())
                 .append('\n');
         }
@@ -47,8 +53,21 @@ public final class ContentFingerprint {
             text.append("zone ").append(z.id()).append(' ').append(z.name())
                 .append(' ').append(z.origin()).append(' ').append(z.element())
                 .append(' ').append(z.weapon()).append(' ').append(z.radius())
+                .append(" innerRadius=").append(z.innerRadius())
                 .append(' ').append(z.duration()).append(' ').append(z.damagePerSecond())
                 .append(' ').append(z.speedMultiplier()).append(' ').append(z.coversPlayers())
+                .append(" solidHalfLength=").append(z.solidHalfLength())
+                .append(" solidHalfThickness=").append(z.solidHalfThickness())
+                .append(" maxHealth=").append(z.maxHealth())
+                .append(" captures=").append(z.capturesProjectiles())
+                .append(" pushImpulse=").append(z.pushImpulse())
+                .append(" gravityRadius=").append(z.gravityRadius())
+                .append(" gravityLevels=").append(z.gravityLevels())
+                .append(" projectileGravityStep=")
+                    .append(z.projectileGravityAccelerationStep())
+                .append(" playerGravityStep=").append(z.playerGravitySpeedStep())
+                .append(" explosionRadius=").append(z.expirationExplosionRadius())
+                .append(" explosionDamage=").append(z.expirationExplosionDamage())
                 .append(' ').append(z.tint())
                 .append('\n');
         }
@@ -61,7 +80,17 @@ public final class ContentFingerprint {
         }
 
         text.append("discharge ").append(Reactions.CHARGE_DISCHARGE_DAMAGE).append('\n');
-        text.append("strict ").append(LoadoutRules.REQUIRE_ONE_BASIC_TWO_ZONES).append('\n');
+        text.append("crystalSplitRange ")
+            .append(Powers.BEAM_OF_LIGHT_CRYSTAL_RANGE)
+            .append('\n');
+        text.append("crystalSplitDamageMultiplier ")
+            .append(Powers.BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER)
+            .append('\n');
+        text.append("loadoutBasicRange ")
+            .append(LoadoutRules.MIN_BASIC_POWERS)
+            .append(' ')
+            .append(LoadoutRules.MAX_BASIC_POWERS)
+            .append('\n');
         text.append("loadout ").append(Loadout.SIZE).append('\n');
 
         return text.toString();

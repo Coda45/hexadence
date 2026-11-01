@@ -216,7 +216,7 @@ public class JoinLobbyScreen implements Screen {
             connection != null
             && connection.status() == LobbyConnection.Status.STARTED
         ) {
-            game.setScreen(new ArenaScreen(connection.handOff()));
+            game.setScreen(new ArenaScreen(game, connection.handOff()));
             // Switching screens hides this screen but does not dispose it.
             dispose();
         } else if (leaveRequested) {

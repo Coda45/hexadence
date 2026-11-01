@@ -17,6 +17,9 @@ import io.github.coda45.hexadence.zone.ZoneKinds;
 // with different definitions is turned away with "update your game").
 public final class Powers {
 
+    public static final float BEAM_OF_LIGHT_CRYSTAL_RANGE = 6f;
+    public static final float BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER = 2f;
+
     // ---- Fire ----
 
     public static final Power FIREBALL = Power.define(1, "Fireball")
@@ -31,18 +34,15 @@ public final class Powers {
         .icon("ui/bg_fireball.png", "ui/rim_orange.png")
         .build();
         
-    // ---- Light ----
+    // ---- Fire zones ----
 
     public static final Power RADIANT_CIRCLE =
         Power.define(7, "Radiant Circle")
         .element(Element.LIGHT)
         .form(PowerForm.ZONE)
-        .behavior(Behavior.THROWN_ZONE)
-        .damage(0f)
+        .behavior(Behavior.PLACED_ZONE)
         .cooldown(1.2f)
-        .speed(12f)
         .range(8f)
-        .radius(0.12f)
         .zone(ZoneKinds.RADIANT_CIRCLE)
         .build();
 
@@ -97,6 +97,16 @@ public final class Powers {
         .radius(0.16f)
         .build();
 
+    public static final Power STONE_WALL = Power.define(10, "Stone Wall")
+        .element(Element.STONE)
+        .form(PowerForm.ZONE)
+        .behavior(Behavior.PLACED_ZONE)
+        .cooldown(3f)
+        .range(8f)
+        .zone(ZoneKinds.STONE_WALL)
+        .icon("ui/bg_stone_wall.png", "ui/rim_stone.png")
+        .build();
+
     // ---- Storm ----
 
     public static final Power LIGHTNING_BOLT = Power.define(3, "Lightning Bolt")
@@ -108,6 +118,32 @@ public final class Powers {
         .range(8f)           // PLACEHOLDER
         .radius(0.1f)        // PLACEHOLDER: half the beam's width
         .icon("ui/bg_lightning.png", "ui/rim_yellow.png")
+        .build();
+
+    public static final Power VORTEX = Power.define(11, "Vortex")
+        .element(Element.STORM)
+        .form(PowerForm.ZONE)
+        .behavior(Behavior.THROWN_ZONE)
+        .cooldown(4f)
+        .speed(12f)
+        .range(4f)
+        .radius(1f)          // traveling field uses its full effect radius
+        .zone(ZoneKinds.VORTEX)
+        .icon("ui/bg_vortex.png", "ui/rim_yellow.png")
+        .build();
+
+    // ---- Light ----
+
+    public static final Power BEAM_OF_LIGHT = Power.define(12, "Beam of Light")
+        .element(Element.LIGHT)
+        .form(PowerForm.BASIC)
+        .behavior(Behavior.BEAM)
+        .damage(2f)          // PLACEHOLDER: damage per channel tick
+        .cooldown(0.7f)      // PLACEHOLDER: begins when the channel is released
+        .channel(0.15f)      // PLACEHOLDER: damage tick interval while held
+        .range(4f)
+        .radius(0.12f)
+        .icon("ui/bg_beam_of_light.png", "ui/rim_light.png")
         .build();
 
     // ---- Void ----
@@ -128,12 +164,9 @@ public final class Powers {
     public static final Power NULL_ZONE = Power.define(6, "Null Zone")
         .element(Element.VOID)
         .form(PowerForm.ZONE)
-        .behavior(Behavior.THROWN_ZONE)
-        .damage(0f)
+        .behavior(Behavior.PLACED_ZONE)
         .cooldown(1f)
-        .speed(12f)
         .range(8f)
-        .radius(0.12f)
         .zone(ZoneKinds.NULL_ZONE)
         .build();
 
@@ -146,7 +179,10 @@ public final class Powers {
         WATER_PUDDLE,
         WATER_SHOTGUN,
         ROCK_SHARDS,
+        STONE_WALL,
         LIGHTNING_BOLT,
+        VORTEX,
+        BEAM_OF_LIGHT,
         VOID_ROT,
         NULL_ZONE,
         RADIANT_CIRCLE

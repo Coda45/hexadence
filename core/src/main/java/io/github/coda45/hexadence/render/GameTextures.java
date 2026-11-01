@@ -4,14 +4,17 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
-import io.github.coda45.hexadence.render.animation.FacingDirection;
 import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.Powers;
+import io.github.coda45.hexadence.render.animation.FacingDirection;
 
 public class GameTextures {
 
@@ -21,7 +24,12 @@ public class GameTextures {
     private final Texture zoneRing;
     private final Texture targetDummy;
     private final Texture rockShard;
-    private final Texture radiantBolt;
+    private final Texture beamOfLight;
+    private final Texture crystalBeam;
+    private final Texture stoneWallSheet;
+    private final Texture crystalWallSheet;
+    private final Texture wearLinesSheet;
+    private final Texture vortexSheet;
 
     private static final int PLAYER_FRAME_WIDTH = 24;
     private static final int PLAYER_FRAME_HEIGHT = 36;
@@ -38,6 +46,18 @@ public class GameTextures {
     private static final int LIGHTNING_FRAME_COUNT = 4;
     private static final float LIGHTNING_FRAME_DURATION = 0.05f;
     private static final int LIGHTNING_VARIANT_COUNT = 8;
+    private static final int LIGHT_BEAM_FRAME_WIDTH = 96;
+    private static final int LIGHT_BEAM_FRAME_HEIGHT = 24;
+    private static final int LIGHT_BEAM_FRAME_COUNT = 8;
+    private static final float LIGHT_BEAM_FRAME_DURATION = 0.1f;
+    private static final int CRYSTAL_BEAM_FRAME_WIDTH = 144;
+    private static final int CRYSTAL_BEAM_FRAME_HEIGHT = 24;
+    private static final int CRYSTAL_BEAM_FRAME_COUNT = 8;
+    private static final float CRYSTAL_BEAM_FRAME_DURATION = 0.1f;
+    private static final int STONE_WALL_FRAME_SIZE = 24;
+    private static final int STONE_WALL_FALLBACK_FRAME_COUNT = 6;
+    private static final float STONE_WALL_FRAME_DURATION = 0.06f;
+    private static final int WALL_WEAR_FRAME_COUNT = 3;
     private static final int CHARGED_PUDDLE_FRAME_SIZE = 48;
     private static final int CHARGED_PUDDLE_FRAME_COUNT = 8;
     private static final float CHARGED_PUDDLE_FRAME_DURATION = 0.08f;
@@ -51,19 +71,17 @@ public class GameTextures {
     private final TextureRegion waterBoltRegion;
     private final TextureRegion voidBoltRegion;
     private final Animation<TextureRegion> rockShardAnimation;
-    private final Animation<TextureRegion> radiantBoltAnimation;
+    private final Animation<TextureRegion> beamOfLightAnimation;
+    private final Animation<TextureRegion> crystalBeamAnimation;
+    private final Animation<TextureRegion> stoneWallAnimation;
+    private final Animation<TextureRegion> crystalWallAnimation;
+    private final TextureRegion[] wallWearFrames;
+    private final Animation<TextureRegion> vortexAnimation;
 
 
     // Directional sheet rows follow FacingDirection order, columns are frames.
-    private final EnumMap<
-        PlayerColor,
-        PlayerAnimationSet
-    > playerAnimationSets =
-        new EnumMap<>(PlayerColor.class);
-
-
-
-
+    private final EnumMap<PlayerColor, PlayerAnimationSet>
+        playerAnimationSets = new EnumMap<>(PlayerColor.class);
 
     public GameTextures() {
         for (PlayerColor color : PlayerColor.values()) {
@@ -99,12 +117,55 @@ public class GameTextures {
                 "spells/rock_shard.png"
             );
 
-        radiantBolt = loadPixelArt("spells/radiant_bolt.png");
-        radiantBoltAnimation =
-            createProjectileAnimation(
-                radiantBolt,
-                "spells/radiant_bolt.png"
-            );
+        beamOfLight = loadOptionalBeamSheet(
+            "spells/beam_of_light.png",
+            LIGHT_BEAM_FRAME_WIDTH,
+            LIGHT_BEAM_FRAME_HEIGHT,
+            LIGHT_BEAM_FRAME_COUNT,
+            new Color(1f, 0.88f, 0.35f, 0.8f)
+        );
+        beamOfLightAnimation = createBeamOfLightAnimation(beamOfLight);
+        crystalBeam = loadRequiredSheet(
+            "spells/crystal_beam.png",
+            CRYSTAL_BEAM_FRAME_WIDTH,
+            CRYSTAL_BEAM_FRAME_HEIGHT,
+            CRYSTAL_BEAM_FRAME_COUNT
+        );
+        crystalBeamAnimation = createCrystalBeamAnimation(crystalBeam);
+
+        stoneWallSheet = loadOptionalFixedFrameSheet(
+            "spells/stone_wall.png",
+            STONE_WALL_FRAME_SIZE,
+            STONE_WALL_FRAME_SIZE,
+            STONE_WALL_FALLBACK_FRAME_COUNT,
+            new Color(0.48f, 0.35f, 0.24f, 1f)
+        );
+        stoneWallAnimation = createStoneWallAnimation(stoneWallSheet);
+        crystalWallSheet = loadRequiredHorizontalSheet(
+            "spells/crystal_wall.png",
+            STONE_WALL_FRAME_SIZE,
+            STONE_WALL_FRAME_SIZE
+        );
+        crystalWallAnimation = createStoneWallAnimation(crystalWallSheet);
+        wearLinesSheet = loadRequiredSheet(
+            "effects/wear_lines.png",
+            STONE_WALL_FRAME_SIZE,
+            STONE_WALL_FRAME_SIZE,
+            WALL_WEAR_FRAME_COUNT
+        );
+        wallWearFrames = TextureRegion.split(
+            wearLinesSheet,
+            STONE_WALL_FRAME_SIZE,
+            STONE_WALL_FRAME_SIZE
+        )[0];
+        vortexSheet = loadOptionalFixedFrameSheet(
+            "spells/Vortex.png",
+            48,
+            48,
+            8,
+            new Color(0.45f, 0.8f, 1f, 0.8f)
+        );
+        vortexAnimation = createVortexAnimation(vortexSheet);
 
         voidBolt = loadPixelArt("spells/void_rot.png");
         voidBoltRegion = new TextureRegion(voidBolt);
@@ -327,6 +388,59 @@ public class GameTextures {
         return animation;
     }
 
+    private Animation<TextureRegion> createVortexAnimation(Texture sheet) {
+        TextureRegion[][] split = TextureRegion.split(sheet, 48, 48);
+
+        Animation<TextureRegion> animation = new Animation<>(0.1f, split[0]);
+        animation.setPlayMode(Animation.PlayMode.LOOP);
+        return animation;
+    }
+
+    private Animation<TextureRegion> createBeamOfLightAnimation(Texture sheet) {
+        TextureRegion[][] split = TextureRegion.split(
+            sheet,
+            LIGHT_BEAM_FRAME_WIDTH,
+            LIGHT_BEAM_FRAME_HEIGHT
+        );
+
+        Animation<TextureRegion> animation = new Animation<>(
+            LIGHT_BEAM_FRAME_DURATION,
+            split[0]
+        );
+        animation.setPlayMode(Animation.PlayMode.LOOP);
+        return animation;
+    }
+
+    private Animation<TextureRegion> createCrystalBeamAnimation(Texture sheet) {
+        TextureRegion[][] split = TextureRegion.split(
+            sheet,
+            CRYSTAL_BEAM_FRAME_WIDTH,
+            CRYSTAL_BEAM_FRAME_HEIGHT
+        );
+
+        Animation<TextureRegion> animation = new Animation<>(
+            CRYSTAL_BEAM_FRAME_DURATION,
+            split[0]
+        );
+        animation.setPlayMode(Animation.PlayMode.LOOP);
+        return animation;
+    }
+
+    private Animation<TextureRegion> createStoneWallAnimation(Texture sheet) {
+        TextureRegion[][] split = TextureRegion.split(
+            sheet,
+            STONE_WALL_FRAME_SIZE,
+            STONE_WALL_FRAME_SIZE
+        );
+
+        Animation<TextureRegion> animation = new Animation<>(
+            STONE_WALL_FRAME_DURATION,
+            split[0]
+        );
+        animation.setPlayMode(Animation.PlayMode.NORMAL);
+        return animation;
+    }
+
     public TextureRegion getLightningFrame(
         int variantIndex,
         float stateTime
@@ -344,6 +458,33 @@ public class GameTextures {
         return lightningAnimations
             .get(0)
             .getAnimationDuration();
+    }
+
+    public TextureRegion getBeamFrame(
+        Power power,
+        int variantIndex,
+        float stateTime,
+        boolean crystalSplit
+    ) {
+        if (crystalSplit) {
+            return crystalBeamAnimation.getKeyFrame(stateTime, true);
+        }
+
+        if (power == Powers.BEAM_OF_LIGHT) {
+            return beamOfLightAnimation.getKeyFrame(stateTime, true);
+        }
+
+        return getLightningFrame(variantIndex, stateTime);
+    }
+
+    public float getBeamAnimationDuration(Power power, boolean crystalSplit) {
+        if (crystalSplit) {
+            return crystalBeamAnimation.getAnimationDuration();
+        }
+
+        return power == Powers.BEAM_OF_LIGHT
+            ? beamOfLightAnimation.getAnimationDuration()
+            : getLightningAnimationDuration();
     }
 
     private List<Animation<TextureRegion>>
@@ -424,6 +565,210 @@ public class GameTextures {
         return texture;
     }
 
+    // New content art may still be in progress. A missing or malformed sheet
+    // should look temporary in-game, not prevent the arena from opening.
+    private Texture loadOptionalBeamSheet(
+        String path,
+        int frameWidth,
+        int frameHeight,
+        int frameCount,
+        Color fallbackColor
+    ) {
+        Texture texture = tryLoadPixelArt(path);
+
+        if (
+            texture != null
+            && texture.getHeight() == frameHeight
+            && texture.getWidth() == frameWidth * frameCount
+        ) {
+            return texture;
+        }
+
+        discardInvalidTexture(path, texture);
+        return createBeamPlaceholder(
+            frameWidth,
+            frameHeight,
+            frameCount,
+            fallbackColor
+        );
+    }
+
+    private Texture loadRequiredSheet(
+        String path,
+        int frameWidth,
+        int frameHeight,
+        int frameCount
+    ) {
+        Texture texture = loadPixelArt(path);
+        int expectedWidth = frameWidth * frameCount;
+
+        if (
+            texture.getWidth() == expectedWidth
+                && texture.getHeight() == frameHeight
+        ) {
+            return texture;
+        }
+
+        int actualWidth = texture.getWidth();
+        int actualHeight = texture.getHeight();
+        texture.dispose();
+        throw new IllegalStateException(
+            "Expected " + frameCount + " horizontal "
+                + frameWidth + "x" + frameHeight + " frames in " + path
+                + ", but found " + actualWidth + "x" + actualHeight
+        );
+    }
+
+    private Texture loadRequiredHorizontalSheet(
+        String path,
+        int frameWidth,
+        int frameHeight
+    ) {
+        Texture texture = loadPixelArt(path);
+
+        if (
+            texture.getHeight() == frameHeight
+                && texture.getWidth() >= frameWidth
+                && texture.getWidth() % frameWidth == 0
+        ) {
+            return texture;
+        }
+
+        int actualWidth = texture.getWidth();
+        int actualHeight = texture.getHeight();
+        texture.dispose();
+        throw new IllegalStateException(
+            "Expected horizontal " + frameWidth + "x" + frameHeight
+                + " frames in " + path + ", but found "
+                + actualWidth + "x" + actualHeight
+        );
+    }
+
+    private Texture loadOptionalFixedFrameSheet(
+        String path,
+        int frameWidth,
+        int frameHeight,
+        int fallbackFrameCount,
+        Color fallbackColor
+    ) {
+        Texture texture = tryLoadPixelArt(path);
+
+        if (
+            texture != null
+            && texture.getHeight() == frameHeight
+            && texture.getWidth() >= frameWidth
+            && texture.getWidth() % frameWidth == 0
+        ) {
+            return texture;
+        }
+
+        discardInvalidTexture(path, texture);
+        return createPlaceholderSheet(
+            frameWidth,
+            frameHeight,
+            fallbackFrameCount,
+            fallbackColor
+        );
+    }
+
+    private Texture tryLoadPixelArt(String path) {
+        if (!Gdx.files.internal(path).exists()) {
+            return null;
+        }
+
+        try {
+            return loadPixelArt(path);
+        } catch (RuntimeException exception) {
+            Gdx.app.error(
+                "GameTextures",
+                "Could not load optional art " + path + "; using a placeholder.",
+                exception
+            );
+            return null;
+        }
+    }
+
+    private void discardInvalidTexture(String path, Texture texture) {
+        if (texture != null) {
+            texture.dispose();
+        }
+
+        Gdx.app.log(
+            "GameTextures",
+            "Optional art " + path + " has unsupported dimensions; using a placeholder."
+        );
+    }
+
+    private Texture createBeamPlaceholder(
+        int frameWidth,
+        int frameHeight,
+        int frameCount,
+        Color color
+    ) {
+        int width = frameWidth * frameCount;
+        Pixmap pixmap = new Pixmap(width, frameHeight, Pixmap.Format.RGBA8888);
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+
+        for (int frame = 0; frame < frameCount; frame++) {
+            int left = frame * frameWidth;
+            pixmap.setColor(color.r, color.g, color.b, color.a);
+            pixmap.fillRectangle(
+                left,
+                frameHeight / 2 - 2,
+                frameWidth,
+                5
+            );
+            pixmap.setColor(Color.WHITE);
+            pixmap.fillRectangle(
+                left,
+                frameHeight / 2,
+                frameWidth,
+                1
+            );
+        }
+
+        return textureFromPixmap(pixmap);
+    }
+
+    private Texture createPlaceholderSheet(
+        int frameWidth,
+        int frameHeight,
+        int frameCount,
+        Color color
+    ) {
+        Pixmap pixmap = new Pixmap(
+            frameWidth * frameCount,
+            frameHeight,
+            Pixmap.Format.RGBA8888
+        );
+        pixmap.setColor(0f, 0f, 0f, 0f);
+        pixmap.fill();
+        pixmap.setColor(color);
+
+        int radius = Math.max(2, Math.min(frameWidth, frameHeight) / 2 - 2);
+
+        for (int frame = 0; frame < frameCount; frame++) {
+            pixmap.fillCircle(
+                frame * frameWidth + frameWidth / 2,
+                frameHeight / 2,
+                radius
+            );
+        }
+
+        return textureFromPixmap(pixmap);
+    }
+
+    private Texture textureFromPixmap(Pixmap pixmap) {
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        texture.setFilter(
+            Texture.TextureFilter.Nearest,
+            Texture.TextureFilter.Nearest
+        );
+        return texture;
+    }
+
     public TextureRegion getPlayerFrame(
         PlayerColor color,
         FacingDirection direction,
@@ -452,14 +797,17 @@ public class GameTextures {
         Power power,
         float stateTime
     ) {
+        if (power == Powers.VORTEX) {
+            return vortexAnimation.getKeyFrame(stateTime);
+        }
+
         return switch (power.element()) {
             case WATER -> waterBoltRegion;
             case VOID -> voidBoltRegion;
             case STONE ->
                 rockShardAnimation.getKeyFrame(stateTime);
 
-            case LIGHT ->
-                radiantBoltAnimation.getKeyFrame(stateTime);
+            case LIGHT -> fireballAnimation.getKeyFrame(stateTime);
 
             default -> fireballAnimation.getKeyFrame(stateTime);
         };
@@ -469,6 +817,10 @@ public class GameTextures {
     // around a ring zone) rather than on a traveling projectile.
     public TextureRegion getFireballFrame(float stateTime) {
         return fireballAnimation.getKeyFrame(stateTime);
+    }
+
+    public float getFireballAnimationDuration() {
+        return fireballAnimation.getAnimationDuration();
     }
 
     private Texture createZoneCircle() {
@@ -544,6 +896,29 @@ public class GameTextures {
         return zoneRing;
     }
 
+    public TextureRegion getStoneWallFrame(float stateTime) {
+        return stoneWallAnimation.getKeyFrame(stateTime, false);
+    }
+
+    public TextureRegion getCrystalWallFrame(float stateTime) {
+        return crystalWallAnimation.getKeyFrame(stateTime, false);
+    }
+
+    public TextureRegion getWallWearFrame(int damageStage) {
+        if (damageStage < 1 || damageStage > wallWearFrames.length) {
+            throw new IllegalArgumentException(
+                "Wall wear damage stage must be between 1 and "
+                    + wallWearFrames.length
+            );
+        }
+
+        return wallWearFrames[damageStage - 1];
+    }
+
+    public TextureRegion getVortexFrame(float stateTime) {
+        return vortexAnimation.getKeyFrame(stateTime);
+    }
+
     public Texture getTargetDummy() {
         return targetDummy;
     }
@@ -591,10 +966,13 @@ public class GameTextures {
         }
         waterBolt.dispose();
         voidBolt.dispose();
-        waterBolt.dispose();
-        voidBolt.dispose();
         rockShard.dispose();
-        radiantBolt.dispose();
+        beamOfLight.dispose();
+        crystalBeam.dispose();
+        stoneWallSheet.dispose();
+        crystalWallSheet.dispose();
+        wearLinesSheet.dispose();
+        vortexSheet.dispose();
         lightningSheet.dispose();
         chargedPuddleSheet.dispose();
         zoneCircle.dispose();

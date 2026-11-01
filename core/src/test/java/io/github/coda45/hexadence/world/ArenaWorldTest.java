@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
+import com.badlogic.gdx.math.MathUtils;
+
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
@@ -15,10 +17,68 @@ import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Powers;
+import io.github.coda45.hexadence.zone.ZoneKinds;
 
 class ArenaWorldTest {
 
     private static final float EPSILON = 0.0001f;
+
+    @Test
+    void crystalWallSplitsLightBeamIntoTwoDamagingBranches() {
+        float castY = 4.75f;
+        float branchDistance = 3f;
+        float branchX = 3f + MathUtils.cosDeg(22.5f) * branchDistance;
+        float branchOffsetY = MathUtils.sinDeg(22.5f) * branchDistance;
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 4f),
+            List.of(
+                new SpawnPoint(branchX, castY - branchOffsetY),
+                new SpawnPoint(branchX, castY + branchOffsetY)
+            )
+        );
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.BEAM_OF_LIGHT,
+            Powers.WATER_PUDDLE,
+            Powers.STONE_WALL
+        )));
+        Zone crystal = Zone.create(
+            99,
+            ZoneKinds.CRYSTAL_WALL,
+            3f,
+            castY,
+            Zone.NO_PLAYER
+        );
+        world.getZones().add(crystal);
+
+        StepResult result = world.step(
+            new PlayerCommand(0f, 0f, 1f, 0f, true, false, false)
+        );
+
+        assertEquals(
+            100f - Powers.BEAM_OF_LIGHT.damage()
+                * Powers.BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER,
+            world.getDummies().get(0).getHealth(),
+            EPSILON
+        );
+        assertEquals(
+            100f - Powers.BEAM_OF_LIGHT.damage()
+                * Powers.BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER,
+            world.getDummies().get(1).getHealth(),
+            EPSILON
+        );
+        List<BeamStrikeEvent> strikes = result.events().stream()
+            .filter(BeamStrikeEvent.class::isInstance)
+            .map(BeamStrikeEvent.class::cast)
+            .toList();
+        assertEquals(3, strikes.size());
+        assertTrue(strikes.stream().anyMatch(strike -> strike.branchIndex() == 1));
+        assertTrue(strikes.stream().anyMatch(strike -> strike.branchIndex() == 2));
+        assertEquals(
+            ZoneKinds.CRYSTAL_WALL.maxHealth(),
+            crystal.getHealth(),
+            EPSILON
+        );
+    }
 
     @Test
     void createsWorldFromPlainArenaDefinition() {
@@ -361,6 +421,11 @@ class ArenaWorldTest {
                     )
                 )
             );
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.FIREBALL,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
 
         float healthBefore =
             world.getDummies().get(0).getHealth();
@@ -382,14 +447,14 @@ class ArenaWorldTest {
         );
         assertEquals(1, result.events().size());
 
-        LightningStrikeEvent strike =
+        BeamStrikeEvent strike =
             assertInstanceOf(
-                LightningStrikeEvent.class,
+                BeamStrikeEvent.class,
                 result.events().get(0)
             );
 
         assertEquals(
-            LightningStrikeEvent.EndReason.TERRAIN,
+            BeamStrikeEvent.EndReason.TERRAIN,
             strike.endReason()
         );
 
@@ -457,14 +522,14 @@ class ArenaWorldTest {
         assertEquals(1L, result.tick());
         assertEquals(1, result.events().size());
 
-        LightningStrikeEvent strike =
+        BeamStrikeEvent strike =
             assertInstanceOf(
-                LightningStrikeEvent.class,
+                BeamStrikeEvent.class,
                 result.events().get(0)
             );
 
         assertEquals(
-            LightningStrikeEvent.EndReason.RANGE_LIMIT,
+            BeamStrikeEvent.EndReason.RANGE_LIMIT,
             strike.endReason()
         );
 
@@ -578,13 +643,13 @@ class ArenaWorldTest {
             EPSILON
         );
 
-        LightningStrikeEvent strike =
+        BeamStrikeEvent strike =
             assertInstanceOf(
-                LightningStrikeEvent.class,
+                BeamStrikeEvent.class,
                 result.events().get(0)
             );
 
-        assertEquals(LightningStrikeEvent.EndReason.PLAYER, strike.endReason());
+        assertEquals(BeamStrikeEvent.EndReason.PLAYER, strike.endReason());
     }
 
     @Test
@@ -796,13 +861,19 @@ class ArenaWorldTest {
         List<SpawnPoint> playerSpawns,
         List<SpawnPoint> dummySpawns
     ) {
-        return new ArenaWorld(
+        ArenaWorld world = new ArenaWorld(
             new ArenaDefinition(
                 new ArenaCollision(new float[10][10]),
                 playerSpawns,
                 dummySpawns
             )
         );
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.FIREBALL,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+        return world;
     }
 
     private ArenaWorld createEmptyWorld(
@@ -819,6 +890,12 @@ class ArenaWorldTest {
                 dummySpawns
             );
 
-        return new ArenaWorld(definition);
+        ArenaWorld world = new ArenaWorld(definition);
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.FIREBALL,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+        return world;
     }
 }

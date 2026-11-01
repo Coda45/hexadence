@@ -211,8 +211,8 @@ class RoomsTest {
 
     private static final Loadout BEAM_FIRST = new Loadout(List.of(
         Powers.LIGHTNING_BOLT,
-        Powers.FIREBALL,
-        Powers.WATER_PUDDLE
+        Powers.WATER_PUDDLE,
+        Powers.EMBER_CIRCLE
     ));
 
     @Test

@@ -62,7 +62,7 @@ public record WorldSnapshot(
     ) {
     }
 
-    // The direction is fixed at cast time, so clients can draw it as-is.
+    // Direction is authoritative and may change in a Vortex or Singularity.
     public record ProjectileState(
         int id,
         Power power,
@@ -81,6 +81,7 @@ public record WorldSnapshot(
         float x,
         float y,
         float radius,
+        float health,
         boolean electrified,
         int damageOwnerPlayerId
     ) {

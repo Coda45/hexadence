@@ -29,6 +29,7 @@ public final class Power {
     private final float speed;
     private final float range;
     private final float radius;
+    private final float channelTickSeconds;
 
     private final ZoneKind zoneKind;
 
@@ -54,6 +55,7 @@ public final class Power {
         this.speed = b.speed;
         this.range = b.range;
         this.radius = b.radius;
+        this.channelTickSeconds = b.channelTickSeconds;
         this.zoneKind = b.zoneKind;
         this.pelletCount = b.pelletCount;
         this.spreadDegrees = b.spreadDegrees;
@@ -87,6 +89,10 @@ public final class Power {
     public float range() { return range; }
     // Projectile radius, or half the width of a beam, in tiles.
     public float radius() { return radius; }
+    // Positive for a held beam. Damage is sampled at this interval and the
+    // regular cooldown begins only when the player releases the binding.
+    public float channelTickSeconds() { return channelTickSeconds; }
+    public boolean isChanneled() { return channelTickSeconds > 0f; }
 
     // Zone left behind, for powers that create one; otherwise null. Its size
     // and lifetime are part of the zone's own definition in ZoneKinds.
@@ -136,6 +142,7 @@ public final class Power {
         private float speed;
         private float range;
         private float radius;
+        private float channelTickSeconds;
         private ZoneKind zoneKind;
         private int pelletCount = 1;
         private float spreadDegrees;
@@ -159,6 +166,11 @@ public final class Power {
         public Builder speed(float tilesPerSecond) { this.speed = tilesPerSecond; return this; }
         public Builder range(float tiles) { this.range = tiles; return this; }
         public Builder radius(float tiles) { this.radius = tiles; return this; }
+
+        public Builder channel(float tickSeconds) {
+            this.channelTickSeconds = tickSeconds;
+            return this;
+        }
 
         public Builder zone(ZoneKind kind) {
             this.zoneKind = kind;
@@ -205,6 +217,11 @@ public final class Power {
             require(damage >= 0f, "damage cannot be negative");
             require(range > 0f, "range must be above 0");
             require(radius >= 0f, "radius cannot be negative");
+            require(channelTickSeconds >= 0f, "channel tick cannot be negative");
+
+            if (channelTickSeconds > 0f) {
+                require(behavior == Behavior.BEAM, "channel(...) needs behavior BEAM");
+            }
 
             if (behavior.travels()) {
                 require(speed > 0f, "speed must be above 0 for a power that travels");

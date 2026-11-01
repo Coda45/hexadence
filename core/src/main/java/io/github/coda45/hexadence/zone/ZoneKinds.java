@@ -43,27 +43,39 @@ public final class ZoneKinds {
         .tint(EMBER_RED)
         .build();
 
-    // ---- Derived zones (produced by reactions; never react further) ----
+    public static final ZoneKind STONE_WALL = ZoneKind.base(13, "Stone Wall", Element.STONE)
+        .radius(0.5f)
+        .duration(5f)
+        .solidWall(0.5f, 0.5f)
+        .health(24f)
+        .tint(0x8A7968FF)
+        .build();
 
-    // Light zone power
+    public static final ZoneKind VORTEX = ZoneKind.base(14, "Vortex", Element.STORM)
+        .radius(1f)
+        .duration(6f)
+        .capturesProjectiles()
+        .pushesPlayers(9f)
+        .tint(0xB8E6FFFF)
+        .build();
+
+    // Light zone power. Until teams exist, its haste benefits anyone inside.
     public static final ZoneKind RADIANT_CIRCLE =
         ZoneKind.base(11, "Radiant Circle", Element.LIGHT)
         .radius(0.8f)
         .duration(3f)
+        .speedMultiplier(1.25f)
         .tint(0xFFF8CCB3)
-        .planned("Buff allies standing inside")
         .build();
 
     // ---- Derived zones (produced by reactions; never react further) ----
-    
-    
+
     // Fire on Water
     public static final ZoneKind STEAM = ZoneKind.derived(2, "Steam")
         .radius(1f)                 // PLACEHOLDER
         .duration(3f)               // PLACEHOLDER
         .coversPlayers()
         .tint(0xCCCCCCD9)
-        .planned("Blocks vision")
         .build();
 
     // Fire on Stone
@@ -109,18 +121,20 @@ public final class ZoneKinds {
 
     // Light on Stone
     public static final ZoneKind CRYSTAL_WALL = ZoneKind.derived(8, "Crystal Wall")
-        .radius(1f)                 // PLACEHOLDER
+        .radius(0.5f)
         .duration(5f)               // PLACEHOLDER
+        .solidWall(0.5f, 0.5f)
+        .health(24f)
         .tint(0xE6F2FFCC)
-        .planned("Blocks movement and projectiles")
         .build();
 
     // Void on Storm
     public static final ZoneKind SINGULARITY = ZoneKind.derived(9, "Singularity")
         .radius(1.2f)               // PLACEHOLDER
         .duration(3f)               // PLACEHOLDER
+        .gravity(5f, 5, 12f, 1.5f)
+        .expirationExplosion(3f, 30f)
         .tint(0x4D1A66CC)
-        .planned("Pulls players toward its center")
         .build();
 
     // ---- Registry ----
@@ -131,6 +145,8 @@ public final class ZoneKinds {
         NULL_ZONE,
         RADIANT_CIRCLE,
         EMBER_CIRCLE,
+        STONE_WALL,
+        VORTEX,
         STEAM,
         LAVA,
         QUICKSAND,

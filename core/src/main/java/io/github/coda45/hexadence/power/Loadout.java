@@ -6,9 +6,8 @@ import java.util.Objects;
 // The three powers a player brings into a match, one per slot. Slot 1 is cast
 // with the left mouse button, slot 2 with the right, slot 3 with Q.
 //
-// The intended rule is one BASIC power and two ZONE powers, chosen in the
-// lobby. Until lobby selection exists, everyone gets DEFAULT, which keeps the
-// three powers the game has so far.
+// Legal builds mix both forms: one BASIC and two ZONE powers, or two BASIC and
+// one ZONE power. DEFAULT is the initial legal build.
 public record Loadout(List<Power> slots) {
 
     public static final int SIZE = 3;
@@ -16,7 +15,7 @@ public record Loadout(List<Power> slots) {
     public static final Loadout DEFAULT = new Loadout(List.of(
         Powers.FIREBALL,
         Powers.WATER_PUDDLE,
-        Powers.LIGHTNING_BOLT
+        Powers.EMBER_CIRCLE
     ));
 
     public Loadout {

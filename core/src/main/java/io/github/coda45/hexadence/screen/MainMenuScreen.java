@@ -350,7 +350,7 @@ public class MainMenuScreen implements Screen {
 
     private void startTraining() {
         game.setScreen(
-            new ArenaScreen(ArenaMaps.TRAINING)
+            new ArenaScreen(game, ArenaMaps.TRAINING)
         );
 
         dispose();

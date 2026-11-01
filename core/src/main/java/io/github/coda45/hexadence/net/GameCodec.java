@@ -12,7 +12,8 @@ import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.zone.ZoneKind;
 import io.github.coda45.hexadence.zone.ZoneKinds;
-import io.github.coda45.hexadence.world.LightningStrikeEvent;
+import io.github.coda45.hexadence.world.BeamChannelEndEvent;
+import io.github.coda45.hexadence.world.BeamStrikeEvent;
 import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -41,12 +42,16 @@ public final class GameCodec {
     // 9: lobby drafting (SelectLoadout, locked count in LobbyState).
     // 10: ClientHello carries a content fingerprint (see ContentFingerprint).
     // 11: commands carry bounded per-slot cast requests with preserved targets.
-    public static final int PROTOCOL_VERSION = 11;
+    // 12: beam events identify their power so clients select the right visual.
+    // 13: held beams identify their caster and send an explicit release event.
+    // 14: zone snapshots carry health for destructible solid zones.
+    // 15: beam events identify primary and crystal-split branches.
+    public static final int PROTOCOL_VERSION = 15;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
     private static final byte TYPE_SNAPSHOT = 3;
-    private static final byte TYPE_LIGHTNING_EVENT = 4;
+    private static final byte TYPE_BEAM_EVENT = 4;
     private static final byte TYPE_CLIENT_HELLO = 5;
     private static final byte TYPE_ZONE_CHARGE_CHANGED = 6;
     private static final byte TYPE_JOIN_REJECTED = 7;
@@ -56,6 +61,7 @@ public final class GameCodec {
     private static final byte TYPE_ROOM_CLOSED = 11;
     private static final byte TYPE_KEEP_ALIVE = 12;
     private static final byte TYPE_SELECT_LOADOUT = 13;
+    private static final byte TYPE_BEAM_CHANNEL_END = 14;
 
     private static final int LENGTH_FIELD_BYTES = 4;
     private static final int MAX_MAP_ID_BYTES = 128;
@@ -112,8 +118,12 @@ public final class GameCodec {
                 writeRoomCode(out, welcome.roomCode());
             } else if (message instanceof WorldSnapshot snapshot) {
                 writeSnapshot(out, snapshot);
-            } else if (message instanceof LightningStrikeEvent event) {
-                writeLightningEvent(out, event);
+            } else if (message instanceof BeamStrikeEvent event) {
+                writeBeamEvent(out, event);
+            } else if (message instanceof BeamChannelEndEvent event) {
+                out.writeByte(TYPE_BEAM_CHANNEL_END);
+                out.writeInt(event.ownerPlayerId());
+                writePower(out, event.power());
             } else if (message instanceof ZoneChargeChangedEvent event) {
                 out.writeByte(TYPE_ZONE_CHARGE_CHANGED);
                 out.writeInt(event.zoneId());
@@ -174,7 +184,11 @@ public final class GameCodec {
                     readRoomCode(in)
                 ));
                 case TYPE_SNAPSHOT -> out.add(readSnapshot(in));
-                case TYPE_LIGHTNING_EVENT -> out.add(readLightningEvent(in));
+                case TYPE_BEAM_EVENT -> out.add(readBeamEvent(in));
+                case TYPE_BEAM_CHANNEL_END -> out.add(new BeamChannelEndEvent(
+                    in.readInt(),
+                    readPower(in)
+                ));
                 case TYPE_ZONE_CHARGE_CHANGED -> out.add(new ZoneChargeChangedEvent(in.readInt(), in.readBoolean()));
                 case TYPE_JOIN_REJECTED -> out.add(new JoinRejected(
                     rejectReasonFromId(in.readUnsignedByte())
@@ -303,6 +317,7 @@ public final class GameCodec {
             out.writeFloat(z.x());
             out.writeFloat(z.y());
             out.writeFloat(z.radius());
+            out.writeFloat(z.health());
             out.writeBoolean(z.electrified());
             out.writeInt(z.damageOwnerPlayerId());
         }
@@ -362,6 +377,7 @@ public final class GameCodec {
             zones.add(new WorldSnapshot.ZoneState(
                 in.readInt(),
                 readZoneKind(in),
+                in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),
@@ -528,53 +544,60 @@ public final class GameCodec {
         return kind;
     }
 
-    private static int lightningEndReasonId(
-        LightningStrikeEvent.EndReason reason
+    private static int beamEndReasonId(
+        BeamStrikeEvent.EndReason reason
     ) {
         return switch (reason) {
             case RANGE_LIMIT -> 1;
             case TERRAIN -> 2;
-            case PUDDLE -> 3;
+            case WALL -> 6;
+            case ZONE_REACTION -> 3;
             case DUMMY -> 4;
             case PLAYER -> 5;
         };
     }
 
-    private static LightningStrikeEvent.EndReason
-    lightningEndReasonFromId(int id) {
+    private static BeamStrikeEvent.EndReason beamEndReasonFromId(int id) {
         return switch (id) {
-            case 1 -> LightningStrikeEvent.EndReason.RANGE_LIMIT;
-            case 2 -> LightningStrikeEvent.EndReason.TERRAIN;
-            case 3 -> LightningStrikeEvent.EndReason.PUDDLE;
-            case 4 -> LightningStrikeEvent.EndReason.DUMMY;
-            case 5 -> LightningStrikeEvent.EndReason.PLAYER;
+            case 1 -> BeamStrikeEvent.EndReason.RANGE_LIMIT;
+            case 2 -> BeamStrikeEvent.EndReason.TERRAIN;
+            case 3 -> BeamStrikeEvent.EndReason.ZONE_REACTION;
+            case 4 -> BeamStrikeEvent.EndReason.DUMMY;
+            case 5 -> BeamStrikeEvent.EndReason.PLAYER;
+            case 6 -> BeamStrikeEvent.EndReason.WALL;
             default -> throw new IllegalArgumentException(
-                "Unknown Lightning end-reason ID: " + id
+                "Unknown beam end-reason ID: " + id
             );
         };
     }
 
-    private static void writeLightningEvent(
+    private static void writeBeamEvent(
         ByteBuf out,
-        LightningStrikeEvent event
+        BeamStrikeEvent event
     ) {
-        out.writeByte(TYPE_LIGHTNING_EVENT);
+        out.writeByte(TYPE_BEAM_EVENT);
+        out.writeInt(event.ownerPlayerId());
+        writePower(out, event.power());
         out.writeFloat(event.startX());
         out.writeFloat(event.startY());
         out.writeFloat(event.endX());
         out.writeFloat(event.endY());
-        out.writeByte(lightningEndReasonId(event.endReason()));
+        out.writeByte(beamEndReasonId(event.endReason()));
+        out.writeByte(event.branchIndex());
     }
 
-    private static LightningStrikeEvent readLightningEvent(
+    private static BeamStrikeEvent readBeamEvent(
         ByteBuf in
     ) {
-        return new LightningStrikeEvent(
+        return new BeamStrikeEvent(
+            in.readInt(),
+            readPower(in),
             in.readFloat(),
             in.readFloat(),
             in.readFloat(),
             in.readFloat(),
-            lightningEndReasonFromId(in.readUnsignedByte())
+            beamEndReasonFromId(in.readUnsignedByte()),
+            in.readUnsignedByte()
         );
     }
 }

@@ -23,6 +23,7 @@ public class Zone {
     private int damageOwnerPlayerId;
     // Set by a CHARGE reaction; cleared when the charge discharges.
     private boolean electrified;
+    private float health;
 
     private Zone(
         int id,
@@ -40,6 +41,7 @@ public class Zone {
         this.radius = radius;
         this.remainingSeconds = duration;
         this.damageOwnerPlayerId = damageOwnerPlayerId;
+        this.health = kind.maxHealth();
     }
 
     // A zone with its kind's own size and lifetime.
@@ -50,7 +52,15 @@ public class Zone {
         float y,
         int ownerPlayerId
     ) {
-        return new Zone(id, kind, x, y, kind.radius(), kind.duration(), ownerPlayerId);
+        return new Zone(
+            id,
+            kind,
+            x,
+            y,
+            kind.radius(),
+            kind.duration(),
+            ownerPlayerId
+        );
     }
 
     // A zone with an explicit size and lifetime, as a snapshot gives them.
@@ -126,6 +136,32 @@ public class Zone {
         return remainingSeconds <= 0f;
     }
 
+    public boolean isDestructible() {
+        return kind.maxHealth() > 0f;
+    }
+
+    public float getHealth() {
+        return health;
+    }
+
+    public float getHealthFraction() {
+        return isDestructible() ? health / kind.maxHealth() : 1f;
+    }
+
+    public void takeDamage(float amount) {
+        if (isDestructible() && amount > 0f) {
+            health = Math.max(0f, health - amount);
+        }
+    }
+
+    public boolean hasBeenDestroyed() {
+        return isDestructible() && health <= 0f;
+    }
+
+    public void restoreHealth(float value) {
+        health = Math.max(0f, Math.min(kind.maxHealth(), value));
+    }
+
     public ZoneKind getKind() {
         return kind;
     }
@@ -141,4 +177,5 @@ public class Zone {
     public float getRadius() {
         return radius;
     }
+
 }

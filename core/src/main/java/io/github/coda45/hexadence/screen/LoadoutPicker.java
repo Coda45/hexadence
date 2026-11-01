@@ -15,8 +15,8 @@ import io.github.coda45.hexadence.power.LoadoutRules;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
 
-// The lobby's power draft: one row per loadout slot, with arrows to cycle
-// through every power, and a LOCK IN button. Both lobby screens use it.
+// Power selection shared by the multiplayer lobby and training menu: one row
+// per loadout slot, with arrows to cycle through every registered power.
 //
 // It only holds the player's choice. The screen sends the choice to the server
 // whenever takeLockChange() reports the player locked in or unlocked.
@@ -38,11 +38,21 @@ final class LoadoutPicker extends Table {
 
     private boolean locked;
     private boolean lockChanged;
+    private boolean choiceChanged;
 
     LoadoutPicker(
         TextButton.TextButtonStyle buttonStyle,
         Label.LabelStyle whiteText,
         Label.LabelStyle goldText
+    ) {
+        this(buttonStyle, whiteText, goldText, true);
+    }
+
+    LoadoutPicker(
+        TextButton.TextButtonStyle buttonStyle,
+        Label.LabelStyle whiteText,
+        Label.LabelStyle goldText,
+        boolean showLockControls
     ) {
         add(new Label("YOUR POWERS", whiteText)).colspan(4).padBottom(4).row();
 
@@ -86,7 +96,9 @@ final class LoadoutPicker extends Table {
         problemLabel.setWrap(true);
         problemLabel.setAlignment(Align.center);
 
-        add(lockButton).colspan(4).padTop(8).row();
+        if (showLockControls) {
+            add(lockButton).colspan(4).padTop(8).row();
+        }
         add(problemLabel).colspan(4).width(WIDTH).padTop(2);
 
         refresh();
@@ -95,6 +107,21 @@ final class LoadoutPicker extends Table {
     // The player's three powers as currently chosen.
     Loadout loadout() {
         return new Loadout(choice);
+    }
+
+    void setLoadout(Loadout loadout) {
+        choice.clear();
+        choice.addAll(loadout.slots());
+        choiceChanged = false;
+        refresh();
+    }
+
+    // True once after any slot changes. Training uses this to apply choices
+    // immediately without adding lobby-style locking to local play.
+    boolean takeChoiceChange() {
+        boolean changed = choiceChanged;
+        choiceChanged = false;
+        return changed;
     }
 
     boolean isLocked() {
@@ -126,6 +153,7 @@ final class LoadoutPicker extends Table {
         int next = Math.floorMod(current + direction, all.size());
 
         choice.set(slot, all.get(next));
+        choiceChanged = true;
         refresh();
     }
 

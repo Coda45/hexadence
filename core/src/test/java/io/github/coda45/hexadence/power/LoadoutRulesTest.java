@@ -23,9 +23,20 @@ class LoadoutRulesTest {
     }
 
     @Test
-    void strictRuleNeedsOneBasicAndTwoZones() {
-        // The default has two basics and one zone, so the strict rule refuses it.
-        assertNotNull(LoadoutRules.problem(Loadout.DEFAULT, true));
-        assertNull(LoadoutRules.problem(Loadout.DEFAULT, false));
+    void allowsEitherMixedOneTwoComposition() {
+        Loadout twoBasics = new Loadout(List.of(
+            Powers.FIREBALL, Powers.LIGHTNING_BOLT, Powers.WATER_PUDDLE
+        ));
+        Loadout threeBasics = new Loadout(List.of(
+            Powers.FIREBALL, Powers.LIGHTNING_BOLT, Powers.ROCK_SHARDS
+        ));
+        Loadout threeZones = new Loadout(List.of(
+            Powers.WATER_PUDDLE, Powers.STONE_WALL, Powers.VORTEX
+        ));
+
+        assertNull(LoadoutRules.problem(Loadout.DEFAULT));
+        assertNull(LoadoutRules.problem(twoBasics));
+        assertNotNull(LoadoutRules.problem(threeBasics));
+        assertNotNull(LoadoutRules.problem(threeZones));
     }
 }
