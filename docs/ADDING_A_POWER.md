@@ -104,11 +104,10 @@ add it to `ZoneKinds.ALL`), then add the line here. The tests check that:
 - each basic power reacts with at most two fields
 - every derived zone is produced by some reaction
 
-## Not covered yet
+## Loadout composition
 
-- Zone effects beyond damage and slow: steam blocking vision, Crystal Wall
-  blocking movement, and Singularity pulling players. These zones exist, but
-  for now they only show and expire.
-- The draft allows any three different powers for now. Once at least two
-  zone powers exist, set `REQUIRE_ONE_BASIC_TWO_ZONES` in
-  `power/LoadoutRules.java` to `true` to enforce one basic and two zone powers.
+`LoadoutRules` is shared by the dedicated server, multiplayer picker, and
+Training Grounds picker. A legal three-power build must contain distinct
+registered powers and may use either one Basic plus two Zones or two Basics
+plus one Zone. Keep future composition changes centralized there and update
+the content fingerprint and focused rule tests at the same time.

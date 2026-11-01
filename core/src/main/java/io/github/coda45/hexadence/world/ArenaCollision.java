@@ -1,7 +1,7 @@
 package io.github.coda45.hexadence.world;
 
 // Tile collision in world units, backed by a nonempty rectangular grid indexed [x][y].
-public class ArenaCollision {
+public class ArenaCollision implements WorldCollider {
 
     private final float[][] blockedHeights;
 
@@ -27,6 +27,7 @@ public class ArenaCollision {
     }
 
     // Tests every tile covered by a rectangular footprint centered at (x, y).
+    @Override
     public boolean overlaps(
         float x,
         float y,
@@ -83,20 +84,41 @@ public class ArenaCollision {
         float maxDistance,
         float footprintHalfSize
     ) {
+        return raycast(
+            originX,
+            originY,
+            directionX,
+            directionY,
+            maxDistance,
+            footprintHalfSize,
+            footprintHalfSize
+        );
+    }
+
+    @Override
+    public float raycast(
+        float originX,
+        float originY,
+        float directionX,
+        float directionY,
+        float maxDistance,
+        float footprintHalfWidth,
+        float footprintHalfHeight
+    ) {
         float endX = originX + directionX * maxDistance;
         float endY = originY + directionY * maxDistance;
 
         int minTileX = (int) Math.floor(
-            Math.min(originX, endX) - footprintHalfSize
+            Math.min(originX, endX) - footprintHalfWidth
         );
         int maxTileX = (int) Math.floor(
-            Math.max(originX, endX) + footprintHalfSize
+            Math.max(originX, endX) + footprintHalfWidth
         );
         int minTileY = (int) Math.floor(
-            Math.min(originY, endY) - footprintHalfSize
+            Math.min(originY, endY) - footprintHalfHeight
         );
         int maxTileY = (int) Math.floor(
-            Math.max(originY, endY) + footprintHalfSize
+            Math.max(originY, endY) + footprintHalfHeight
         );
 
         float nearestDistance = CombatGeometry.NO_HIT;
@@ -126,10 +148,10 @@ public class ArenaCollision {
                         directionX,
                         directionY,
                         currentLimit,
-                        tileX - footprintHalfSize,
-                        tileY - footprintHalfSize,
-                        tileX + 1f + footprintHalfSize,
-                        tileY + blockedHeight + footprintHalfSize
+                        tileX - footprintHalfWidth,
+                        tileY - footprintHalfHeight,
+                        tileX + 1f + footprintHalfWidth,
+                        tileY + blockedHeight + footprintHalfHeight
                     );
 
                 if (hitDistance < nearestDistance) {

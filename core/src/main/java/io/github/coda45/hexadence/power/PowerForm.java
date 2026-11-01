@@ -1,7 +1,7 @@
 package io.github.coda45.hexadence.power;
 
-// Each element has one basic version and one zone (field) version.
-// A loadout is one BASIC power and two ZONE powers.
+// Each element can provide a basic spell and a zone (field) power. Legal
+// loadouts contain at least one of each form.
 public enum PowerForm {
     BASIC,
     ZONE

@@ -14,6 +14,7 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.MathUtils;
 
@@ -22,13 +23,16 @@ import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.power.Element;
+import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.Powers;
+import io.github.coda45.hexadence.render.animation.BeamStrikeVisual;
 import io.github.coda45.hexadence.render.animation.ChargedPuddleVisual;
 import io.github.coda45.hexadence.render.animation.FacingDirection;
-import io.github.coda45.hexadence.render.animation.LightningStrikeVisual;
 import io.github.coda45.hexadence.render.animation.VoidTrailVisual;
 import io.github.coda45.hexadence.world.ArenaMap;
 import io.github.coda45.hexadence.world.ArenaWorld;
-import io.github.coda45.hexadence.world.LightningStrikeEvent;
+import io.github.coda45.hexadence.world.BeamChannelEndEvent;
+import io.github.coda45.hexadence.world.BeamStrikeEvent;
 import io.github.coda45.hexadence.world.WorldEvent;
 import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.github.coda45.hexadence.zone.ZoneKinds;
@@ -37,20 +41,29 @@ import io.github.coda45.hexadence.zone.ZoneKinds;
 public class WorldRenderer {
 
     private static final float ZONE_FLASH_DURATION = 0.12f;
+    private static final float DAMAGE_FLASH_DURATION = 0.1f;
     private static final int RING_FLAME_COUNT = 8;
-    private static final float RING_FLAME_SIZE = 0.35f;
+    private static final float RING_FLAME_SIZE = 0.75f;
+    private static final float RING_FLAME_ROTATION = -90f;
 
     private final OrthogonalTiledMapRenderer mapRenderer;
     private final SpriteBatch batch;
     private final GameTextures textures;
     private final Texture pixelTexture;
+    private final ShaderProgram whiteFlashShader;
     private final int[] groundLayers;
     private final int[] lowerTerrainLayers;
     private final int[] foregroundLayers;
-    private final List<LightningStrikeVisual> lightningStrikes = new ArrayList<>();
+    private final List<BeamStrikeVisual> beamStrikes = new ArrayList<>();
     private final Map<Zone, ChargedPuddleVisual> chargedPuddleVisuals = new IdentityHashMap<>();
     private final Map<Integer, Float> zoneFlashRemaining = new HashMap<>();
+    private final Map<Integer, Float> stoneWallAnimationTimes = new HashMap<>();
+    private final Map<Integer, Float> crystalWallAnimationTimes = new HashMap<>();
     private final Map<Integer, VoidTrailVisual> voidTrails = new HashMap<>();
+    private final Map<Integer, Float> previousPlayerHealth = new HashMap<>();
+    private final Map<Integer, Float> previousDummyHealth = new HashMap<>();
+    private final Map<Integer, Float> playerDamageFlashes = new HashMap<>();
+    private final Map<Integer, Float> dummyDamageFlashes = new HashMap<>();
 
     private float projectileAnimationTime;
     private float playerMoveTime;
@@ -69,14 +82,14 @@ public class WorldRenderer {
             requireLayerIndex(
                 arenaMap,
                 ArenaMap.GROUND_LAYER_NAME
+            ),
+            requireLayerIndex(
+                arenaMap,
+                ArenaMap.DECORATION_GROUND_LAYER_NAME
             )
         };
 
         lowerTerrainLayers = new int[] {
-            requireLayerIndex(
-                arenaMap,
-                ArenaMap.DECORATION_GROUND_LAYER_NAME
-            ),
             requireLayerIndex(
                 arenaMap,
                 ArenaMap.WALLS_LAYER_NAME
@@ -101,6 +114,46 @@ public class WorldRenderer {
         pixelTexture = new Texture(pixmap);
         // Texture has its own copy; the temporary pixel data can be released now.
         pixmap.dispose();
+
+        whiteFlashShader = createWhiteFlashShader();
+    }
+
+    private static ShaderProgram createWhiteFlashShader() {
+        String vertexShader =
+            "attribute vec4 a_position;\n"
+                + "attribute vec4 a_color;\n"
+                + "attribute vec2 a_texCoord0;\n"
+                + "uniform mat4 u_projTrans;\n"
+                + "varying vec4 v_color;\n"
+                + "varying vec2 v_texCoords;\n"
+                + "void main() {\n"
+                + "  v_color = a_color;\n"
+                + "  v_color.a = v_color.a * (255.0 / 254.0);\n"
+                + "  v_texCoords = a_texCoord0;\n"
+                + "  gl_Position = u_projTrans * a_position;\n"
+                + "}\n";
+
+        String fragmentShader =
+            "#ifdef GL_ES\n"
+                + "precision mediump float;\n"
+                + "#endif\n"
+                + "varying vec4 v_color;\n"
+                + "varying vec2 v_texCoords;\n"
+                + "uniform sampler2D u_texture;\n"
+                + "void main() {\n"
+                + "  float alpha = texture2D(u_texture, v_texCoords).a * v_color.a;\n"
+                + "  gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);\n"
+                + "}\n";
+
+        ShaderProgram shader = new ShaderProgram(vertexShader, fragmentShader);
+        if (!shader.isCompiled()) {
+            String log = shader.getLog();
+            shader.dispose();
+            throw new IllegalStateException(
+                "Could not compile the damage-flash shader: " + log
+            );
+        }
+        return shader;
     }
 
     public void render(
@@ -109,6 +162,7 @@ public class WorldRenderer {
         float presentationDelta,
         List<WorldEvent> frameEvents
     ) {
+        updateDamageFlashes(world, presentationDelta);
         updateZoneFlashes(presentationDelta);
         consumeEvents(frameEvents);
         // TMX order: Ground, DecorationGround, Walls, DecorationOverlay, Spawns.
@@ -124,6 +178,9 @@ public class WorldRenderer {
             world,
             presentationDelta
         );
+
+        updateStoneWallAnimations(world, presentationDelta);
+        updateCrystalWallAnimations(world, presentationDelta);
 
         mapRenderer.setView(worldCamera.getCamera());
         // Ground is the bottommost map layer.
@@ -177,8 +234,11 @@ public class WorldRenderer {
             playerMoveTime = 0f;
         }
 
-        for (Player player : world.getPlayers().values()){
-            if (!player.isAlive()) {
+        for (Map.Entry<Integer, Player> entry : world.getPlayers().entrySet()) {
+            int playerId = entry.getKey();
+            Player player = entry.getValue();
+
+            if (!player.isAlive() && !playerDamageFlashes.containsKey(playerId)) {
                 continue;
             }
             FacingDirection facing =
@@ -200,12 +260,14 @@ public class WorldRenderer {
             playerSpriteHeight = height;
 
             // Anchor the wizard at its feet; projectiles below are centered on their positions.
-            batch.draw(
+            drawEntitySprite(
                 playerRegion,
                 player.getX() - width / 2f,
                 player.getY(),
                 width,
-                height
+                height,
+                playerDamageFlashes.containsKey(playerId),
+                Color.WHITE
             );
         }   
 
@@ -232,8 +294,9 @@ public class WorldRenderer {
                 projectileRegion.getRegionHeight()
                     / ArenaMap.TILE_SIZE;
 
-            float rotationDegrees =
-                MathUtils.atan2(
+            float rotationDegrees = projectile.getPower() == Powers.VORTEX
+                ? 0f
+                : MathUtils.atan2(
                     projectile.getDirectionY(),
                     projectile.getDirectionX()
                 ) * MathUtils.radiansToDegrees;
@@ -255,7 +318,7 @@ public class WorldRenderer {
             );
         }
 
-        renderLightningStrikes();
+        renderBeamStrikes(world);
 
         batch.end();
 
@@ -280,24 +343,56 @@ public class WorldRenderer {
 
         batch.end();
 
-        updateLightningStrikes(presentationDelta);
+        updateBeamStrikes(presentationDelta);
     }
 
     private void consumeEvents(
         List<WorldEvent> frameEvents
     ) {
+        Set<Integer> sampledLightOwners = new HashSet<>();
+        Set<Long> refreshedSplitBranches = new HashSet<>();
+
         for (WorldEvent event : frameEvents) {
-            if (event instanceof LightningStrikeEvent strike) {
-                int variantIndex =
-                    MathUtils.random(
-                        textures.getLightningVariantCount() - 1
+            if (event instanceof BeamStrikeEvent strike) {
+                if (strike.power() == Powers.BEAM_OF_LIGHT) {
+                    if (strike.branchIndex() == 0) {
+                        sampledLightOwners.add(strike.ownerPlayerId());
+                    } else {
+                        refreshedSplitBranches.add(beamBranchKey(
+                            strike.ownerPlayerId(),
+                            strike.branchIndex()
+                        ));
+                    }
+
+                    BeamStrikeVisual active = findHeldBeam(
+                        strike.ownerPlayerId(),
+                        strike.power(),
+                        strike.branchIndex()
                     );
 
-                lightningStrikes.add(
-                    new LightningStrikeVisual(
+                    if (active != null) {
+                        active.refresh(strike);
+                    } else {
+                        beamStrikes.add(new BeamStrikeVisual(strike, 0));
+                    }
+
+                    continue;
+                }
+
+                int variantIndex = strike.power() == Powers.LIGHTNING_BOLT
+                    ? MathUtils.random(textures.getLightningVariantCount() - 1)
+                    : 0;
+
+                beamStrikes.add(
+                    new BeamStrikeVisual(
                         strike,
                         variantIndex
                     )
+                );
+            } else if (event instanceof BeamChannelEndEvent ended) {
+                beamStrikes.removeIf(visual ->
+                    visual.getStrike().ownerPlayerId() == ended.ownerPlayerId()
+                        && visual.getStrike().power().equals(ended.power())
                 );
             } else if (event instanceof ZoneChargeChangedEvent changed) {
                 zoneFlashRemaining.put(
@@ -306,6 +401,93 @@ public class WorldRenderer {
                 );
             }
         }
+
+        beamStrikes.removeIf(visual -> {
+            BeamStrikeEvent strike = visual.getStrike();
+            return strike.power() == Powers.BEAM_OF_LIGHT
+                && strike.branchIndex() > 0
+                && sampledLightOwners.contains(strike.ownerPlayerId())
+                && !refreshedSplitBranches.contains(beamBranchKey(
+                    strike.ownerPlayerId(),
+                    strike.branchIndex()
+                ));
+        });
+    }
+
+    private BeamStrikeVisual findHeldBeam(
+        int ownerPlayerId,
+        Power power,
+        int branchIndex
+    ) {
+        for (BeamStrikeVisual visual : beamStrikes) {
+            BeamStrikeEvent strike = visual.getStrike();
+
+            if (
+                strike.ownerPlayerId() == ownerPlayerId
+                && strike.power().equals(power)
+                && strike.branchIndex() == branchIndex
+            ) {
+                return visual;
+            }
+        }
+
+        return null;
+    }
+
+    private static long beamBranchKey(int ownerPlayerId, int branchIndex) {
+        return ((long) ownerPlayerId << 32) | (branchIndex & 0xFFFFFFFFL);
+    }
+
+    private void updateDamageFlashes(
+        ArenaWorld world,
+        float deltaSeconds
+    ) {
+        updateFlashTimers(playerDamageFlashes, deltaSeconds);
+        updateFlashTimers(dummyDamageFlashes, deltaSeconds);
+
+        Set<Integer> livePlayerIds = new HashSet<>();
+        for (Map.Entry<Integer, Player> entry : world.getPlayers().entrySet()) {
+            int id = entry.getKey();
+            float health = entry.getValue().getHealth();
+            Float previous = previousPlayerHealth.put(id, health);
+            livePlayerIds.add(id);
+
+            if (
+                previous != null
+                    && health < previous
+                    && !playerDamageFlashes.containsKey(id)
+            ) {
+                playerDamageFlashes.put(id, DAMAGE_FLASH_DURATION);
+            }
+        }
+        previousPlayerHealth.keySet().retainAll(livePlayerIds);
+        playerDamageFlashes.keySet().retainAll(livePlayerIds);
+
+        Set<Integer> liveDummyIds = new HashSet<>();
+        for (TargetDummy dummy : world.getDummies()) {
+            int id = dummy.getId();
+            float health = dummy.getHealth();
+            Float previous = previousDummyHealth.put(id, health);
+            liveDummyIds.add(id);
+
+            if (
+                previous != null
+                    && health < previous
+                    && !dummyDamageFlashes.containsKey(id)
+            ) {
+                dummyDamageFlashes.put(id, DAMAGE_FLASH_DURATION);
+            }
+        }
+        previousDummyHealth.keySet().retainAll(liveDummyIds);
+        dummyDamageFlashes.keySet().retainAll(liveDummyIds);
+    }
+
+    private static void updateFlashTimers(
+        Map<Integer, Float> flashes,
+        float deltaSeconds
+    ) {
+        flashes.replaceAll((id, remaining) -> remaining - deltaSeconds);
+        flashes.values().removeIf(remaining -> remaining <= 0f);
     }
 
     private void updateZoneFlashes(float deltaSeconds) {
@@ -325,19 +507,60 @@ public class WorldRenderer {
         }
     }
 
-    private void updateLightningStrikes(
+    private void updateStoneWallAnimations(
+        ArenaWorld world,
+        float deltaSeconds
+    ) {
+        Set<Integer> liveWallIds = new HashSet<>();
+
+        for (Zone zone : world.getZones()) {
+            if (zone.getKind() != ZoneKinds.STONE_WALL) {
+                continue;
+            }
+
+            liveWallIds.add(zone.getId());
+            stoneWallAnimationTimes.merge(zone.getId(), deltaSeconds, Float::sum);
+        }
+
+        stoneWallAnimationTimes.keySet().retainAll(liveWallIds);
+    }
+
+    private void updateCrystalWallAnimations(
+        ArenaWorld world,
+        float deltaSeconds
+    ) {
+        Set<Integer> liveCrystalIds = new HashSet<>();
+
+        for (Zone zone : world.getZones()) {
+            if (zone.getKind() != ZoneKinds.CRYSTAL_WALL) {
+                continue;
+            }
+
+            liveCrystalIds.add(zone.getId());
+            crystalWallAnimationTimes.merge(zone.getId(), deltaSeconds, Float::sum);
+        }
+
+        crystalWallAnimationTimes.keySet().retainAll(liveCrystalIds);
+    }
+
+    private void updateBeamStrikes(
         float presentationDelta
     ) {
-        Iterator<LightningStrikeVisual> iterator = lightningStrikes.iterator();
+        Iterator<BeamStrikeVisual> iterator = beamStrikes.iterator();
 
         while (iterator.hasNext()) {
-            LightningStrikeVisual strike = iterator.next();
+            BeamStrikeVisual strike = iterator.next();
 
             strike.update(presentationDelta);
 
             if (
+                strike.getStrike().power() != Powers.BEAM_OF_LIGHT
+                &&
                 strike.isFinished(
-                    textures.getLightningAnimationDuration()
+                    textures.getBeamAnimationDuration(
+                        strike.getStrike().power(),
+                        strike.getStrike().branchIndex() > 0
+                    )
                 )
             ) {
                 iterator.remove();
@@ -345,19 +568,20 @@ public class WorldRenderer {
         }
     }
 
-    private void renderLightningStrikes() {
+    private void renderBeamStrikes(ArenaWorld world) {
         for (
-            LightningStrikeVisual visual
-                : lightningStrikes
+            BeamStrikeVisual visual
+                : beamStrikes
         ) {
-            renderLightningStrike(visual);
+            renderBeamStrike(world, visual);
         }
     }
 
-    private void renderLightningStrike(
-        LightningStrikeVisual visual
+    private void renderBeamStrike(
+        ArenaWorld world,
+        BeamStrikeVisual visual
     ) {
-        LightningStrikeEvent strike = visual.getStrike();
+        BeamStrikeEvent strike = visual.getStrike();
 
         float deltaX = strike.endX() - strike.startX();
         float deltaY = strike.endY() - strike.startY();
@@ -370,11 +594,51 @@ public class WorldRenderer {
             return;
         }
 
-        TextureRegion frame =
-            textures.getLightningFrame(
-                visual.getVariantIndex(),
-                visual.getStateTime()
-            );
+        float drawStartX = strike.startX();
+        float drawStartY = strike.startY();
+
+        // Damage, collision length, and crystal origin remain the latest
+        // authoritative sample. Presentation alone follows the owner's latest
+        // 60 Hz aim between damage ticks.
+        if (strike.power() == Powers.BEAM_OF_LIGHT) {
+            Player owner = world.getPlayers().get(strike.ownerPlayerId());
+
+            if (owner != null && owner.isAlive()) {
+                float aimX = owner.getAimX();
+                float aimY = owner.getAimY();
+                float aimLength = (float) Math.sqrt(aimX * aimX + aimY * aimY);
+
+                if (aimLength > 0.0001f) {
+                    float directionX = aimX / aimLength;
+                    float directionY = aimY / aimLength;
+
+                    if (strike.branchIndex() == 0) {
+                        drawStartX = owner.getCastX();
+                        drawStartY = owner.getCastY();
+                    } else {
+                        float splitAngle = strike.branchIndex() == 1
+                            ? -22.5f
+                            : 22.5f;
+                        float cos = MathUtils.cosDeg(splitAngle);
+                        float sin = MathUtils.sinDeg(splitAngle);
+                        float rotatedX = directionX * cos - directionY * sin;
+                        float rotatedY = directionX * sin + directionY * cos;
+                        directionX = rotatedX;
+                        directionY = rotatedY;
+                    }
+
+                    deltaX = directionX * strikeLength;
+                    deltaY = directionY * strikeLength;
+                }
+            }
+        }
+
+        TextureRegion frame = textures.getBeamFrame(
+            strike.power(),
+            visual.getVariantIndex(),
+            visual.getStateTime(),
+            strike.branchIndex() > 0
+        );
 
         float visualHeight =
             frame.getRegionHeight()
@@ -390,8 +654,11 @@ public class WorldRenderer {
                 Math.min(
                     frame.getRegionWidth(),
                     (int) Math.ceil(
-                        strikeLength
-                            * ArenaMap.TILE_SIZE
+                        frame.getRegionWidth()
+                            * strikeLength
+                            / (strike.branchIndex() > 0
+                                ? Powers.BEAM_OF_LIGHT_CRYSTAL_RANGE
+                                : strike.power().range())
                     )
                 )
             );
@@ -399,10 +666,10 @@ public class WorldRenderer {
         batch.draw(
             frame.getTexture(),
 
-            // Place the unrotated image with its left-center
-            // directly on the authoritative cast point.
-            strike.startX(),
-            strike.startY() - visualHeight / 2f,
+            // Place the unrotated image with its left-center on the current
+            // presentation anchor (or the authoritative branch origin).
+            drawStartX,
+            drawStartY - visualHeight / 2f,
 
             // Rotate around that left-center point.
             0f,
@@ -604,6 +871,25 @@ public class WorldRenderer {
                 (tint & 0xFF) / 255f
             );
         }
+
+        if (zone.getKind() == ZoneKinds.STONE_WALL) {
+            renderStoneWall(zone);
+            batch.setColor(Color.WHITE);
+            return;
+        }
+
+        if (zone.getKind() == ZoneKinds.CRYSTAL_WALL) {
+            renderCrystalWall(zone);
+            batch.setColor(Color.WHITE);
+            return;
+        }
+
+        if (zone.getKind() == ZoneKinds.VORTEX) {
+            TextureRegion frame = textures.getVortexFrame(projectileAnimationTime);
+            batch.setColor(Color.WHITE);
+            batch.draw(frame, left, bottom, diameter, diameter);
+            return;
+        }
         
 
 
@@ -669,11 +955,75 @@ public class WorldRenderer {
         }
     }
 
+    private void renderStoneWall(Zone zone) {
+        TextureRegion frame = textures.getStoneWallFrame(
+            stoneWallAnimationTimes.getOrDefault(zone.getId(), 0f)
+        );
+        float width = zone.getKind().solidHalfLength() * 2f;
+        float height = zone.getKind().solidHalfThickness() * 2f;
+        float left = zone.getX() - width / 2f;
+        float bottom = zone.getY() - height / 2f;
+
+        batch.setColor(Color.WHITE);
+        batch.draw(frame, left, bottom, width, height);
+        renderStoneWallWear(zone, left, bottom, width, height);
+    }
+
+    private void renderCrystalWall(Zone zone) {
+        TextureRegion frame = textures.getCrystalWallFrame(
+            crystalWallAnimationTimes.getOrDefault(zone.getId(), 0f)
+        );
+        float width = zone.getKind().solidHalfLength() * 2f;
+        float height = zone.getKind().solidHalfThickness() * 2f;
+
+        batch.setColor(Color.WHITE);
+        batch.draw(
+            frame,
+            zone.getX() - width / 2f,
+            zone.getY() - height / 2f,
+            width,
+            height
+        );
+        renderStoneWallWear(zone, zone.getX() - width / 2f,
+            zone.getY() - height / 2f, width, height);
+    }
+
+    // Damage selects progressively heavier frames from wear_lines.png rather
+    // than advancing them as a time-based animation.
+    private void renderStoneWallWear(
+        Zone zone,
+        float left,
+        float bottom,
+        float width,
+        float height
+    ) {
+        float healthFraction = zone.getHealthFraction();
+        int stage = healthFraction <= 0.25f ? 3
+            : healthFraction <= 0.5f ? 2
+            : healthFraction <= 0.75f ? 1
+            : 0;
+
+        if (stage == 0) {
+            return;
+        }
+
+        batch.setColor(Color.WHITE);
+        batch.draw(
+            textures.getWallWearFrame(stage),
+            left,
+            bottom,
+            width,
+            height
+        );
+    }
+
     // Flame shapes spaced evenly around a ring zone's band, reusing the
     // fireball animation so a ring reads as fire without new art.
     private void renderRingFlames(Zone zone) {
         float midRadius =
             (zone.getKind().innerRadius() + zone.getRadius()) / 2f;
+        float phaseStep =
+            textures.getFireballAnimationDuration() / RING_FLAME_COUNT;
 
         for (int i = 0; i < RING_FLAME_COUNT; i++) {
             float angle = i * 360f / RING_FLAME_COUNT;
@@ -681,15 +1031,20 @@ public class WorldRenderer {
             float flameY = zone.getY() + midRadius * MathUtils.sinDeg(angle);
 
             TextureRegion flame = textures.getFireballFrame(
-                projectileAnimationTime + i * 0.05f
+                projectileAnimationTime + i * phaseStep
             );
 
             batch.draw(
                 flame,
                 flameX - RING_FLAME_SIZE / 2f,
                 flameY - RING_FLAME_SIZE / 2f,
+                RING_FLAME_SIZE / 2f,
+                RING_FLAME_SIZE / 2f,
                 RING_FLAME_SIZE,
-                RING_FLAME_SIZE
+                RING_FLAME_SIZE,
+                1f,
+                1f,
+                RING_FLAME_ROTATION
             );
         }
     }
@@ -731,6 +1086,46 @@ public class WorldRenderer {
         batch.setColor(Color.WHITE);
     }
 
+    private void drawEntitySprite(
+        TextureRegion sprite,
+        float left,
+        float bottom,
+        float width,
+        float height,
+        boolean flashing,
+        Color normalTint
+    ) {
+        batch.setColor(flashing ? Color.WHITE : normalTint);
+        if (flashing) {
+            batch.setShader(whiteFlashShader);
+        }
+        batch.draw(sprite, left, bottom, width, height);
+        if (flashing) {
+            batch.setShader(null);
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    private void drawEntitySprite(
+        Texture sprite,
+        float left,
+        float bottom,
+        float width,
+        float height,
+        boolean flashing,
+        Color normalTint
+    ) {
+        batch.setColor(flashing ? Color.WHITE : normalTint);
+        if (flashing) {
+            batch.setShader(whiteFlashShader);
+        }
+        batch.draw(sprite, left, bottom, width, height);
+        if (flashing) {
+            batch.setShader(null);
+        }
+        batch.setColor(Color.WHITE);
+    }
+
     // Center the sprite on the circular hit area; dead dummies remain gray.
     private void renderDummy(TargetDummy dummy) {
         Texture sprite = textures.getTargetDummy();
@@ -740,16 +1135,15 @@ public class WorldRenderer {
         float spriteBottom = dummy.getY() - height / 2f;
         float diameter = TargetDummy.RADIUS * 2f;
 
-        batch.setColor(dummy.isAlive() ? Color.WHITE : Color.DARK_GRAY);
-        batch.draw(
+        drawEntitySprite(
             sprite,
             spriteLeft,
             spriteBottom,
             width,
-            height
+            height,
+            dummyDamageFlashes.containsKey(dummy.getId()),
+            dummy.isAlive() ? Color.WHITE : Color.DARK_GRAY
         );
-        // Batch tint carries into later draws, so reset it after drawing the sprite.
-        batch.setColor(Color.WHITE);
 
         if (dummy.isAlive()) {
             float barWidth = diameter;
@@ -791,6 +1185,7 @@ public class WorldRenderer {
         mapRenderer.dispose();
         batch.dispose();
         textures.dispose();
+        whiteFlashShader.dispose();
         
         pixelTexture.dispose();
     }

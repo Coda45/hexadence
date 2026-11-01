@@ -55,6 +55,12 @@ class PowersTest {
     }
 
     @Test
+    void cursorTargetedCirclesArePlacedImmediately() {
+        assertEquals(Behavior.PLACED_ZONE, Powers.NULL_ZONE.behavior());
+        assertEquals(Behavior.PLACED_ZONE, Powers.RADIANT_CIRCLE.behavior());
+    }
+
+    @Test
     void defaultLoadoutUsesRegisteredPowers() {
         for (Power power : Loadout.DEFAULT.slots()) {
             assertTrue(Powers.ALL.contains(power), power + " is not in Powers.ALL");

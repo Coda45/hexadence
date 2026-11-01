@@ -51,6 +51,48 @@ class LoadoutCastingTest {
     }
 
     @Test
+    void beamOfLightDealsConstantDamageAtItsChannelTickInterval() {
+        ArenaWorld world = worldWithDummyAt(4f, 2.75f);
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.BEAM_OF_LIGHT,
+            Powers.WATER_PUDDLE,
+            Powers.EMBER_CIRCLE
+        )));
+        float healthBefore = world.getDummies().get(0).getHealth();
+
+        world.step(CAST_SLOT_1_RIGHT);
+
+        assertTrue(world.getProjectiles().isEmpty());
+        assertEquals(
+            healthBefore - Powers.BEAM_OF_LIGHT.damage(),
+            world.getDummies().get(0).getHealth(),
+            EPSILON
+        );
+
+        for (int i = 0; i < 12; i++) {
+            world.step(CAST_SLOT_1_RIGHT);
+        }
+
+        assertEquals(
+            healthBefore - 2f * Powers.BEAM_OF_LIGHT.damage(),
+            world.getDummies().get(0).getHealth(),
+            EPSILON
+        );
+        assertTrue(world.getPlayer().isSlotReady(0));
+
+        StepResult release = world.step(PlayerCommand.IDLE);
+
+        assertEquals(
+            Powers.BEAM_OF_LIGHT.cooldownSeconds(),
+            world.getPlayer().getCooldownRemaining(0),
+            EPSILON
+        );
+        assertTrue(release.events().stream().anyMatch(
+            BeamChannelEndEvent.class::isInstance
+        ));
+    }
+
+    @Test
     void cooldownUsesTheSlotsPower() {
         ArenaWorld world = worldWithDummyAt(9f, 9f);
         Player player = world.getPlayer();
@@ -369,6 +411,47 @@ class LoadoutCastingTest {
             world.getZones().get(0).getRadius(),
             EPSILON
         );
+    }
+
+    @Test
+    void stoneWallOffsetsFromTerrainAndBlocksMovement() {
+        float[][] blocked = new float[20][10];
+        blocked[5][2] = 1f;
+        ArenaCollision collision = new ArenaCollision(blocked);
+        ArenaWorld world = new ArenaWorld(new ArenaDefinition(
+            collision,
+            new SpawnPoint(1f, 2f),
+            List.of()
+        ));
+        Player player = world.getPlayer();
+        player.setLoadout(new Loadout(List.of(
+            Powers.STONE_WALL,
+            Powers.WATER_PUDDLE,
+            Powers.EMBER_CIRCLE
+        )));
+
+        world.step(new PlayerCommand(
+            0f, 0f,
+            6f, 0f,
+            true, false, false
+        ));
+
+        assertEquals(1, world.getZones().size());
+        var wall = world.getZones().get(0);
+        assertTrue(wall.getX() < 5f);
+        assertFalse(collision.overlaps(
+            wall.getX(),
+            wall.getY(),
+            ZoneKinds.STONE_WALL.solidHalfLength(),
+            ZoneKinds.STONE_WALL.solidHalfThickness()
+        ));
+
+        for (int i = 0; i < 90; i++) {
+            world.step(new PlayerCommand(1f, 0f, 1f, 0f, false, false, false));
+        }
+
+        float wallLeft = wall.getX() - ZoneKinds.STONE_WALL.solidHalfLength();
+        assertTrue(player.getCollisionX() + Player.HALF_WIDTH <= wallLeft + EPSILON);
     }
 
     private static Power placedPuddle() {

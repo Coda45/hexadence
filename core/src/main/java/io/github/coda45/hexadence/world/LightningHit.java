@@ -15,6 +15,8 @@ record LightningHit(
     enum Kind {
         NONE,
         TERRAIN,
+        WALL,
+        CRYSTAL,
         // Any zone the beam reacts with (named for the first one, the puddle).
         PUDDLE,
         DUMMY,
@@ -37,6 +39,28 @@ record LightningHit(
             Kind.TERRAIN,
             distance,
             null,
+            null,
+            -1,
+            null
+        );
+    }
+
+    static LightningHit wall(float distance, Zone zone) {
+        return new LightningHit(
+            Kind.WALL,
+            distance,
+            zone,
+            null,
+            -1,
+            null
+        );
+    }
+
+    static LightningHit crystal(float distance, Zone zone) {
+        return new LightningHit(
+            Kind.CRYSTAL,
+            distance,
+            zone,
             null,
             -1,
             null

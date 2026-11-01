@@ -17,10 +17,13 @@ import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.net.WorldSnapshot;
+import io.github.coda45.hexadence.power.Behavior;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.zone.Reactions;
 import io.github.coda45.hexadence.zone.ZoneKind;
+import io.github.coda45.hexadence.zone.ZoneKinds;
 
 // Owns gameplay state and applies commands at a fixed 60 Hz rate.
 public class ArenaWorld {
@@ -30,6 +33,8 @@ public class ArenaWorld {
     private static final float PLAYER_SPEED = 5f;
     private static final float PLAYER_RESPAWN_DELAY = 3f;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
+    private static final float KNOCKBACK_DAMPING_PER_STEP = 0.9f;
+    private static final float VORTEX_ORBIT_SPEED = 8f;
 
     private final ArenaCollision collision;
     private final List<SpawnPoint> playerSpawns;
@@ -42,6 +47,14 @@ public class ArenaWorld {
     // Damage-over-time started by a hit, independent of standing in a zone.
     private final Map<Integer, DotEffect> playerDotEffects = new LinkedHashMap<>();
     private final Map<TargetDummy, DotEffect> dummyDotEffects = new LinkedHashMap<>();
+    private final Map<ChannelKey, ActiveChannel> activeChannels = new LinkedHashMap<>();
+    private final Map<Integer, VortexOrbit> vortexOrbits = new LinkedHashMap<>();
+    // A traveling Vortex and the stationary zone it creates share one source
+    // key, preventing a projectile or player from being captured/pushed twice
+    // merely because the same field changed representation.
+    private final Map<Integer, Integer> vortexZoneSourceKeys =
+        new LinkedHashMap<>();
+    private final Set<VortexPlayerContact> vortexPlayerContacts = new HashSet<>();
 
     private long tick;
     private int nextPlayerId = 1;
@@ -80,6 +93,9 @@ public class ArenaWorld {
             zone.update(STEP);
 
             if (zone.hasExpired()) {
+                applyExpirationExplosion(zone);
+                releaseVortexOrbitsFromSource(vortexSourceKey(zone));
+                vortexZoneSourceKeys.remove(zone.getId());
                 zoneIterator.remove();
             }
         }
@@ -102,13 +118,23 @@ public class ArenaWorld {
             Projectile projectile =
                 projectileIterator.next();
 
+            VortexOrbit orbit = vortexOrbits.get(projectile.getId());
+
+            if (orbit != null) {
+                updateVortexOrbit(projectile, orbit);
+                continue;
+            }
+
+            boolean singularityInfluenced =
+                applySingularityGravity(projectile);
+
             Power power = projectile.getPower();
             float radius = power.radius();
 
             float remainingRange = projectile.getRemainingTravel();
 
             float movementDistance = Math.min(
-                power.speed() * STEP,
+                projectile.getCurrentSpeed() * STEP,
                 remainingRange
             );
 
@@ -126,32 +152,52 @@ public class ArenaWorld {
                 movementDistance / substepCount;
 
             boolean terminated = false;
+            boolean captured = false;
 
             for (int step = 0; step < substepCount; step++) {
                 // Sweep the whole substep so a diagonal path cannot tunnel
                 // through the tiny region around a blocked tile corner.
-                float terrainDistance = collision.raycastTerrain(
+                BlockingHit blockingHit = findBlockingHit(
                     projectile.getX(),
                     projectile.getY(),
                     projectile.getDirectionX(),
                     projectile.getDirectionY(),
                     substepDistance,
+                    radius,
                     radius
                 );
 
-                if (Float.isFinite(terrainDistance)) {
-                    projectile.update(terrainDistance);
-                    leaveZoneIfAny(
+                if (Float.isFinite(blockingHit.distance())) {
+                    advanceProjectile(
                         projectile,
-                        projectile.getX(),
-                        projectile.getY()
+                        blockingHit.distance(),
+                        singularityInfluenced
                     );
+
+                    if (
+                        blockingHit.zone() == null
+                        || !damageDestructibleZone(
+                            projectile,
+                            blockingHit.zone(),
+                            events
+                        )
+                    ) {
+                        leaveZoneIfAny(
+                            projectile,
+                            projectile.getX(),
+                            projectile.getY()
+                        );
+                    }
 
                     terminated = true;
                     break;
                 }
 
-                projectile.update(substepDistance);
+                advanceProjectile(
+                    projectile,
+                    substepDistance,
+                    singularityInfluenced
+                );
 
                 // Zone reactions take priority over player and dummy hits.
                 if (applyProjectileZoneReaction(projectile, events)) {
@@ -159,7 +205,15 @@ public class ArenaWorld {
                     break;
                 }
 
-                if (applyProjectilePlayerHit(projectile)) {
+                if (tryCaptureProjectile(projectile)) {
+                    captured = true;
+                    break;
+                }
+
+                if (
+                    power != Powers.VORTEX
+                    && applyProjectilePlayerHit(projectile)
+                ) {
                     leaveZoneIfAny(
                         projectile,
                         projectile.getX(),
@@ -170,7 +224,10 @@ public class ArenaWorld {
                     break;
                 }
 
-                if (applyProjectileDummyHit(projectile)) {
+                if (
+                    power != Powers.VORTEX
+                    && applyProjectileDummyHit(projectile)
+                ) {
                     leaveZoneIfAny(
                         projectile,
                         projectile.getX(),
@@ -180,9 +237,15 @@ public class ArenaWorld {
                     terminated = true;
                     break;
                 }
+
+            }
+
+            if (captured) {
+                continue;
             }
 
             if (terminated) {
+                vortexOrbits.remove(projectile.getId());
                 projectileIterator.remove();
                 continue;
             }
@@ -196,18 +259,20 @@ public class ArenaWorld {
                     projectile.getY()
                 );
 
+                vortexOrbits.remove(projectile.getId());
                 projectileIterator.remove();
             }
         }
 
-    
+        applyVortexImpulses();
+
         for (Map.Entry<Integer, Player> entry : players.entrySet()) {
             movePlayer(
                 entry.getValue(),
                 commandFor(commands, entry.getKey())
             );
         }
- 
+
         applyZoneEffects();
         applyChargedPuddleDischarges(events);
         applyDotEffects();
@@ -249,11 +314,80 @@ public class ArenaWorld {
         // Spawn before player movement, using the aim chosen for this step.
         for (int slot = 0; slot < Loadout.SIZE; slot++) {
             CastRequest cast = command.castFor(slot);
+            ChannelKey key = new ChannelKey(playerId, slot);
+            ActiveChannel active = activeChannels.get(key);
+            Power currentPower = player.getPower(slot);
+
+            if (active != null) {
+                boolean stillHeld =
+                    player.isAlive()
+                    && cast != null
+                    && currentPower.equals(active.power());
+
+                if (!stillHeld) {
+                    activeChannels.remove(key);
+
+                    if (currentPower.equals(active.power())) {
+                        player.startCooldown(slot);
+                    }
+
+                    events.add(new BeamChannelEndEvent(playerId, active.power()));
+                    continue;
+                }
+
+                if (active.advance(STEP)) {
+                    castChannelTick(playerId, player, active.power(), cast, events);
+                }
+
+                continue;
+            }
 
             if (cast != null) {
-                tryCast(playerId, player, cast, events);
+                if (currentPower.isChanneled()) {
+                    if (!player.isAlive() || !player.isSlotReady(slot)) {
+                        continue;
+                    }
+
+                    activeChannels.put(
+                        key,
+                        new ActiveChannel(
+                            currentPower,
+                            currentPower.channelTickSeconds()
+                        )
+                    );
+                    castChannelTick(playerId, player, currentPower, cast, events);
+                } else {
+                    tryCast(playerId, player, cast, events);
+                }
             }
         }
+    }
+
+    private void castChannelTick(
+        int playerId,
+        Player player,
+        Power power,
+        CastRequest request,
+        List<WorldEvent> events
+    ) {
+        CastTarget target = Targeting.resolveOffset(
+            player.getCastX(),
+            player.getCastY(),
+            request.targetOffsetX(),
+            request.targetOffsetY(),
+            power.range(),
+            player.getAimX(),
+            player.getAimY()
+        );
+
+        castBeam(
+            playerId,
+            player,
+            power,
+            target.directionX(),
+            target.directionY(),
+            events
+        );
     }
 
     private void movePlayer(Player player, PlayerCommand command) {
@@ -280,21 +414,167 @@ public class ArenaWorld {
         Zone underfoot = topZoneOverlapping(player);
         float speed = PLAYER_SPEED
             * (underfoot == null ? 1f : underfoot.getKind().speedMultiplier());
+        float[] gravityPull = singularityPlayerPull(player);
 
-        float dx = moveX * speed * STEP;
-        float dy = moveY * speed * STEP;
+        float dx = (
+            moveX * speed
+                + player.getKnockbackVelocityX()
+                + gravityPull[0]
+        ) * STEP;
+        float dy = (
+            moveY * speed
+                + player.getKnockbackVelocityY()
+                + gravityPull[1]
+        ) * STEP;
 
-        float[] resolved =
-                collision.resolveMovement(
-                    player.getCollisionX(),
-                    player.getCollisionY(),
-                    dx,
-                    dy,
-                    Player.HALF_WIDTH,
-                    Player.HALF_HEIGHT
+        float[] resolved = resolveWorldMovement(
+            player.getCollisionX(),
+            player.getCollisionY(),
+            dx,
+            dy,
+            Player.HALF_WIDTH,
+            Player.HALF_HEIGHT
+        );
+
+        player.move(resolved[0], resolved[1]);
+        player.dampenKnockback(KNOCKBACK_DAMPING_PER_STEP);
+    }
+
+    private void advanceProjectile(
+        Projectile projectile,
+        float distance,
+        boolean externallyInfluenced
+    ) {
+        if (externallyInfluenced) {
+            projectile.updateWithoutConsumingRange(distance);
+        } else {
+            projectile.update(distance);
+        }
+    }
+
+    private boolean applySingularityGravity(Projectile projectile) {
+        boolean influenced = false;
+
+        for (Zone zone : zones) {
+            ZoneKind kind = zone.getKind();
+            int level = gravityLevel(
+                projectile.getX(),
+                projectile.getY(),
+                zone
+            );
+
+            if (level == 0) {
+                continue;
+            }
+
+            influenced = true;
+
+            projectile.accelerateToward(
+                zone.getX(),
+                zone.getY(),
+                kind.projectileGravityAccelerationStep() * level * level,
+                STEP
+            );
+        }
+
+        return influenced;
+    }
+
+    private float[] singularityPlayerPull(Player player) {
+        float pullX = 0f;
+        float pullY = 0f;
+
+        for (Zone zone : zones) {
+            int level = gravityLevel(
+                player.getCollisionX(),
+                player.getCollisionY(),
+                zone
+            );
+
+            if (level == 0) {
+                continue;
+            }
+
+            float dx = zone.getX() - player.getCollisionX();
+            float dy = zone.getY() - player.getCollisionY();
+            float distance = (float) Math.sqrt(dx * dx + dy * dy);
+
+            if (distance <= 0.0001f) {
+                continue;
+            }
+
+            float pullSpeed = zone.getKind().playerGravitySpeedStep() * level;
+            pullX += dx / distance * pullSpeed;
+            pullY += dy / distance * pullSpeed;
+        }
+
+        return new float[] { pullX, pullY };
+    }
+
+    private int gravityLevel(float x, float y, Zone zone) {
+        ZoneKind kind = zone.getKind();
+
+        if (kind.gravityRadius() <= 0f) {
+            return 0;
+        }
+
+        float dx = x - zone.getX();
+        float dy = y - zone.getY();
+        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > kind.gravityRadius()) {
+            return 0;
+        }
+
+        float bandWidth = kind.gravityRadius() / kind.gravityLevels();
+        int bandFromCenter = Math.min(
+            kind.gravityLevels() - 1,
+            (int) (distance / bandWidth)
+        );
+        return kind.gravityLevels() - bandFromCenter;
+    }
+
+    private void applyExpirationExplosion(Zone zone) {
+        ZoneKind kind = zone.getKind();
+        float radius = kind.expirationExplosionRadius();
+
+        if (radius <= 0f) {
+            return;
+        }
+
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            Player player = entry.getValue();
+
+            if (
+                player.isAlive()
+                    && circleOverlapsPlayer(
+                        zone.getX(),
+                        zone.getY(),
+                        radius,
+                        player
+                    )
+            ) {
+                damagePlayer(
+                    entry.getKey(),
+                    kind.expirationExplosionDamage(),
+                    zone.getDamageOwnerPlayerId()
                 );
+            }
+        }
 
-            player.move(resolved[0], resolved[1]);
+        for (TargetDummy dummy : dummies) {
+            if (
+                dummy.isAlive()
+                    && circleOverlapsDummy(
+                        zone.getX(),
+                        zone.getY(),
+                        radius,
+                        dummy
+                    )
+            ) {
+                dummy.takeDamage(kind.expirationExplosionDamage());
+            }
+        }
     }
 
     // Adds a player at the arena spawn and returns its id.
@@ -305,13 +585,14 @@ public class ArenaWorld {
 
         return id;
     }
- 
+
     public void removePlayer(int id) {
         players.remove(id);
         assignedPlayerSpawns.remove(id);
         playerDotEffects.remove(id);
+        activeChannels.keySet().removeIf(key -> key.playerId() == id);
     }
- 
+
     // Read-only view, in join order; the Player objects are live.
     public Map<Integer, Player> getPlayers() {
         return Collections.unmodifiableMap(players);
@@ -329,18 +610,25 @@ public class ArenaWorld {
             return;
         }
 
-        placeZone(
+        Zone placed = placeZone(
             power.zoneKind(),
             x,
             y,
             projectile.getOwnerPlayerId()
         );
+
+        if (power == Powers.VORTEX) {
+            vortexZoneSourceKeys.put(
+                placed.getId(),
+                projectileVortexSourceKey(projectile)
+            );
+        }
     }
 
     // An instant zone follows the same terrain path rule as a projectile. Its
     // center stops where its point/probe first touches terrain; the larger zone
     // itself may overlap the blocked tile after appearing.
-    private void placeZoneAtTargetOrTerrain(
+    private boolean placeZoneAtTargetOrTerrain(
         ZoneKind kind,
         float originX,
         float originY,
@@ -348,6 +636,10 @@ public class ArenaWorld {
         float probeRadius,
         int ownerPlayerId
     ) {
+        if (kind.isSolid()) {
+            return placeSolidZone(kind, originX, originY, target, ownerPlayerId);
+        }
+
         float terrainDistance = collision.raycastTerrain(
             originX,
             originY,
@@ -366,25 +658,246 @@ public class ArenaWorld {
             originY + target.directionY() * distance,
             ownerPlayerId
         );
+        return true;
     }
 
-    private void placeZone(
+    private Zone placeZone(
         ZoneKind kind,
         float x,
         float y,
         int ownerPlayerId
     ) {
-        zones.add(Zone.create(
+        Zone zone = Zone.create(
             nextZoneId++,
             kind,
             x,
             y,
             ownerPlayerId
-        ));
+        );
+        zones.add(zone);
+        return zone;
+    }
+
+    private boolean placeSolidZone(
+        ZoneKind kind,
+        float originX,
+        float originY,
+        CastTarget target,
+        int ownerPlayerId
+    ) {
+        // Solid zones retain sub-tile cursor precision. Their full footprint is
+        // swept so a blocked cursor places the zone just before the obstacle.
+        float halfWidth = kind.solidHalfLength();
+        float halfHeight = kind.solidHalfThickness();
+
+        BlockingHit hit = findBlockingHit(
+            originX,
+            originY,
+            target.directionX(),
+            target.directionY(),
+            target.distance(),
+            halfWidth,
+            halfHeight
+        );
+        float distance = Float.isFinite(hit.distance())
+            ? Math.max(0f, hit.distance() - 0.001f)
+            : target.distance();
+        float x = originX + target.directionX() * distance;
+        float y = originY + target.directionY() * distance;
+        RectangleCollider wall = new RectangleCollider(x, y, halfWidth, halfHeight);
+
+        if (overlapsWorldObstacle(wall) || overlapsLivingPlayer(wall)) {
+            return false;
+        }
+
+        placeZone(kind, x, y, ownerPlayerId);
+        return true;
+    }
+
+    private boolean overlapsLivingPlayer(WorldCollider collider) {
+        for (Player player : players.values()) {
+            if (
+                player.isAlive()
+                && collider.overlaps(
+                    player.getCollisionX(),
+                    player.getCollisionY(),
+                    Player.HALF_WIDTH,
+                    Player.HALF_HEIGHT
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean overlapsWorldObstacle(RectangleCollider candidate) {
+        if (
+            collision.overlaps(
+                candidate.centerX(),
+                candidate.centerY(),
+                candidate.halfWidth(),
+                candidate.halfHeight()
+            )
+        ) {
+            return true;
+        }
+
+        for (Zone zone : zones) {
+            if (
+                zone.getKind().isSolid()
+                && zoneCollider(zone).overlaps(
+                    candidate.centerX(),
+                    candidate.centerY(),
+                    candidate.halfWidth(),
+                    candidate.halfHeight()
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private BlockingHit findBlockingHit(
+        float originX,
+        float originY,
+        float directionX,
+        float directionY,
+        float maxDistance,
+        float footprintHalfWidth,
+        float footprintHalfHeight
+    ) {
+        return findBlockingHit(
+            originX,
+            originY,
+            directionX,
+            directionY,
+            maxDistance,
+            footprintHalfWidth,
+            footprintHalfHeight,
+            null
+        );
+    }
+
+    private BlockingHit findBlockingHit(
+        float originX,
+        float originY,
+        float directionX,
+        float directionY,
+        float maxDistance,
+        float footprintHalfWidth,
+        float footprintHalfHeight,
+        Zone ignoredZone
+    ) {
+        float nearest = collision.raycast(
+            originX,
+            originY,
+            directionX,
+            directionY,
+            maxDistance,
+            footprintHalfWidth,
+            footprintHalfHeight
+        );
+        Zone nearestZone = null;
+
+        for (Zone zone : zones) {
+            if (zone == ignoredZone || !zone.getKind().isSolid()) {
+                continue;
+            }
+
+            float distance = zoneCollider(zone).raycast(
+                originX,
+                originY,
+                directionX,
+                directionY,
+                Math.min(maxDistance, nearest),
+                footprintHalfWidth,
+                footprintHalfHeight
+            );
+
+            if (distance < nearest) {
+                nearest = distance;
+                nearestZone = zone;
+            }
+        }
+
+        return new BlockingHit(nearest, nearestZone);
+    }
+
+    private RectangleCollider zoneCollider(Zone zone) {
+        ZoneKind kind = zone.getKind();
+        return new RectangleCollider(
+            zone.getX(),
+            zone.getY(),
+            kind.solidHalfLength(),
+            kind.solidHalfThickness()
+        );
+    }
+
+    private boolean overlapsWorldObstacle(
+        float x,
+        float y,
+        float halfWidth,
+        float halfHeight
+    ) {
+        if (collision.overlaps(x, y, halfWidth, halfHeight)) {
+            return true;
+        }
+
+        for (Zone zone : zones) {
+            if (
+                zone.getKind().isSolid()
+                && zoneCollider(zone).overlaps(x, y, halfWidth, halfHeight)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private float[] resolveWorldMovement(
+        float x,
+        float y,
+        float dx,
+        float dy,
+        float halfWidth,
+        float halfHeight
+    ) {
+        float allowedDx = overlapsWorldObstacle(x + dx, y, halfWidth, halfHeight)
+            ? 0f
+            : dx;
+        float newX = x + allowedDx;
+        float allowedDy = overlapsWorldObstacle(newX, y + dy, halfWidth, halfHeight)
+            ? 0f
+            : dy;
+
+        return new float[] { allowedDx, allowedDy };
     }
 
     public List<Zone> getZones() {
         return zones;
+    }
+
+    // Read-only query for client presentation such as Steam view obscuring.
+    public boolean isPlayerOverlappingZoneKind(
+        Player player,
+        ZoneKind kind
+    ) {
+        if (player == null || !player.isAlive()) {
+            return false;
+        }
+
+        for (Zone zone : zones) {
+            if (zone.getKind() == kind && zoneOverlapsPlayer(zone, player)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // A projectile reacts with the newest zone it touches, if the reaction
@@ -400,26 +913,344 @@ public class ArenaWorld {
         for (int i = zones.size() - 1; i >= 0; i--) {
             Zone zone = zones.get(i);
 
-            float dx = projectile.getX() - zone.getX();
-            float dy = projectile.getY() - zone.getY();
-            float interactionDistance =
-                power.radius() + zone.getRadius();
+            boolean overlaps;
 
-            boolean overlaps =
-                dx * dx + dy * dy
+            if (zone.getKind().isSolid()) {
+                overlaps = zoneCollider(zone).overlaps(
+                    projectile.getX(),
+                    projectile.getY(),
+                    power.radius(),
+                    power.radius()
+                );
+            } else {
+                float dx = projectile.getX() - zone.getX();
+                float dy = projectile.getY() - zone.getY();
+                float interactionDistance = power.radius() + zone.getRadius();
+                overlaps = dx * dx + dy * dy
                     <= interactionDistance * interactionDistance;
+            }
 
             if (!overlaps) {
                 continue;
             }
 
-            Reactions.Reaction reaction = Reactions.find(power, zone.getKind());
-
-            return reaction != null
-                && applyReaction(zone, reaction, projectile.getOwnerPlayerId(), events);
+            return applyProjectileReactionWithZone(projectile, zone, events);
         }
 
         return false;
+    }
+
+    private boolean applyProjectileReactionWithZone(
+        Projectile projectile,
+        Zone zone,
+        List<WorldEvent> events
+    ) {
+        Reactions.Reaction reaction = Reactions.find(
+            projectile.getPower(),
+            zone.getKind()
+        );
+
+        return reaction != null
+            && applyReaction(zone, reaction, projectile.getOwnerPlayerId(), events);
+    }
+
+    // Solid destructible zones absorb the hit. Their elemental reaction is
+    // deferred until the hit that depletes their health, so a Stone Wall is
+    // useful as cover instead of transforming on first contact.
+    private boolean damageDestructibleZone(
+        Projectile projectile,
+        Zone zone,
+        List<WorldEvent> events
+    ) {
+        return damageDestructibleZone(
+            zone,
+            projectile.getPower(),
+            projectile.getOwnerPlayerId(),
+            events
+        );
+    }
+
+    private boolean damageDestructibleZone(
+        Zone zone,
+        Power power,
+        int casterPlayerId,
+        List<WorldEvent> events
+    ) {
+        return damageDestructibleZone(
+            zone,
+            power,
+            power.damage(),
+            casterPlayerId,
+            events
+        );
+    }
+
+    private boolean damageDestructibleZone(
+        Zone zone,
+        Power power,
+        float damage,
+        int casterPlayerId,
+        List<WorldEvent> events
+    ) {
+        if (!zone.isDestructible()) {
+            return false;
+        }
+
+        Reactions.Reaction reaction = Reactions.find(power, zone.getKind());
+
+        // Stone Wall is an elemental interaction target rather than a generic
+        // damage sponge. A spell still collides with it, but only a spell that
+        // can transform Stone is allowed to reduce its health.
+        if (zone.getKind() == ZoneKinds.STONE_WALL && reaction == null) {
+            return true;
+        }
+
+        zone.takeDamage(damage);
+
+        if (!zone.hasBeenDestroyed()) {
+            return true;
+        }
+
+        if (reaction != null) {
+            applyReaction(zone, reaction, casterPlayerId, events);
+        } else {
+            zones.remove(zone);
+        }
+
+        return true;
+    }
+
+    private boolean tryCaptureProjectile(Projectile projectile) {
+        if (projectile.getPower() == Powers.VORTEX) {
+            return false;
+        }
+
+        for (int i = zones.size() - 1; i >= 0; i--) {
+            Zone zone = zones.get(i);
+
+            if (!zone.getKind().capturesProjectiles()) {
+                continue;
+            }
+
+            if (
+                captureProjectile(
+                    projectile,
+                    new ZoneVortexSource(zone, vortexSourceKey(zone))
+                )
+            ) {
+                return true;
+            }
+        }
+
+        for (Projectile source : projectiles) {
+            if (source == projectile || source.getPower() != Powers.VORTEX) {
+                continue;
+            }
+
+            if (
+                captureProjectile(
+                    projectile,
+                    new ProjectileVortexSource(source)
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean captureProjectile(
+        Projectile projectile,
+        VortexSource source
+    ) {
+        if (projectile.hasCompletedVortexOrbit(source.key())) {
+            return false;
+        }
+
+        float dx = projectile.getX() - source.x();
+        float dy = projectile.getY() - source.y();
+        float overlap = projectile.getPower().radius() + source.radius();
+
+        if (dx * dx + dy * dy > overlap * overlap) {
+            return false;
+        }
+
+        float angle = (float) Math.atan2(dy, dx);
+        int mixed = projectile.getId() * 1_103_515_245 + source.key() * 12_345;
+        float fraction = (mixed & 0x7FFFFFFF) / (float) Integer.MAX_VALUE;
+        float rotations = 0.5f + fraction;
+        VortexOrbit orbit = new VortexOrbit(
+            source,
+            angle,
+            rotations * (float) (Math.PI * 2.0)
+        );
+        vortexOrbits.put(projectile.getId(), orbit);
+        positionProjectileOnOrbit(projectile, orbit, 0f);
+        return true;
+    }
+
+    private void updateVortexOrbit(
+        Projectile projectile,
+        VortexOrbit orbit
+    ) {
+        float angularStep = VORTEX_ORBIT_SPEED / orbit.source().radius() * STEP;
+        float actualStep = Math.min(angularStep, orbit.radiansRemaining());
+        orbit.advance(actualStep);
+        positionProjectileOnOrbit(
+            projectile,
+            orbit,
+            orbit.source().radius() * actualStep
+        );
+
+        if (orbit.radiansRemaining() > 0.0001f) {
+            return;
+        }
+
+        vortexOrbits.remove(projectile.getId());
+        releaseProjectileFromVortex(projectile, orbit);
+    }
+
+    private void releaseVortexOrbitsFromSource(int sourceKey) {
+        Iterator<Map.Entry<Integer, VortexOrbit>> iterator =
+            vortexOrbits.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<Integer, VortexOrbit> entry = iterator.next();
+            VortexOrbit orbit = entry.getValue();
+
+            if (orbit.source().key() != sourceKey) {
+                continue;
+            }
+
+            Projectile projectile = projectileById(entry.getKey());
+            if (projectile != null) {
+                releaseProjectileFromVortex(projectile, orbit);
+            }
+            iterator.remove();
+        }
+    }
+
+    private Projectile projectileById(int projectileId) {
+        for (Projectile projectile : projectiles) {
+            if (projectile.getId() == projectileId) {
+                return projectile;
+            }
+        }
+
+        return null;
+    }
+
+    private void releaseProjectileFromVortex(
+        Projectile projectile,
+        VortexOrbit orbit
+    ) {
+        float tangentX = -(float) Math.sin(orbit.angle());
+        float tangentY = (float) Math.cos(orbit.angle());
+        int owner = orbit.source().ownerPlayerId() == Zone.NO_PLAYER
+            ? projectile.getOwnerPlayerId()
+            : orbit.source().ownerPlayerId();
+        projectile.releaseFromVortex(
+            orbit.source().key(),
+            tangentX,
+            tangentY,
+            owner
+        );
+    }
+
+    private int vortexSourceKey(Zone zone) {
+        return vortexZoneSourceKeys.getOrDefault(zone.getId(), zone.getId());
+    }
+
+    private static int projectileVortexSourceKey(Projectile projectile) {
+        return -projectile.getId() - 1;
+    }
+
+    private void positionProjectileOnOrbit(
+        Projectile projectile,
+        VortexOrbit orbit,
+        float orbitDistance
+    ) {
+        float cosine = (float) Math.cos(orbit.angle());
+        float sine = (float) Math.sin(orbit.angle());
+        float tangentX = -sine;
+        float tangentY = cosine;
+        projectile.orbitTo(
+            orbit.source().x() + cosine * orbit.source().radius(),
+            orbit.source().y() + sine * orbit.source().radius(),
+            tangentX,
+            tangentY,
+            orbitDistance
+        );
+    }
+
+    private void applyVortexImpulses() {
+        Set<VortexPlayerContact> currentContacts = new HashSet<>();
+
+        for (Zone zone : zones) {
+            if (zone.getKind().pushImpulse() <= 0f) {
+                continue;
+            }
+
+            applyVortexImpulse(
+                new ZoneVortexSource(zone, vortexSourceKey(zone)),
+                zone.getKind().pushImpulse(),
+                currentContacts
+            );
+        }
+
+        for (Projectile projectile : projectiles) {
+            if (projectile.getPower() != Powers.VORTEX) {
+                continue;
+            }
+
+            applyVortexImpulse(
+                new ProjectileVortexSource(projectile),
+                ZoneKinds.VORTEX.pushImpulse(),
+                currentContacts
+            );
+        }
+
+        vortexPlayerContacts.retainAll(currentContacts);
+    }
+
+    private void applyVortexImpulse(
+        VortexSource source,
+        float impulseSpeed,
+        Set<VortexPlayerContact> currentContacts
+    ) {
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            Player player = entry.getValue();
+
+            if (
+                !player.isAlive()
+                || !circleOverlapsPlayer(source.x(), source.y(), source.radius(), player)
+            ) {
+                continue;
+            }
+
+            VortexPlayerContact contact = new VortexPlayerContact(
+                source.key(),
+                entry.getKey()
+            );
+            currentContacts.add(contact);
+
+            if (vortexPlayerContacts.contains(contact)) {
+                continue;
+            }
+
+            float dx = player.getCollisionX() - source.x();
+            float dy = player.getCollisionY() - source.y();
+            float length = (float) Math.sqrt(dx * dx + dy * dy);
+            float directionX = length > 0.0001f ? dx / length : player.getAimX();
+            float directionY = length > 0.0001f ? dy / length : player.getAimY();
+            player.addKnockbackVelocity(
+                directionX * impulseSpeed,
+                directionY * impulseSpeed
+            );
+        }
+
+        vortexPlayerContacts.addAll(currentContacts);
     }
 
     // Carries out one cell of the interaction matrix on a zone. Returns
@@ -434,6 +1265,8 @@ public class ArenaWorld {
             case TRANSFORM -> {
                 // Same spot and ID, new kind. It moves to the end of the list
                 // because it is now the newest zone there.
+                releaseVortexOrbitsFromSource(vortexSourceKey(zone));
+                vortexZoneSourceKeys.remove(zone.getId());
                 zones.remove(zone);
                 zones.add(Zone.create(
                     zone.getId(),
@@ -504,26 +1337,53 @@ public class ArenaWorld {
         float directionY,
         float maxDistance,
         float halfWidth,
-        Power beam
+        Power beam,
+        Zone ignoredZone
     ) {
         LightningHit nearest = LightningHit.none();
 
-        float terrainDistance =
-            collision.raycastTerrain(
+        BlockingHit blockingHit =
+            findBlockingHit(
                 originX,
                 originY,
                 directionX,
                 directionY,
                 maxDistance,
-                halfWidth
+                halfWidth,
+                halfWidth,
+                ignoredZone
             );
 
-        if (!Float.isInfinite(terrainDistance)) {
-            nearest = LightningHit.terrain(terrainDistance);
+        if (!Float.isInfinite(blockingHit.distance())) {
+            if (
+                beam == Powers.BEAM_OF_LIGHT
+                    && blockingHit.zone() != null
+                    && blockingHit.zone().getKind() == ZoneKinds.CRYSTAL_WALL
+            ) {
+                nearest = LightningHit.crystal(
+                    blockingHit.distance(),
+                    blockingHit.zone()
+                );
+            } else if (
+                blockingHit.zone() != null
+                    && blockingHit.zone().isDestructible()
+            ) {
+                nearest = LightningHit.wall(
+                    blockingHit.distance(),
+                    blockingHit.zone()
+                );
+            } else {
+                nearest = LightningHit.terrain(blockingHit.distance());
+            }
         }
 
         for (Zone zone : zones) {
-            if (Reactions.find(beam, zone.getKind()) == null) {
+            if (
+                zone == ignoredZone
+                    || zone.isDestructible()
+                    || zone.getKind().isSolid()
+                    || Reactions.find(beam, zone.getKind()) == null
+            ) {
                 continue;
             }
 
@@ -817,16 +1677,43 @@ public class ArenaWorld {
         Zone zone,
         TargetDummy dummy
     ) {
-        float dx = zone.getX() - dummy.getX();
-        float dy = zone.getY() - dummy.getY();
-        float overlapDistance =
-            zone.getRadius() + TargetDummy.RADIUS;
+        return circleOverlapsDummy(
+            zone.getX(),
+            zone.getY(),
+            zone.getRadius(),
+            dummy
+        );
+    }
+
+    private boolean circleOverlapsDummy(
+        float x,
+        float y,
+        float radius,
+        TargetDummy dummy
+    ) {
+        float dx = x - dummy.getX();
+        float dy = y - dummy.getY();
+        float overlapDistance = radius + TargetDummy.RADIUS;
 
         return dx * dx + dy * dy
             <= overlapDistance * overlapDistance;
     }
 
     private boolean zoneOverlapsPlayer(Zone zone, Player player) {
+        return circleOverlapsPlayer(
+            zone.getX(),
+            zone.getY(),
+            zone.getRadius(),
+            player
+        );
+    }
+
+    private boolean circleOverlapsPlayer(
+        float x,
+        float y,
+        float radius,
+        Player player
+    ) {
         float collisionX = player.getCollisionX();
         float collisionY = player.getCollisionY();
 
@@ -844,19 +1731,19 @@ public class ArenaWorld {
 
         float closestX = Math.max(
             playerLeft,
-            Math.min(zone.getX(), playerRight)
+            Math.min(x, playerRight)
         );
 
         float closestY = Math.max(
             playerBottom,
-            Math.min(zone.getY(), playerTop)
+            Math.min(y, playerTop)
         );
 
-        float dx = zone.getX() - closestX;
-        float dy = zone.getY() - closestY;
+        float dx = x - closestX;
+        float dy = y - closestY;
 
         return dx * dx + dy * dy
-            <= zone.getRadius() * zone.getRadius();
+            <= radius * radius;
     }
 
     private void addPlayerAtAvailableSpawn(int playerId) {
@@ -1050,9 +1937,12 @@ public class ArenaWorld {
                     state.ownerPlayerId()
                 );
             } else {
-                projectile.restorePosition(
+                projectile.restoreState(
                     state.x(),
-                    state.y()
+                    state.y(),
+                    state.directionX(),
+                    state.directionY(),
+                    state.ownerPlayerId()
                 );
             }
 
@@ -1068,6 +1958,8 @@ public class ArenaWorld {
         }
 
         zones.clear();
+        vortexOrbits.clear();
+        vortexZoneSourceKeys.clear();
 
         for (WorldSnapshot.ZoneState state : snapshot.zones()) {
             Zone zone = previousZones.remove(state.id());
@@ -1079,6 +1971,7 @@ public class ArenaWorld {
             zone.setDamageOwnerPlayerId(
                 state.damageOwnerPlayerId()
             );
+            zone.restoreHealth(state.health());
 
             if (state.electrified() && !zone.isElectrified()) {
                 zone.electrify(state.damageOwnerPlayerId());
@@ -1098,7 +1991,7 @@ public class ArenaWorld {
     private static Zone createZoneFromSnapshot(
         WorldSnapshot.ZoneState state
     ) {
-        return Zone.create(
+        Zone zone = Zone.create(
             state.id(),
             state.kind(),
             state.x(),
@@ -1107,6 +2000,8 @@ public class ArenaWorld {
             Float.MAX_VALUE,
             state.damageOwnerPlayerId()
         );
+        zone.restoreHealth(state.health());
+        return zone;
     }
 
     // Player 0 is the local player in single-player.
@@ -1135,7 +2030,8 @@ public class ArenaWorld {
                 directionY,
                 power.range(),
                 power.radius(),
-                power
+                power,
+                null
             );
 
         switch (hit.kind()) {
@@ -1146,6 +2042,25 @@ public class ArenaWorld {
                     zone,
                     Reactions.find(power, zone.getKind()),
                     playerId,
+                    events
+                );
+            }
+
+            case WALL ->
+                damageDestructibleZone(
+                    hit.zone(),
+                    power,
+                    playerId,
+                    events
+                );
+
+            case CRYSTAL -> {
+                castCrystalSplitBeams(
+                    playerId,
+                    power,
+                    hit.zone(),
+                    directionX,
+                    directionY,
                     events
                 );
             }
@@ -1172,26 +2087,34 @@ public class ArenaWorld {
                 ? power.range()
                 : hit.distance();
 
-        LightningStrikeEvent.EndReason endReason =
+        BeamStrikeEvent.EndReason endReason =
             switch (hit.kind()) {
                 case NONE ->
-                    LightningStrikeEvent.EndReason.RANGE_LIMIT;
+                    BeamStrikeEvent.EndReason.RANGE_LIMIT;
 
                 case TERRAIN ->
-                    LightningStrikeEvent.EndReason.TERRAIN;
+                    BeamStrikeEvent.EndReason.TERRAIN;
+
+                case WALL ->
+                    BeamStrikeEvent.EndReason.WALL;
+
+                case CRYSTAL ->
+                    BeamStrikeEvent.EndReason.WALL;
 
                 case PUDDLE ->
-                    LightningStrikeEvent.EndReason.PUDDLE;
+                    BeamStrikeEvent.EndReason.ZONE_REACTION;
 
                 case PLAYER ->
-                    LightningStrikeEvent.EndReason.PLAYER;
+                    BeamStrikeEvent.EndReason.PLAYER;
 
                 case DUMMY ->
-                    LightningStrikeEvent.EndReason.DUMMY;
+                    BeamStrikeEvent.EndReason.DUMMY;
             };
 
         events.add(
-            new LightningStrikeEvent(
+            new BeamStrikeEvent(
+                playerId,
+                power,
                 originX,
                 originY,
                 originX + directionX * strikeDistance,
@@ -1199,6 +2122,108 @@ public class ArenaWorld {
                 endReason
             )
         );
+    }
+
+    private void castCrystalSplitBeams(
+        int playerId,
+        Power power,
+        Zone crystal,
+        float incomingDirectionX,
+        float incomingDirectionY,
+        List<WorldEvent> events
+    ) {
+        float halfSplitRadians = (float) Math.toRadians(22.5f);
+
+        for (int branch = 1; branch <= 2; branch++) {
+            float angle = branch == 1 ? -halfSplitRadians : halfSplitRadians;
+            float[] direction = rotateDirection(
+                incomingDirectionX,
+                incomingDirectionY,
+                angle
+            );
+
+            LightningHit hit = findLightningHit(
+                playerId,
+                crystal.getX(),
+                crystal.getY(),
+                direction[0],
+                direction[1],
+                Powers.BEAM_OF_LIGHT_CRYSTAL_RANGE,
+                power.radius(),
+                power,
+                crystal
+            );
+
+            applyCrystalSplitHit(playerId, power, hit, events);
+
+            float strikeDistance = hit.kind() == LightningHit.Kind.NONE
+                ? Powers.BEAM_OF_LIGHT_CRYSTAL_RANGE
+                : hit.distance();
+
+            events.add(new BeamStrikeEvent(
+                playerId,
+                power,
+                crystal.getX(),
+                crystal.getY(),
+                crystal.getX() + direction[0] * strikeDistance,
+                crystal.getY() + direction[1] * strikeDistance,
+                beamEndReason(hit.kind()),
+                branch
+            ));
+        }
+    }
+
+    private void applyCrystalSplitHit(
+        int playerId,
+        Power power,
+        LightningHit hit,
+        List<WorldEvent> events
+    ) {
+        float splitDamage = power.damage()
+            * Powers.BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER;
+
+        switch (hit.kind()) {
+            case PUDDLE -> {
+                Zone zone = hit.zone();
+                applyReaction(
+                    zone,
+                    Reactions.find(power, zone.getKind()),
+                    playerId,
+                    events
+                );
+            }
+
+            case WALL ->
+                damageDestructibleZone(
+                    hit.zone(),
+                    power,
+                    splitDamage,
+                    playerId,
+                    events
+                );
+
+            case PLAYER ->
+                damagePlayer(hit.playerId(), splitDamage, playerId);
+
+            case DUMMY ->
+                hit.dummy().takeDamage(splitDamage);
+
+            case NONE, TERRAIN, CRYSTAL -> {
+                // A split ray stops at terrain or another crystal. Crystals do
+                // not recursively multiply beams or take light-beam damage.
+            }
+        }
+    }
+
+    private BeamStrikeEvent.EndReason beamEndReason(LightningHit.Kind kind) {
+        return switch (kind) {
+            case NONE -> BeamStrikeEvent.EndReason.RANGE_LIMIT;
+            case TERRAIN -> BeamStrikeEvent.EndReason.TERRAIN;
+            case WALL, CRYSTAL -> BeamStrikeEvent.EndReason.WALL;
+            case PUDDLE -> BeamStrikeEvent.EndReason.ZONE_REACTION;
+            case PLAYER -> BeamStrikeEvent.EndReason.PLAYER;
+            case DUMMY -> BeamStrikeEvent.EndReason.DUMMY;
+        };
     }
 
     private boolean applyProjectilePlayerHit(
@@ -1352,7 +2377,7 @@ public class ArenaWorld {
             }
 
             case PLACED_ZONE -> {
-                placeZoneAtTargetOrTerrain(
+                accepted = placeZoneAtTargetOrTerrain(
                     power.zoneKind(),
                     player.getCastX(),
                     player.getCastY(),
@@ -1360,7 +2385,6 @@ public class ArenaWorld {
                     power.radius(),
                     playerId
                 );
-                accepted = true;
             }
 
             case BEAM -> {
@@ -1435,5 +2459,108 @@ public class ArenaWorld {
     // Returns the live list for rendering, including dead dummies awaiting respawn.
     public List<TargetDummy> getDummies() {
         return dummies;
+    }
+
+    private record BlockingHit(float distance, Zone zone) {
+    }
+
+    private record ChannelKey(int playerId, int slot) {
+    }
+
+    private record VortexPlayerContact(int sourceKey, int playerId) {
+    }
+
+    private interface VortexSource {
+        int key();
+        float x();
+        float y();
+        float radius();
+        int ownerPlayerId();
+    }
+
+    private record ZoneVortexSource(
+        Zone zone,
+        int sourceKey
+    ) implements VortexSource {
+        @Override
+        public int key() { return sourceKey; }
+        @Override
+        public float x() { return zone.getX(); }
+        @Override
+        public float y() { return zone.getY(); }
+        @Override
+        public float radius() { return zone.getRadius(); }
+        @Override
+        public int ownerPlayerId() { return zone.getDamageOwnerPlayerId(); }
+    }
+
+    private record ProjectileVortexSource(Projectile projectile)
+        implements VortexSource {
+
+        @Override
+        public int key() { return projectileVortexSourceKey(projectile); }
+        @Override
+        public float x() { return projectile.getX(); }
+        @Override
+        public float y() { return projectile.getY(); }
+        @Override
+        public float radius() { return ZoneKinds.VORTEX.radius(); }
+        @Override
+        public int ownerPlayerId() { return projectile.getOwnerPlayerId(); }
+    }
+
+    private static final class VortexOrbit {
+
+        private final VortexSource source;
+        private float angle;
+        private float radiansRemaining;
+
+        private VortexOrbit(
+            VortexSource source,
+            float angle,
+            float radiansRemaining
+        ) {
+            this.source = source;
+            this.angle = angle;
+            this.radiansRemaining = radiansRemaining;
+        }
+
+        private VortexSource source() { return source; }
+        private float angle() { return angle; }
+        private float radiansRemaining() { return radiansRemaining; }
+
+        private void advance(float radians) {
+            angle += radians;
+            radiansRemaining = Math.max(0f, radiansRemaining - radians);
+        }
+    }
+
+    private static final class ActiveChannel {
+
+        private final Power power;
+        private float secondsUntilTick;
+
+        private ActiveChannel(Power power, float secondsUntilTick) {
+            this.power = power;
+            this.secondsUntilTick = secondsUntilTick;
+        }
+
+        private Power power() {
+            return power;
+        }
+
+        private boolean advance(float deltaSeconds) {
+            secondsUntilTick -= deltaSeconds;
+
+            if (secondsUntilTick > 0f) {
+                return false;
+            }
+
+            do {
+                secondsUntilTick += power.channelTickSeconds();
+            } while (secondsUntilTick <= 0f);
+
+            return true;
+        }
     }
 }

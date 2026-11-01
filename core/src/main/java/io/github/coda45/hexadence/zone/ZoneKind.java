@@ -27,6 +27,17 @@ public final class ZoneKind {
 
     private final float damagePerSecond;
     private final float speedMultiplier;
+    private final float solidHalfLength;
+    private final float solidHalfThickness;
+    private final float maxHealth;
+    private final boolean capturesProjectiles;
+    private final float pushImpulse;
+    private final float gravityRadius;
+    private final int gravityLevels;
+    private final float projectileGravityAccelerationStep;
+    private final float playerGravitySpeedStep;
+    private final float expirationExplosionRadius;
+    private final float expirationExplosionDamage;
 
     private final boolean coversPlayers;
     private final int tint;
@@ -43,6 +54,17 @@ public final class ZoneKind {
         this.duration = b.duration;
         this.damagePerSecond = b.damagePerSecond;
         this.speedMultiplier = b.speedMultiplier;
+        this.solidHalfLength = b.solidHalfLength;
+        this.solidHalfThickness = b.solidHalfThickness;
+        this.maxHealth = b.maxHealth;
+        this.capturesProjectiles = b.capturesProjectiles;
+        this.pushImpulse = b.pushImpulse;
+        this.gravityRadius = b.gravityRadius;
+        this.gravityLevels = b.gravityLevels;
+        this.projectileGravityAccelerationStep = b.projectileGravityAccelerationStep;
+        this.playerGravitySpeedStep = b.playerGravitySpeedStep;
+        this.expirationExplosionRadius = b.expirationExplosionRadius;
+        this.expirationExplosionDamage = b.expirationExplosionDamage;
         this.coversPlayers = b.coversPlayers;
         this.tint = b.tint;
         this.plannedEffect = b.plannedEffect;
@@ -73,8 +95,24 @@ public final class ZoneKind {
 
     // Health removed per second from anyone standing in it.
     public float damagePerSecond() { return damagePerSecond; }
-    // Movement speed inside it: 1 is normal, 0.5 is half speed.
+    // Movement speed inside it: 1 is normal, 0.5 is half, 1.25 is 25% faster.
     public float speedMultiplier() { return speedMultiplier; }
+    public boolean isSolid() { return solidHalfLength > 0f; }
+    public float solidHalfLength() { return solidHalfLength; }
+    public float solidHalfThickness() { return solidHalfThickness; }
+    // Zero means the zone cannot be damaged.
+    public float maxHealth() { return maxHealth; }
+    public boolean capturesProjectiles() { return capturesProjectiles; }
+    // Outward velocity added once when a player touches the field.
+    public float pushImpulse() { return pushImpulse; }
+    public float gravityRadius() { return gravityRadius; }
+    public int gravityLevels() { return gravityLevels; }
+    public float projectileGravityAccelerationStep() {
+        return projectileGravityAccelerationStep;
+    }
+    public float playerGravitySpeedStep() { return playerGravitySpeedStep; }
+    public float expirationExplosionRadius() { return expirationExplosionRadius; }
+    public float expirationExplosionDamage() { return expirationExplosionDamage; }
 
     // Drawn over players instead of under them, like a cloud.
     public boolean coversPlayers() { return coversPlayers; }
@@ -114,6 +152,17 @@ public final class ZoneKind {
         private float duration;
         private float damagePerSecond;
         private float speedMultiplier = 1f;
+        private float solidHalfLength;
+        private float solidHalfThickness;
+        private float maxHealth;
+        private boolean capturesProjectiles;
+        private float pushImpulse;
+        private float gravityRadius;
+        private int gravityLevels;
+        private float projectileGravityAccelerationStep;
+        private float playerGravitySpeedStep;
+        private float expirationExplosionRadius;
+        private float expirationExplosionDamage;
         private boolean coversPlayers;
         private int tint = 0xFFFFFF99;
         private String plannedEffect = "";
@@ -131,6 +180,34 @@ public final class ZoneKind {
         public Builder duration(float seconds) { this.duration = seconds; return this; }
         public Builder damagePerSecond(float hp) { this.damagePerSecond = hp; return this; }
         public Builder speedMultiplier(float multiplier) { this.speedMultiplier = multiplier; return this; }
+        public Builder solidWall(float halfLength, float halfThickness) {
+            this.solidHalfLength = halfLength;
+            this.solidHalfThickness = halfThickness;
+            return this;
+        }
+        public Builder health(float hp) { this.maxHealth = hp; return this; }
+        public Builder capturesProjectiles() { this.capturesProjectiles = true; return this; }
+        public Builder pushesPlayers(float impulseTilesPerSecond) {
+            this.pushImpulse = impulseTilesPerSecond;
+            return this;
+        }
+        public Builder gravity(
+            float radius,
+            int levels,
+            float projectileAccelerationStep,
+            float playerSpeedStep
+        ) {
+            this.gravityRadius = radius;
+            this.gravityLevels = levels;
+            this.projectileGravityAccelerationStep = projectileAccelerationStep;
+            this.playerGravitySpeedStep = playerSpeedStep;
+            return this;
+        }
+        public Builder expirationExplosion(float radius, float damage) {
+            this.expirationExplosionRadius = radius;
+            this.expirationExplosionDamage = damage;
+            return this;
+        }
         public Builder coversPlayers() { this.coversPlayers = true; return this; }
         public Builder tint(int rgba) { this.tint = rgba; return this; }
         public Builder planned(String effect) { this.plannedEffect = effect; return this; }
@@ -146,9 +223,43 @@ public final class ZoneKind {
             require(innerRadius < radius, "inner radius must be less than radius");
             require(duration > 0f, "duration must be above 0");
             require(damagePerSecond >= 0f, "damage per second cannot be negative");
+            require(speedMultiplier > 0f, "speed multiplier must be above 0");
+            require(solidHalfLength >= 0f, "solid half length cannot be negative");
+            require(solidHalfThickness >= 0f, "solid half thickness cannot be negative");
+            require(maxHealth >= 0f, "health cannot be negative");
             require(
-                speedMultiplier > 0f && speedMultiplier <= 1f,
-                "speed multiplier must be above 0 and at most 1"
+                (solidHalfLength == 0f) == (solidHalfThickness == 0f),
+                "solid wall needs both half length and half thickness"
+            );
+            require(maxHealth == 0f || solidHalfLength > 0f, "only a solid zone can have health");
+            require(pushImpulse >= 0f, "push impulse cannot be negative");
+            require(gravityRadius >= 0f, "gravity radius cannot be negative");
+            require(gravityLevels >= 0, "gravity levels cannot be negative");
+            require(
+                (gravityRadius == 0f) == (gravityLevels == 0),
+                "gravity needs both a radius and level count"
+            );
+            require(
+                gravityRadius == 0f
+                    || projectileGravityAccelerationStep > 0f,
+                "gravity needs projectile acceleration"
+            );
+            require(
+                gravityRadius == 0f || playerGravitySpeedStep > 0f,
+                "gravity needs player pull speed"
+            );
+            require(
+                expirationExplosionRadius >= 0f,
+                "explosion radius cannot be negative"
+            );
+            require(
+                expirationExplosionDamage >= 0f,
+                "explosion damage cannot be negative"
+            );
+            require(
+                (expirationExplosionRadius == 0f)
+                    == (expirationExplosionDamage == 0f),
+                "expiration explosion needs both radius and damage"
             );
 
             if (origin == ZoneOrigin.BASE) {

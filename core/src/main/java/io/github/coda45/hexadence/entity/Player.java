@@ -16,6 +16,8 @@ public class Player {
     private float aimX = 1f;
     private float aimY = 0f;
     private boolean moving;
+    private float knockbackVelocityX;
+    private float knockbackVelocityY;
 
     private static final float MAX_HEALTH = 100f;
     private float health = MAX_HEALTH;
@@ -64,6 +66,31 @@ public class Player {
 
     public boolean isMoving() {
         return moving;
+    }
+
+    public void addKnockbackVelocity(float velocityX, float velocityY) {
+        knockbackVelocityX += velocityX;
+        knockbackVelocityY += velocityY;
+    }
+
+    public float getKnockbackVelocityX() {
+        return knockbackVelocityX;
+    }
+
+    public float getKnockbackVelocityY() {
+        return knockbackVelocityY;
+    }
+
+    public void dampenKnockback(float multiplier) {
+        knockbackVelocityX *= multiplier;
+        knockbackVelocityY *= multiplier;
+
+        if (knockbackVelocityX * knockbackVelocityX < 0.0001f) {
+            knockbackVelocityX = 0f;
+        }
+        if (knockbackVelocityY * knockbackVelocityY < 0.0001f) {
+            knockbackVelocityY = 0f;
+        }
     }
 
     public PlayerColor getColor() {
@@ -144,6 +171,8 @@ public class Player {
 
         if (!isAlive()) {
             moving = false;
+            knockbackVelocityX = 0f;
+            knockbackVelocityY = 0f;
         }
     }
 
@@ -268,5 +297,7 @@ public class Player {
         this.x = x;
         this.y = y;
         moving = false;
+        knockbackVelocityX = 0f;
+        knockbackVelocityY = 0f;
     }
 }
