@@ -44,6 +44,7 @@ public final class Powers {
         .cooldown(1.2f)
         .range(8f)
         .zone(ZoneKinds.RADIANT_CIRCLE)
+        .icon("ui/bg_radiant_circle.png", "ui/rim_yellow.png")
         .build();
 
     public static final Power EMBER_CIRCLE = Power.define(9, "Ember Circle")
@@ -95,6 +96,7 @@ public final class Powers {
         .speed(10f)
         .range(6f)
         .radius(0.16f)
+        .icon("ui/bg_rock_shards.png", "ui/rim_none.png")
         .build();
 
     public static final Power STONE_WALL = Power.define(10, "Stone Wall")
@@ -168,6 +170,7 @@ public final class Powers {
         .cooldown(1f)
         .range(8f)
         .zone(ZoneKinds.NULL_ZONE)
+        .icon("ui/bg_null_zone.png", "ui/rim_none.png")
         .build();
 
     // ---- Registry ----
