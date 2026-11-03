@@ -27,10 +27,10 @@ public final class ZoneKinds {
     ZoneKind.base(10, "Null Zone", Element.VOID)
         .radius(0.8f)
         .duration(3f)
+        .damagePerSecond(10f)
         .tint(0x551A8BCC)
         .planned("Future Void field effects")
         .build();
-
     // Ember Circle's tint: a burning red, named since the zone is drawn as a
     // plain runtime circle rather than custom art.
     private static final int EMBER_RED = 0xE63300B3;

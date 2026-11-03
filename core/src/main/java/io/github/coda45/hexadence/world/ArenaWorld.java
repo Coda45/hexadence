@@ -309,8 +309,14 @@ public class ArenaWorld {
             );
         }
 
-        player.updateCooldowns(STEP);
+        Zone currentZone = topZoneOverlapping(player);
 
+        if (
+            currentZone == null
+            || currentZone.getKind() != ZoneKinds.NULL_ZONE
+        ) {
+            player.updateCooldowns(STEP);
+        }
         // Spawn before player movement, using the aim chosen for this step.
         for (int slot = 0; slot < Loadout.SIZE; slot++) {
             CastRequest cast = command.castFor(slot);
@@ -1313,9 +1319,24 @@ public class ArenaWorld {
                 continue;
             }
 
-            dummy.takeDamage(
-                power.damage()
-            );
+            float damage = power.damage();
+
+            Player attacker =
+                players.get(projectile.getOwnerPlayerId());
+
+            Zone attackerZone =
+                attacker == null
+                    ? null
+                    : topZoneOverlapping(attacker);
+
+            if (
+                attackerZone != null
+                && attackerZone.getKind() == ZoneKinds.RADIANT_CIRCLE
+            ) {
+                damage *= 1.25f;
+            }
+
+            dummy.takeDamage(damage);
 
             applyDotIfAny(power, dummy, projectile.getOwnerPlayerId());
 
@@ -2244,9 +2265,26 @@ public class ArenaWorld {
                 continue;
             }
 
+            float damage = projectile.getPower().damage();
+
+            Player attacker =
+                players.get(projectile.getOwnerPlayerId());
+
+            Zone attackerZone =
+                attacker == null
+                    ? null
+                    : topZoneOverlapping(attacker);
+
+            if (
+                attackerZone != null
+                && attackerZone.getKind() == ZoneKinds.RADIANT_CIRCLE
+            ) {
+                damage *= 1.25f;
+            }
+
             damagePlayer(
                 targetPlayerId,
-                projectile.getPower().damage(),
+                damage,
                 projectile.getOwnerPlayerId()
             );
 
