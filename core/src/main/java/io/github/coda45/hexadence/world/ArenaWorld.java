@@ -2244,9 +2244,26 @@ public class ArenaWorld {
                 continue;
             }
 
+            float damage = projectile.getPower().damage();
+
+            Player attacker =
+                players.get(projectile.getOwnerPlayerId());
+
+            Zone attackerZone =
+                attacker == null
+                    ? null
+                    : topZoneOverlapping(attacker);
+
+            if (
+                attackerZone != null
+                && attackerZone.getKind() == ZoneKinds.RADIANT_CIRCLE
+            ) {
+                damage *= 1.25f;
+            }
+
             damagePlayer(
                 targetPlayerId,
-                projectile.getPower().damage(),
+                damage,
                 projectile.getOwnerPlayerId()
             );
 
