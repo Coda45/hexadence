@@ -71,10 +71,10 @@ public final class Reactions {
         transform(WATER, STORM, ZoneKinds.HAILSTORM),
 
         transform(STONE, FIRE,  ZoneKinds.HOT_COALS),
-        // Stone: second reaction not decided yet
+        transform(STONE, VOID,  ZoneKinds.COMPACTOR),
 
         transform(STORM, FIRE,  ZoneKinds.INFERNO),
-        charge(STORM,    WATER),
+        transform(STORM, LIGHT, ZoneKinds.DROUGHT),
 
         transform(LIGHT, STONE, ZoneKinds.CRYSTAL_WALL),
         // Light: second reaction not decided yet

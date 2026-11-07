@@ -85,9 +85,6 @@ class ReactionsTest {
         Reactions.Reaction steam = Reactions.find(Powers.FIREBALL, ZoneKinds.PUDDLE);
         assertEquals(Reactions.Result.TRANSFORM, steam.result());
         assertSame(ZoneKinds.STEAM, steam.into());
-
-        Reactions.Reaction charge = Reactions.find(Powers.LIGHTNING_BOLT, ZoneKinds.PUDDLE);
-        assertEquals(Reactions.Result.CHARGE, charge.result());
     }
 
     @Test
@@ -95,6 +92,20 @@ class ReactionsTest {
         Reactions.Reaction inferno = Reactions.find(Powers.LIGHTNING_BOLT, ZoneKinds.EMBER_CIRCLE);
         assertEquals(Reactions.Result.TRANSFORM, inferno.result());
         assertSame(ZoneKinds.INFERNO, inferno.into());
+    }
+
+    @Test
+    void lightningTransformsRadiantCircleIntoDrought() {
+        Reactions.Reaction drought = Reactions.find(Powers.LIGHTNING_BOLT, ZoneKinds.RADIANT_CIRCLE);
+        assertEquals(Reactions.Result.TRANSFORM, drought.result());
+        assertSame(ZoneKinds.DROUGHT, drought.into());
+    }
+
+    @Test
+    void stoneTransformsNullZoneIntoCompactor() {
+        Reactions.Reaction compactor = Reactions.find(Powers.ROCK_SHARDS, ZoneKinds.NULL_ZONE);
+        assertEquals(Reactions.Result.TRANSFORM, compactor.result());
+        assertSame(ZoneKinds.COMPACTOR, compactor.into());
     }
 
     @Test
