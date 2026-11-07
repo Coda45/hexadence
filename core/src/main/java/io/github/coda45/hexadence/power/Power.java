@@ -39,6 +39,7 @@ public final class Power {
     private final float dotDamagePerTick;
     private final float dotTickSeconds;
     private final float dotDurationSeconds;
+    private final int dotMaxStacks;
 
     private final String iconPath;
     private final String iconRimPath;
@@ -62,6 +63,7 @@ public final class Power {
         this.dotDamagePerTick = b.dotDamagePerTick;
         this.dotTickSeconds = b.dotTickSeconds;
         this.dotDurationSeconds = b.dotDurationSeconds;
+        this.dotMaxStacks = b.dotMaxStacks;
         this.iconPath = b.iconPath;
         this.iconRimPath = b.iconRimPath;
     }
@@ -105,10 +107,12 @@ public final class Power {
 
     // Extra damage applied once per tick after the initial hit, for a power
     // with a damage-over-time effect; 0 for a power without one. A later hit
-    // from the same power refreshes the effect instead of stacking it.
+    // from the same power adds a stack (up to dotMaxStacks) and refreshes
+    // the effect's duration; each stack multiplies dotDamagePerTick.
     public float dotDamagePerTick() { return dotDamagePerTick; }
     public float dotTickSeconds() { return dotTickSeconds; }
     public float dotDurationSeconds() { return dotDurationSeconds; }
+    public int dotMaxStacks() { return dotMaxStacks; }
 
     // HUD icon images, relative to the assets folder.
     public String iconPath() { return iconPath; }
@@ -149,6 +153,7 @@ public final class Power {
         private float dotDamagePerTick;
         private float dotTickSeconds;
         private float dotDurationSeconds;
+        private int dotMaxStacks = 1;
         private String iconPath = "ui/bg_fireball.png";
         private String iconRimPath = "ui/rim_orange.png";
 
@@ -194,6 +199,13 @@ public final class Power {
             this.dotDamagePerTick = damagePerTick;
             this.dotTickSeconds = tickSeconds;
             this.dotDurationSeconds = durationSeconds;
+            return this;
+        }
+
+        // Caps how many times the damage-over-time effect can stack from
+        // repeated hits before a reapplication only refreshes its duration.
+        public Builder dotMaxStacks(int maxStacks) {
+            this.dotMaxStacks = maxStacks;
             return this;
         }
 
@@ -265,6 +277,8 @@ public final class Power {
                 require(dotTickSeconds > 0f, "dotTickSeconds must be above 0");
                 require(dotDurationSeconds > 0f, "dotDurationSeconds must be above 0");
             }
+
+            require(dotMaxStacks >= 1, "dotMaxStacks must be at least 1");
 
             return new Power(this);
         }

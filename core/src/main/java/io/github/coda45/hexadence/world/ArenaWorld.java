@@ -1631,8 +1631,8 @@ public class ArenaWorld {
         }
     }
 
-    // Starts (or refreshes) the power's damage-over-time effect on a target
-    // it just hit. Does nothing for a power without one.
+    // Starts, or adds a stack and refreshes, the power's damage-over-time
+    // effect on a target it just hit. Does nothing for a power without one.
     private void applyDotIfAny(
         Power power,
         int targetPlayerId,
@@ -1642,12 +1642,20 @@ public class ArenaWorld {
             return;
         }
 
+        DotEffect existing = playerDotEffects.get(targetPlayerId);
+
+        if (existing != null) {
+            existing.reapply(attackerPlayerId);
+            return;
+        }
+
         playerDotEffects.put(
             targetPlayerId,
             new DotEffect(
                 power.dotDamagePerTick(),
                 power.dotTickSeconds(),
                 power.dotDurationSeconds(),
+                power.dotMaxStacks(),
                 attackerPlayerId
             )
         );
@@ -1662,12 +1670,20 @@ public class ArenaWorld {
             return;
         }
 
+        DotEffect existing = dummyDotEffects.get(dummy);
+
+        if (existing != null) {
+            existing.reapply(attackerPlayerId);
+            return;
+        }
+
         dummyDotEffects.put(
             dummy,
             new DotEffect(
                 power.dotDamagePerTick(),
                 power.dotTickSeconds(),
                 power.dotDurationSeconds(),
+                power.dotMaxStacks(),
                 attackerPlayerId
             )
         );
@@ -1830,6 +1846,7 @@ public class ArenaWorld {
 
             if (!player.hasRespawnPending()) {
                 player.beginRespawn(PLAYER_RESPAWN_DELAY);
+                playerDotEffects.remove(playerId);
             }
 
             SpawnPoint spawn = assignedPlayerSpawns.get(playerId);
@@ -1851,6 +1868,7 @@ public class ArenaWorld {
                 && !dummy.hasRespawnPending()
             ) {
                 dummy.beginRespawn(DUMMY_RESPAWN_DELAY);
+                dummyDotEffects.remove(dummy);
                 continue;
             }
 

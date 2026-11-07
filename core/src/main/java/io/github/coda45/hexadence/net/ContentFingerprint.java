@@ -45,6 +45,7 @@ public final class ContentFingerprint {
                 .append(" dotDamage=").append(p.dotDamagePerTick())
                 .append(" dotTick=").append(p.dotTickSeconds())
                 .append(" dotDuration=").append(p.dotDurationSeconds())
+                .append(" dotMaxStacks=").append(p.dotMaxStacks())
                 .append(' ').append(p.iconPath()).append(' ').append(p.iconRimPath())
                 .append('\n');
         }

@@ -150,6 +150,10 @@ public final class Powers {
 
     // ---- Void ----
 
+    // Each reapplication before Void Rot's DOT expires adds a stack, up to
+    // this cap, multiplying its damage per tick.
+    public static final int VOID_ROT_MAX_STACKS = 3;
+
     public static final Power VOID_ROT = Power.define(5, "Void Rot")
         .element(Element.VOID)
         .form(PowerForm.BASIC)
@@ -160,6 +164,7 @@ public final class Powers {
         .range(4f)
         .radius(0.12f)
         .damageOverTime(2f, 0.5f, 2f)
+        .dotMaxStacks(VOID_ROT_MAX_STACKS)
         .icon("ui/bg_void_rot.png", "ui/rim_none.png")
         .build();
     

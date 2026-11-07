@@ -43,11 +43,16 @@ public final class ZoneKinds {
         .tint(EMBER_RED)
         .build();
 
+    // Lowered from its original 24 so a single reactive basic (the only kind
+    // of hit that can ever damage Stone Wall; see
+    // ArenaWorld.damageDestructibleZone) consumes it in fewer hits.
+    private static final float STONE_WALL_HEALTH = 12f;
+
     public static final ZoneKind STONE_WALL = ZoneKind.base(13, "Stone Wall", Element.STONE)
         .radius(0.5f)
         .duration(5f)
         .solidWall(0.5f, 0.5f)
-        .health(24f)
+        .health(STONE_WALL_HEALTH)
         .tint(0x8A7968FF)
         .build();
 
@@ -137,6 +142,26 @@ public final class ZoneKinds {
         .tint(0x4D1A66CC)
         .build();
 
+    // Storm on Light: lightning scorches the Radiant Circle into a parched,
+    // slowing patch instead.
+    public static final ZoneKind DROUGHT = ZoneKind.derived(15, "Drought")
+        .radius(1f)                 // PLACEHOLDER
+        .duration(4f)               // PLACEHOLDER
+        .damagePerSecond(8f)        // PLACEHOLDER
+        .speedMultiplier(0.6f)      // PLACEHOLDER
+        .tint(0xE6C84DB3)
+        .build();
+
+    // Stone on Void: the Null Zone gets crushed into a weaker gravity well
+    // that also deals continuous damage.
+    public static final ZoneKind COMPACTOR = ZoneKind.derived(16, "Compactor")
+        .radius(1f)                 // PLACEHOLDER
+        .duration(4f)               // PLACEHOLDER
+        .damagePerSecond(10f)       // PLACEHOLDER
+        .gravity(2.5f, 3, 6f, 0.8f) // PLACEHOLDER: weaker pull than Singularity
+        .tint(0x5C5444CC)
+        .build();
+
     // ---- Registry ----
 
     // Every zone kind must be listed here to exist in the game.
@@ -154,7 +179,9 @@ public final class ZoneKinds {
         HOT_COALS,
         INFERNO,
         CRYSTAL_WALL,
-        SINGULARITY
+        SINGULARITY,
+        DROUGHT,
+        COMPACTOR
         );
 
     private static final Map<Integer, ZoneKind> BY_ID = indexById();

@@ -468,7 +468,7 @@ class ArenaWorldTest {
     }
 
     @Test
-    void puddleStopsLightningAndBecomesElectrified() {
+    void lightningNoLongerReactsWithAPuddle() {
         ArenaWorld world = createEmptyWorld(
             new SpawnPoint(1f, 1f),
             List.of(
@@ -493,12 +493,52 @@ class ArenaWorldTest {
 
         world.step(castLightningRight);
 
-        assertTrue(puddle.isElectrified());
+        assertFalse(puddle.isElectrified());
+        assertTrue(world.getZones().contains(puddle));
+
+        assertEquals(
+            healthBefore - Powers.LIGHTNING_BOLT.damage(),
+            world.getDummies().get(0).getHealth(),
+            EPSILON,
+            "Storm no longer reacts with Water, so lightning passes through and hits the dummy"
+        );
+    }
+
+    @Test
+    void lightningTransformsRadiantCircleIntoDrought() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(
+                new SpawnPoint(5f, 1.75f)
+            )
+        );
+
+        Zone radiantCircle =
+            Zone.create(123, ZoneKinds.RADIANT_CIRCLE, 3f, 1.75f, Zone.NO_PLAYER);
+
+        world.getZones().add(radiantCircle);
+
+        float healthBefore =
+            world.getDummies().get(0).getHealth();
+
+        PlayerCommand castLightningRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                false, false, true
+            );
+
+        world.step(castLightningRight);
+
+        assertTrue(world.getZones().stream().anyMatch(
+            zone -> zone.getKind() == ZoneKinds.DROUGHT
+        ));
 
         assertEquals(
             healthBefore,
             world.getDummies().get(0).getHealth(),
-            EPSILON
+            EPSILON,
+            "The beam should stop at the reaction instead of reaching the dummy"
         );
     }
 
@@ -796,7 +836,7 @@ class ArenaWorldTest {
     }
 
     @Test
-    void voidRotReapplyRefreshesInsteadOfStackingDamageOverTime() {
+    void voidRotReapplyAddsAStackAndRefreshesDuration() {
         ArenaWorld world = createEmptyWorld(
             new SpawnPoint(1f, 1f),
             List.of(new SpawnPoint(1.3f, 1.75f))
@@ -842,7 +882,7 @@ class ArenaWorldTest {
             healthAfterSecondHit,
             dummy.getHealth(),
             EPSILON,
-            "Reapplying Void Rot should refresh its timer, not stack a second one"
+            "Reapplying Void Rot should refresh its timer, not land an extra tick immediately"
         );
 
         for (int i = 0; i < 14; i++) {
@@ -850,10 +890,59 @@ class ArenaWorldTest {
         }
 
         assertEquals(
-            healthAfterSecondHit - 2f,
+            healthAfterSecondHit - 4f,
             dummy.getHealth(),
             EPSILON,
-            "The refreshed timer's first tick lands 0.5s after the second hit"
+            "The refreshed timer's first tick lands 0.5s after the second hit, now at 2 stacks (4 damage)"
+        );
+    }
+
+    @Test
+    void voidRotStacksDamageUpToACapThenStopsGrowing() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(new SpawnPoint(1.3f, 1.75f))
+        );
+
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.VOID_ROT,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+
+        TargetDummy dummy = world.getDummies().get(0);
+
+        PlayerCommand castVoidRot = new PlayerCommand(
+            0f, 0f,
+            1f, 0f,
+            true, false, false
+        );
+
+        world.step(castVoidRot);
+
+        // Reapply once per tick interval (0.5s, matching Void Rot's own
+        // cooldown) until the stack count has reached and then exceeded
+        // its cap.
+        for (int reapply = 0; reapply < Powers.VOID_ROT_MAX_STACKS; reapply++) {
+            for (int i = 0; i < 30; i++) {
+                world.step(PlayerCommand.IDLE);
+            }
+
+            world.step(castVoidRot);
+        }
+
+        float healthBeforeFinalTick = dummy.getHealth();
+
+        for (int i = 0; i < 30; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            healthBeforeFinalTick
+                - Powers.VOID_ROT.dotDamagePerTick() * Powers.VOID_ROT_MAX_STACKS,
+            dummy.getHealth(),
+            EPSILON,
+            "Damage per tick should stop growing once stacks reach the cap"
         );
     }
 
