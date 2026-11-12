@@ -16,7 +16,6 @@ import io.github.coda45.hexadence.zone.ZoneKind;
 import io.github.coda45.hexadence.zone.ZoneKinds;
 import io.github.coda45.hexadence.world.BeamStrikeEvent;
 import io.github.coda45.hexadence.world.BeamChannelEndEvent;
-import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 
@@ -160,7 +159,6 @@ class GameCodecTest {
                     8f,
                     0.5f,
                     17f,
-                    false,
                     4
                 )
             )
@@ -188,7 +186,7 @@ class GameCodecTest {
         for (ZoneKind kind : ZoneKinds.ALL) {
             WorldSnapshot.ZoneState expected =
                 new WorldSnapshot.ZoneState(
-                    1, kind, 2f, 3f, kind.radius(), kind.maxHealth(), false, 4
+                    1, kind, 2f, 3f, kind.radius(), kind.maxHealth(), 4
                 );
 
             WorldSnapshot snapshot = new WorldSnapshot(
@@ -197,14 +195,6 @@ class GameCodecTest {
 
             assertEquals(snapshot, roundTrip(snapshot), kind.name());
         }
-    }
-
-    @Test
-    void roundTripsZoneChargeChangedEvent() {
-        ZoneChargeChangedEvent expected =
-            new ZoneChargeChangedEvent(33, true);
-
-        assertEquals(expected, roundTrip(expected));
     }
 
     private static Object roundTrip(Object expected) {

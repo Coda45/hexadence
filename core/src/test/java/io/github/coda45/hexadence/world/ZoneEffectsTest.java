@@ -15,7 +15,6 @@ import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Powers;
-import io.github.coda45.hexadence.zone.Reactions;
 import io.github.coda45.hexadence.zone.ZoneKinds;
 
 // Zone effects and the newest-on-top rule.
@@ -368,39 +367,6 @@ class ZoneEffectsTest {
     }
 
     @Test
-    void coveredChargeDoesNotDischarge() {
-        ArenaWorld world = world();
-        TargetDummy dummy = world.getDummies().get(0);
-
-        Zone charged = addZone(world, 1, ZoneKinds.PUDDLE, dummy.getX(), dummy.getY());
-        charged.electrify(Zone.NO_PLAYER);
-        addZone(world, 2, ZoneKinds.QUICKSAND, dummy.getX(), dummy.getY());
-
-        stepIdle(world, 1);
-
-        assertTrue(charged.isElectrified());
-        assertEquals(dummy.getMaxHealth(), dummy.getHealth(), EPSILON);
-    }
-
-    @Test
-    void uncoveredChargeDischargesOnce() {
-        ArenaWorld world = world();
-        TargetDummy dummy = world.getDummies().get(0);
-
-        Zone charged = addZone(world, 1, ZoneKinds.PUDDLE, dummy.getX(), dummy.getY());
-        charged.electrify(Zone.NO_PLAYER);
-
-        stepIdle(world, 2);
-
-        assertFalse(charged.isElectrified());
-        assertEquals(
-            dummy.getMaxHealth() - Reactions.CHARGE_DISCHARGE_DAMAGE,
-            dummy.getHealth(),
-            EPSILON
-        );
-    }
-
-    @Test
     void transformedZoneBecomesTheNewest() {
         ArenaWorld world = world();
         Player player = world.getPlayer();
@@ -513,7 +479,7 @@ class ZoneEffectsTest {
         ArenaWorld world = world();
         Player player = world.getPlayer();
         player.setLoadout(new Loadout(List.of(
-            Powers.ROCK_SHARDS,
+            Powers.FIREBALL,
             Powers.WATER_PUDDLE,
             Powers.STONE_WALL
         )));
@@ -529,12 +495,12 @@ class ZoneEffectsTest {
         stepIdle(world, 8);
 
         assertEquals(
-            ZoneKinds.CRYSTAL_WALL.maxHealth() - Powers.ROCK_SHARDS.damage(),
+            ZoneKinds.CRYSTAL_WALL.maxHealth() - Powers.FIREBALL.damage(),
             crystal.getHealth(),
             EPSILON
         );
 
-        stepIdle(world, Math.round(Powers.ROCK_SHARDS.cooldownSeconds() / ArenaWorld.STEP));
+        stepIdle(world, Math.round(Powers.FIREBALL.cooldownSeconds() / ArenaWorld.STEP));
         world.step(new PlayerCommand(0f, 0f, 1f, 0f, true, false, false));
         stepIdle(world, 8);
 

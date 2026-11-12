@@ -116,20 +116,24 @@ public final class ZoneKinds {
         .tint(0xB33A14B3)
         .build();
 
-    // Storm on Fire
+    // Storm on Fire. The strike tips it over, so it rolls on in the
+    // lightning's direction instead of sitting still like other derived zones.
     public static final ZoneKind INFERNO = ZoneKind.derived(7, "Inferno")
         .radius(1.4f)               // PLACEHOLDER
         .duration(3f)               // PLACEHOLDER
         .damagePerSecond(20f)       // PLACEHOLDER
+        .drift(2f)                  // PLACEHOLDER
         .tint(0xFF8C1AC0)
         .build();
 
-    // Light on Stone
+    // Light on Stone. Any projectile can chip Crystal Wall (unlike Stone
+    // Wall it has no element to react with), so it shares Stone Wall's
+    // lowered health and breaks in fewer hits.
     public static final ZoneKind CRYSTAL_WALL = ZoneKind.derived(8, "Crystal Wall")
         .radius(0.5f)
         .duration(5f)               // PLACEHOLDER
         .solidWall(0.5f, 0.5f)
-        .health(24f)
+        .health(STONE_WALL_HEALTH)
         .tint(0xE6F2FFCC)
         .build();
 

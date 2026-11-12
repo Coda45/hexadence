@@ -15,6 +15,7 @@ import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
 import io.github.coda45.hexadence.entity.Zone;
 import io.github.coda45.hexadence.input.PlayerCommand;
+import io.github.coda45.hexadence.net.WorldSnapshot;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.zone.ZoneKinds;
@@ -493,7 +494,6 @@ class ArenaWorldTest {
 
         world.step(castLightningRight);
 
-        assertFalse(puddle.isElectrified());
         assertTrue(world.getZones().contains(puddle));
 
         assertEquals(
@@ -540,6 +540,86 @@ class ArenaWorldTest {
             EPSILON,
             "The beam should stop at the reaction instead of reaching the dummy"
         );
+    }
+
+    @Test
+    void infernoDriftsInTheLightningsDirectionAfterItIsCreated() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of()
+        );
+
+        Zone emberCircle =
+            Zone.create(123, ZoneKinds.EMBER_CIRCLE, 3f, 1.75f, Zone.NO_PLAYER);
+
+        world.getZones().add(emberCircle);
+
+        PlayerCommand castLightningRight =
+            new PlayerCommand(
+                0f, 0f,
+                1f, 0f,
+                false, false, true
+            );
+
+        world.step(castLightningRight);
+
+        Zone inferno = world.getZones().stream()
+            .filter(zone -> zone.getKind() == ZoneKinds.INFERNO)
+            .findFirst()
+            .orElseThrow();
+
+        // It has not drifted yet: the step that creates it only sets its
+        // velocity, and movement is applied at the start of the next step.
+        assertEquals(3f, inferno.getX(), EPSILON);
+        assertEquals(1.75f, inferno.getY(), EPSILON);
+
+        int idleSteps = 10;
+
+        for (int i = 0; i < idleSteps; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            3f + ZoneKinds.INFERNO.driftSpeed() * ArenaWorld.STEP * idleSteps,
+            inferno.getX(),
+            EPSILON
+        );
+        assertEquals(1.75f, inferno.getY(), EPSILON);
+    }
+
+    // The screen draws from host snapshots, so a drifting zone the client
+    // already knows about must follow the host's position, not stay where
+    // it was first seen.
+    @Test
+    void applyingSnapshotMovesAnExistingZoneToTheHostsPosition() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of()
+        );
+        Zone inferno =
+            Zone.create(7, ZoneKinds.INFERNO, 3f, 1.75f, Zone.NO_PLAYER);
+        world.getZones().add(inferno);
+
+        world.applySnapshot(new WorldSnapshot(
+            1L,
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(new WorldSnapshot.ZoneState(
+                7,
+                ZoneKinds.INFERNO,
+                4.5f,
+                2.25f,
+                inferno.getRadius(),
+                inferno.getHealth(),
+                Zone.NO_PLAYER
+            ))
+        ));
+
+        Zone restored = world.getZones().get(0);
+        assertEquals(inferno, restored);
+        assertEquals(4.5f, restored.getX(), EPSILON);
+        assertEquals(2.25f, restored.getY(), EPSILON);
     }
 
     @Test

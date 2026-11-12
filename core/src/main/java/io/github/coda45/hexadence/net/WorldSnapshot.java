@@ -74,7 +74,8 @@ public record WorldSnapshot(
     ) {
     }
 
-    // Zones never move. The stable ID, not coordinates or list order, is identity.
+    // The stable ID, not coordinates or list order, is identity: a drifting
+    // zone keeps its ID while its position changes between snapshots.
     public record ZoneState(
         int id,
         ZoneKind kind,
@@ -82,7 +83,6 @@ public record WorldSnapshot(
         float y,
         float radius,
         float health,
-        boolean electrified,
         int damageOwnerPlayerId
     ) {
     }

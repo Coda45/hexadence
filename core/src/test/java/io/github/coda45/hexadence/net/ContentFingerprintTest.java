@@ -52,6 +52,10 @@ class ContentFingerprintTest {
             .filter(line -> line.startsWith("zone " + ZoneKinds.VORTEX.id() + " "))
             .findFirst()
             .orElseThrow();
+        String inferno = content.lines()
+            .filter(line -> line.startsWith("zone " + ZoneKinds.INFERNO.id() + " "))
+            .findFirst()
+            .orElseThrow();
 
         assertTrue(shotgun.contains("pellets=" + Powers.WATER_SHOTGUN.pelletCount()));
         assertTrue(shotgun.contains("spread=" + Powers.WATER_SHOTGUN.spreadDegrees()));
@@ -66,6 +70,7 @@ class ContentFingerprintTest {
         assertTrue(stoneWall.contains("maxHealth=" + ZoneKinds.STONE_WALL.maxHealth()));
         assertTrue(vortex.contains("captures=true"));
         assertTrue(vortex.contains("pushImpulse=" + ZoneKinds.VORTEX.pushImpulse()));
+        assertTrue(inferno.contains("driftSpeed=" + ZoneKinds.INFERNO.driftSpeed()));
         assertTrue(content.contains(
             "loadoutBasicRange " + LoadoutRules.MIN_BASIC_POWERS
                 + " " + LoadoutRules.MAX_BASIC_POWERS

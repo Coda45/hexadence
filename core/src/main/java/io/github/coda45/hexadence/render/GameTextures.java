@@ -58,14 +58,9 @@ public class GameTextures {
     private static final int STONE_WALL_FALLBACK_FRAME_COUNT = 6;
     private static final float STONE_WALL_FRAME_DURATION = 0.06f;
     private static final int WALL_WEAR_FRAME_COUNT = 3;
-    private static final int CHARGED_PUDDLE_FRAME_SIZE = 48;
-    private static final int CHARGED_PUDDLE_FRAME_COUNT = 8;
-    private static final float CHARGED_PUDDLE_FRAME_DURATION = 0.08f;
 
     private final Texture lightningSheet;
     private final List<Animation<TextureRegion>> lightningAnimations;
-    private final Texture chargedPuddleSheet;
-    private final List<Animation<TextureRegion>> chargedPuddleAnimations;
     private final Texture fireballSheet;
     private final Animation<TextureRegion> fireballAnimation;
     private final TextureRegion waterBoltRegion;
@@ -105,8 +100,6 @@ public class GameTextures {
         fireballAnimation = createFireballAnimation(fireballSheet);
         lightningSheet = loadPixelArt("spells/Lightning.png");
         lightningAnimations = createLightningAnimations(lightningSheet);
-        chargedPuddleSheet = loadPixelArt("spells/chargedPuddle.png");
-        chargedPuddleAnimations = createChargedPuddleAnimations(chargedPuddleSheet);
         waterBolt = loadPixelArt("spells/water_bolt.png");
         waterBoltRegion = new TextureRegion(waterBolt);
 
@@ -485,73 +478,6 @@ public class GameTextures {
         return power == Powers.BEAM_OF_LIGHT
             ? beamOfLightAnimation.getAnimationDuration()
             : getLightningAnimationDuration();
-    }
-
-    private List<Animation<TextureRegion>>
-        createChargedPuddleAnimations(Texture sheet) {
-
-        boolean invalidDimensions =
-            sheet.getWidth()
-                != CHARGED_PUDDLE_FRAME_SIZE
-                    * CHARGED_PUDDLE_FRAME_COUNT
-            || sheet.getHeight()
-                < CHARGED_PUDDLE_FRAME_SIZE
-            || sheet.getHeight()
-                % CHARGED_PUDDLE_FRAME_SIZE != 0;
-
-        if (invalidDimensions) {
-            sheet.dispose();
-
-            throw new IllegalStateException(
-                "Expected rows of eight 48x48 frames in: "
-                    + "spells/chargedPuddle.png"
-            );
-        }
-
-        TextureRegion[][] split =
-            TextureRegion.split(
-                sheet,
-                CHARGED_PUDDLE_FRAME_SIZE,
-                CHARGED_PUDDLE_FRAME_SIZE
-            );
-
-        // Each row becomes one variation selected when an overlay starts.
-        List<Animation<TextureRegion>> animations = new ArrayList<>(split.length);
-
-        for (TextureRegion[] row : split) {
-            Animation<TextureRegion> animation =
-                new Animation<>(
-                    CHARGED_PUDDLE_FRAME_DURATION,
-                    row
-                );
-
-            animation.setPlayMode(
-                Animation.PlayMode.NORMAL
-            );
-
-            animations.add(animation);
-        }
-
-        return List.copyOf(animations);
-    }
-
-    public TextureRegion getChargedPuddleFrame(
-        int variantIndex,
-        float stateTime
-    ) {
-        return chargedPuddleAnimations
-            .get(variantIndex)
-            .getKeyFrame(stateTime, false);
-    }
-
-    public int getChargedPuddleVariantCount() {
-        return chargedPuddleAnimations.size();
-    }
-
-    public float getChargedPuddleAnimationDuration() {
-        return chargedPuddleAnimations
-            .get(0)
-            .getAnimationDuration();
     }
 
     private Texture loadPixelArt(String path) {
@@ -974,7 +900,6 @@ public class GameTextures {
         wearLinesSheet.dispose();
         vortexSheet.dispose();
         lightningSheet.dispose();
-        chargedPuddleSheet.dispose();
         zoneCircle.dispose();
         zoneRing.dispose();
         targetDummy.dispose();

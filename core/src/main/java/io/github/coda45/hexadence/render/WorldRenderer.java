@@ -3,7 +3,6 @@ package io.github.coda45.hexadence.render;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +25,6 @@ import io.github.coda45.hexadence.power.Element;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.render.animation.BeamStrikeVisual;
-import io.github.coda45.hexadence.render.animation.ChargedPuddleVisual;
 import io.github.coda45.hexadence.render.animation.FacingDirection;
 import io.github.coda45.hexadence.render.animation.VoidTrailVisual;
 import io.github.coda45.hexadence.world.ArenaMap;
@@ -34,13 +32,11 @@ import io.github.coda45.hexadence.world.ArenaWorld;
 import io.github.coda45.hexadence.world.BeamChannelEndEvent;
 import io.github.coda45.hexadence.world.BeamStrikeEvent;
 import io.github.coda45.hexadence.world.WorldEvent;
-import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.github.coda45.hexadence.zone.ZoneKinds;
 
 // Draws world state and owns drawing resources. The TiledMap stays owned by ArenaMap.
 public class WorldRenderer {
 
-    private static final float ZONE_FLASH_DURATION = 0.12f;
     private static final float DAMAGE_FLASH_DURATION = 0.1f;
     private static final int RING_FLAME_COUNT = 8;
     private static final float RING_FLAME_SIZE = 0.75f;
@@ -55,8 +51,6 @@ public class WorldRenderer {
     private final int[] lowerTerrainLayers;
     private final int[] foregroundLayers;
     private final List<BeamStrikeVisual> beamStrikes = new ArrayList<>();
-    private final Map<Zone, ChargedPuddleVisual> chargedPuddleVisuals = new IdentityHashMap<>();
-    private final Map<Integer, Float> zoneFlashRemaining = new HashMap<>();
     private final Map<Integer, Float> stoneWallAnimationTimes = new HashMap<>();
     private final Map<Integer, Float> crystalWallAnimationTimes = new HashMap<>();
     private final Map<Integer, VoidTrailVisual> voidTrails = new HashMap<>();
@@ -163,16 +157,10 @@ public class WorldRenderer {
         List<WorldEvent> frameEvents
     ) {
         updateDamageFlashes(world, presentationDelta);
-        updateZoneFlashes(presentationDelta);
         consumeEvents(frameEvents);
         // TMX order: Ground, DecorationGround, Walls, DecorationOverlay, Spawns.
 
         projectileAnimationTime += presentationDelta;
-
-        updateChargedPuddleVisuals(
-            world,
-            presentationDelta
-        );
 
         updateVoidTrails(
             world,
@@ -196,16 +184,6 @@ public class WorldRenderer {
         for (Zone zone : world.getZones()) {
             if (!zone.getKind().coversPlayers()) {
                 renderZone(zone);
-
-                ChargedPuddleVisual visual =
-                    chargedPuddleVisuals.get(zone);
-
-                if (
-                    visual != null
-                    && visual.isPlaying()
-                ) {
-                    renderChargedPuddle(visual);
-                }
             }
         }
 
@@ -394,11 +372,6 @@ public class WorldRenderer {
                     visual.getStrike().ownerPlayerId() == ended.ownerPlayerId()
                         && visual.getStrike().power().equals(ended.power())
                 );
-            } else if (event instanceof ZoneChargeChangedEvent changed) {
-                zoneFlashRemaining.put(
-                    changed.zoneId(),
-                    ZONE_FLASH_DURATION
-                );
             }
         }
 
@@ -488,23 +461,6 @@ public class WorldRenderer {
     ) {
         flashes.replaceAll((id, remaining) -> remaining - deltaSeconds);
         flashes.values().removeIf(remaining -> remaining <= 0f);
-    }
-
-    private void updateZoneFlashes(float deltaSeconds) {
-        Iterator<Map.Entry<Integer, Float>> iterator =
-            zoneFlashRemaining.entrySet().iterator();
-
-        while (iterator.hasNext()) {
-            Map.Entry<Integer, Float> entry = iterator.next();
-
-            float remaining = entry.getValue() - deltaSeconds;
-
-            if (remaining <= 0f) {
-                iterator.remove();
-            } else {
-                entry.setValue(remaining);
-            }
-        }
     }
 
     private void updateStoneWallAnimations(
@@ -694,103 +650,6 @@ public class WorldRenderer {
         );
     }
 
-    private void renderChargedPuddle(
-        ChargedPuddleVisual visual
-    ) {
-        Zone zone = visual.getZone();
-
-        TextureRegion frame =
-            textures.getChargedPuddleFrame(
-                visual.getVariantIndex(),
-                visual.getStateTime()
-            );
-
-        float diameter = zone.getRadius() * 2f;
-
-        batch.setColor(Color.WHITE);
-
-        batch.draw(
-            frame,
-            zone.getX() - zone.getRadius(),
-            zone.getY() - zone.getRadius(),
-            diameter,
-            diameter
-        );
-    }
-
-    private void updateChargedPuddleVisuals(
-        ArenaWorld world,
-        float presentationDelta
-    ) {
-        Iterator<
-            Map.Entry<Zone, ChargedPuddleVisual>
-        > iterator =
-            chargedPuddleVisuals
-                .entrySet()
-                .iterator();
-
-        // Discharge, expiration, or replacement immediately ends the overlay.
-        while (iterator.hasNext()) {
-            Map.Entry<Zone, ChargedPuddleVisual> entry =
-                iterator.next();
-
-            Zone zone = entry.getKey();
-
-            boolean zoneStillExists = world.getZones().contains(zone);
-
-            if (
-                !zoneStillExists
-                || !zone.isElectrified()
-            ) {
-                iterator.remove();
-                continue;
-            }
-
-            ChargedPuddleVisual visual = entry.getValue();
-
-            visual.update(
-                presentationDelta,
-                textures.getChargedPuddleAnimationDuration()
-            );
-
-            if (visual.isReadyToPlayAgain()) {
-                int variantIndex =
-                    MathUtils.random(
-                        textures
-                            .getChargedPuddleVariantCount()
-                            - 1
-                    );
-
-                visual.start(variantIndex);
-            }
-        }
-
-        // A newly charged puddle begins its first variation immediately.
-        for (Zone zone : world.getZones()) {
-            if (
-                !zone.isElectrified()
-                || chargedPuddleVisuals.containsKey(zone)
-            ) {
-                continue;
-            }
-
-            int variantIndex =
-                MathUtils.random(
-                    textures
-                        .getChargedPuddleVariantCount()
-                        - 1
-                );
-
-            chargedPuddleVisuals.put(
-                zone,
-                new ChargedPuddleVisual(
-                    zone,
-                    variantIndex
-                )
-            );
-        }
-    }
-
     // Samples each live Void projectile's position for its fading trail, and
     // drops trails for projectiles that are gone.
     private void updateVoidTrails(
@@ -854,23 +713,15 @@ public class WorldRenderer {
         float left = zone.getX() - zone.getRadius();
         float bottom = zone.getY() - zone.getRadius();
 
-        if (zoneFlashRemaining.containsKey(zone.getId())) {
-            // Brief yellow hit/damage feedback.
-            batch.setColor(0.9f, 0.95f, 0.2f, 0.75f);
-        } else if (zone.isElectrified()) {
-            // Persistent muted teal charged state.
-            batch.setColor(0.25f, 0.68f, 0.72f, 0.68f);
-        } else {
-            // The zone kind's own color, from its definition in ZoneKinds.
-            int tint = zone.getKind().tint();
+        // The zone kind's own color, from its definition in ZoneKinds.
+        int tint = zone.getKind().tint();
 
-            batch.setColor(
-                ((tint >>> 24) & 0xFF) / 255f,
-                ((tint >>> 16) & 0xFF) / 255f,
-                ((tint >>> 8) & 0xFF) / 255f,
-                (tint & 0xFF) / 255f
-            );
-        }
+        batch.setColor(
+            ((tint >>> 24) & 0xFF) / 255f,
+            ((tint >>> 16) & 0xFF) / 255f,
+            ((tint >>> 8) & 0xFF) / 255f,
+            (tint & 0xFF) / 255f
+        );
 
         if (zone.getKind() == ZoneKinds.STONE_WALL) {
             renderStoneWall(zone);
@@ -930,8 +781,6 @@ public class WorldRenderer {
             }
 
             // Restore the zone's original tint before drawing it.
-            int tint = zone.getKind().tint();
-
             batch.setColor(
                 ((tint >>> 24) & 0xFF) / 255f,
                 ((tint >>> 16) & 0xFF) / 255f,

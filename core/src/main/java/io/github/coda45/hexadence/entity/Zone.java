@@ -14,16 +14,18 @@ public class Zone {
 
     private final int id;
     private final ZoneKind kind;
-    private final float x;
-    private final float y;
+    private float x;
+    private float y;
     private final float radius;
 
     private float remainingSeconds;
     // Who gets credit for damage this zone deals.
     private int damageOwnerPlayerId;
-    // Set by a CHARGE reaction; cleared when the charge discharges.
-    private boolean electrified;
     private float health;
+    // Set once, by a reaction that tips a derived zone in a direction;
+    // zero for a zone that stays put.
+    private float velocityX;
+    private float velocityY;
 
     private Zone(
         int id,
@@ -98,24 +100,6 @@ public class Zone {
         return create(id, ZoneKinds.STEAM, x, y, ownerPlayerId);
     }
 
-    public boolean isElectrified() {
-        return electrified;
-    }
-
-    public void electrify(int ownerPlayerId) {
-        electrified = true;
-        damageOwnerPlayerId = ownerPlayerId;
-    }
-
-    // Keeps existing tests and client-side code usable.
-    public void electrify() {
-        electrify(damageOwnerPlayerId);
-    }
-
-    public void discharge() {
-        electrified = false;
-    }
-
     public int getId() {
         return id;
     }
@@ -130,6 +114,15 @@ public class Zone {
 
     public void update(float deltaSeconds) {
         remainingSeconds = Math.max(0f, remainingSeconds - deltaSeconds);
+        x += velocityX * deltaSeconds;
+        y += velocityY * deltaSeconds;
+    }
+
+    // Tipped in this direction, at the kind's drift speed. Set once, when a
+    // reaction creates the zone; has no effect on a kind with no drift.
+    public void setVelocity(float velocityX, float velocityY) {
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
     }
 
     public boolean hasExpired() {
@@ -156,6 +149,13 @@ public class Zone {
 
     public boolean hasBeenDestroyed() {
         return isDestructible() && health <= 0f;
+    }
+
+    // Clients follow the host's position for a zone that drifts, since they
+    // never simulate zone velocity themselves.
+    public void restorePosition(float x, float y) {
+        this.x = x;
+        this.y = y;
     }
 
     public void restoreHealth(float value) {

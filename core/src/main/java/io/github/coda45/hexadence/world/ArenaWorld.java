@@ -178,8 +178,7 @@ public class ArenaWorld {
                         blockingHit.zone() == null
                         || !damageDestructibleZone(
                             projectile,
-                            blockingHit.zone(),
-                            events
+                            blockingHit.zone()
                         )
                     ) {
                         leaveZoneIfAny(
@@ -200,7 +199,7 @@ public class ArenaWorld {
                 );
 
                 // Zone reactions take priority over player and dummy hits.
-                if (applyProjectileZoneReaction(projectile, events)) {
+                if (applyProjectileZoneReaction(projectile)) {
                     terminated = true;
                     break;
                 }
@@ -274,7 +273,6 @@ public class ArenaWorld {
         }
 
         applyZoneEffects();
-        applyChargedPuddleDischarges(events);
         applyDotEffects();
         updatePlayerRespawns();
         updateDummyRespawns();
@@ -909,10 +907,7 @@ public class ArenaWorld {
     // A projectile reacts with the newest zone it touches, if the reaction
     // table says that power and zone react. Returns true if the projectile
     // was used up by the reaction.
-    private boolean applyProjectileZoneReaction(
-        Projectile projectile,
-        List<WorldEvent> events
-    ) {
+    private boolean applyProjectileZoneReaction(Projectile projectile) {
         Power power = projectile.getPower();
 
         // Zones later in the list are newer, and the newest one counts.
@@ -940,7 +935,7 @@ public class ArenaWorld {
                 continue;
             }
 
-            return applyProjectileReactionWithZone(projectile, zone, events);
+            return applyProjectileReactionWithZone(projectile, zone);
         }
 
         return false;
@@ -948,16 +943,26 @@ public class ArenaWorld {
 
     private boolean applyProjectileReactionWithZone(
         Projectile projectile,
-        Zone zone,
-        List<WorldEvent> events
+        Zone zone
     ) {
         Reactions.Reaction reaction = Reactions.find(
             projectile.getPower(),
             zone.getKind()
         );
 
-        return reaction != null
-            && applyReaction(zone, reaction, projectile.getOwnerPlayerId(), events);
+        if (reaction == null) {
+            return false;
+        }
+
+        applyReaction(
+            zone,
+            reaction,
+            projectile.getOwnerPlayerId(),
+            projectile.getDirectionX(),
+            projectile.getDirectionY()
+        );
+
+        return true;
     }
 
     // Solid destructible zones absorb the hit. Their elemental reaction is
@@ -965,14 +970,14 @@ public class ArenaWorld {
     // useful as cover instead of transforming on first contact.
     private boolean damageDestructibleZone(
         Projectile projectile,
-        Zone zone,
-        List<WorldEvent> events
+        Zone zone
     ) {
         return damageDestructibleZone(
             zone,
             projectile.getPower(),
             projectile.getOwnerPlayerId(),
-            events
+            projectile.getDirectionX(),
+            projectile.getDirectionY()
         );
     }
 
@@ -980,14 +985,16 @@ public class ArenaWorld {
         Zone zone,
         Power power,
         int casterPlayerId,
-        List<WorldEvent> events
+        float directionX,
+        float directionY
     ) {
         return damageDestructibleZone(
             zone,
             power,
             power.damage(),
             casterPlayerId,
-            events
+            directionX,
+            directionY
         );
     }
 
@@ -996,7 +1003,8 @@ public class ArenaWorld {
         Power power,
         float damage,
         int casterPlayerId,
-        List<WorldEvent> events
+        float directionX,
+        float directionY
     ) {
         if (!zone.isDestructible()) {
             return false;
@@ -1018,7 +1026,13 @@ public class ArenaWorld {
         }
 
         if (reaction != null) {
-            applyReaction(zone, reaction, casterPlayerId, events);
+            applyReaction(
+                zone,
+                reaction,
+                casterPlayerId,
+                directionX,
+                directionY
+            );
         } else {
             zones.remove(zone);
         }
@@ -1259,43 +1273,39 @@ public class ArenaWorld {
         vortexPlayerContacts.addAll(currentContacts);
     }
 
-    // Carries out one cell of the interaction matrix on a zone. Returns
-    // false if it changed nothing (charging an already charged zone).
-    private boolean applyReaction(
+    // Carries out one cell of the interaction matrix on a zone: the zone
+    // becomes the reaction's derived kind in the same spot, with the same
+    // ID. It moves to the end of the list because it is now the newest zone
+    // there. The hit's direction tips a kind that drifts.
+    private void applyReaction(
         Zone zone,
         Reactions.Reaction reaction,
         int casterPlayerId,
-        List<WorldEvent> events
+        float directionX,
+        float directionY
     ) {
-        switch (reaction.result()) {
-            case TRANSFORM -> {
-                // Same spot and ID, new kind. It moves to the end of the list
-                // because it is now the newest zone there.
-                releaseVortexOrbitsFromSource(vortexSourceKey(zone));
-                vortexZoneSourceKeys.remove(zone.getId());
-                zones.remove(zone);
-                zones.add(Zone.create(
-                    zone.getId(),
-                    reaction.into(),
-                    zone.getX(),
-                    zone.getY(),
-                    casterPlayerId
-                ));
-                return true;
-            }
+        releaseVortexOrbitsFromSource(vortexSourceKey(zone));
+        vortexZoneSourceKeys.remove(zone.getId());
+        zones.remove(zone);
 
-            case CHARGE -> {
-                if (zone.isElectrified()) {
-                    return false;
-                }
+        Zone transformed = Zone.create(
+            zone.getId(),
+            reaction.into(),
+            zone.getX(),
+            zone.getY(),
+            casterPlayerId
+        );
 
-                zone.electrify(casterPlayerId);
-                events.add(new ZoneChargeChangedEvent(zone.getId(), true));
-                return true;
-            }
+        float driftSpeed = reaction.into().driftSpeed();
+
+        if (driftSpeed > 0f) {
+            transformed.setVelocity(
+                directionX * driftSpeed,
+                directionY * driftSpeed
+            );
         }
 
-        return false;
+        zones.add(transformed);
     }
 
     private boolean applyProjectileDummyHit(
@@ -1540,54 +1550,6 @@ public class ArenaWorld {
 
             if (zone != null && zone.getKind().damagePerSecond() > 0f) {
                 dummy.takeDamage(zone.getKind().damagePerSecond() * STEP);
-            }
-        }
-    }
-
-    // A charged zone shocks the players and dummies it is the newest zone
-    // under, then loses its charge.
-    private void applyChargedPuddleDischarges(
-        List<WorldEvent> events
-    ) {
-        for (Zone zone : zones) {
-            if (!zone.isElectrified()) {
-                continue;
-            }
-
-            boolean discharged = false;
-
-            for (Map.Entry<Integer, Player> entry : players.entrySet()) {
-                Player target = entry.getValue();
-
-                if (
-                    target.isAlive()
-                    && topZoneOverlapping(target) == zone
-                ) {
-                    damagePlayer(
-                        entry.getKey(),
-                        Reactions.CHARGE_DISCHARGE_DAMAGE,
-                        zone.getDamageOwnerPlayerId()
-                    );
-
-                    discharged = true;
-                }
-            }
-
-            for (TargetDummy dummy : dummies) {
-                if (
-                    dummy.isAlive()
-                    && topZoneOverlapping(dummy) == zone
-                ) {
-                    dummy.takeDamage(Reactions.CHARGE_DISCHARGE_DAMAGE);
-                    discharged = true;
-                }
-            }
-
-            if (discharged) {
-                zone.discharge();
-                events.add(
-                    new ZoneChargeChangedEvent(zone.getId(), false)
-                );
             }
         }
     }
@@ -2010,17 +1972,8 @@ public class ArenaWorld {
             zone.setDamageOwnerPlayerId(
                 state.damageOwnerPlayerId()
             );
+            zone.restorePosition(state.x(), state.y());
             zone.restoreHealth(state.health());
-
-            if (state.electrified() && !zone.isElectrified()) {
-                zone.electrify(state.damageOwnerPlayerId());
-            } else if (
-                !state.electrified()
-                    && zone.isElectrified()
-            ) {
-                zone.discharge();
-            }
-
             zones.add(zone);
         }
     }
@@ -2081,7 +2034,8 @@ public class ArenaWorld {
                     zone,
                     Reactions.find(power, zone.getKind()),
                     playerId,
-                    events
+                    directionX,
+                    directionY
                 );
             }
 
@@ -2090,7 +2044,8 @@ public class ArenaWorld {
                     hit.zone(),
                     power,
                     playerId,
-                    events
+                    directionX,
+                    directionY
                 );
 
             case CRYSTAL -> {
@@ -2193,7 +2148,14 @@ public class ArenaWorld {
                 crystal
             );
 
-            applyCrystalSplitHit(playerId, power, hit, events);
+            applyCrystalSplitHit(
+                playerId,
+                power,
+                hit,
+                direction[0],
+                direction[1],
+                events
+            );
 
             float strikeDistance = hit.kind() == LightningHit.Kind.NONE
                 ? Powers.BEAM_OF_LIGHT_CRYSTAL_RANGE
@@ -2216,6 +2178,8 @@ public class ArenaWorld {
         int playerId,
         Power power,
         LightningHit hit,
+        float directionX,
+        float directionY,
         List<WorldEvent> events
     ) {
         float splitDamage = power.damage()
@@ -2228,7 +2192,8 @@ public class ArenaWorld {
                     zone,
                     Reactions.find(power, zone.getKind()),
                     playerId,
-                    events
+                    directionX,
+                    directionY
                 );
             }
 
@@ -2238,7 +2203,8 @@ public class ArenaWorld {
                     power,
                     splitDamage,
                     playerId,
-                    events
+                    directionX,
+                    directionY
                 );
 
             case PLAYER ->
