@@ -14,7 +14,6 @@ import io.github.coda45.hexadence.zone.ZoneKind;
 import io.github.coda45.hexadence.zone.ZoneKinds;
 import io.github.coda45.hexadence.world.BeamChannelEndEvent;
 import io.github.coda45.hexadence.world.BeamStrikeEvent;
-import io.github.coda45.hexadence.world.ZoneChargeChangedEvent;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -53,7 +52,7 @@ public final class GameCodec {
     private static final byte TYPE_SNAPSHOT = 3;
     private static final byte TYPE_BEAM_EVENT = 4;
     private static final byte TYPE_CLIENT_HELLO = 5;
-    private static final byte TYPE_ZONE_CHARGE_CHANGED = 6;
+    // 6 was the zone charge event, retired with the CHARGE reaction.
     private static final byte TYPE_JOIN_REJECTED = 7;
     private static final byte TYPE_LOBBY_STATE = 8;
     private static final byte TYPE_START_GAME = 9;
@@ -124,10 +123,6 @@ public final class GameCodec {
                 out.writeByte(TYPE_BEAM_CHANNEL_END);
                 out.writeInt(event.ownerPlayerId());
                 writePower(out, event.power());
-            } else if (message instanceof ZoneChargeChangedEvent event) {
-                out.writeByte(TYPE_ZONE_CHARGE_CHANGED);
-                out.writeInt(event.zoneId());
-                out.writeBoolean(event.electrified());
             } else if (message instanceof JoinRejected rejected) {
                 out.writeByte(TYPE_JOIN_REJECTED);
                 out.writeByte(rejectReasonId(rejected.reason()));
@@ -189,7 +184,6 @@ public final class GameCodec {
                     in.readInt(),
                     readPower(in)
                 ));
-                case TYPE_ZONE_CHARGE_CHANGED -> out.add(new ZoneChargeChangedEvent(in.readInt(), in.readBoolean()));
                 case TYPE_JOIN_REJECTED -> out.add(new JoinRejected(
                     rejectReasonFromId(in.readUnsignedByte())
                 ));
@@ -318,7 +312,6 @@ public final class GameCodec {
             out.writeFloat(z.y());
             out.writeFloat(z.radius());
             out.writeFloat(z.health());
-            out.writeBoolean(z.electrified());
             out.writeInt(z.damageOwnerPlayerId());
         }
     }
@@ -381,7 +374,6 @@ public final class GameCodec {
                 in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),
-                in.readBoolean(),
                 in.readInt()
             ));
         }

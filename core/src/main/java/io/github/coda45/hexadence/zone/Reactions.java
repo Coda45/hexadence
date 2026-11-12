@@ -31,10 +31,7 @@ public final class Reactions {
 
     public enum Result {
         // The zone becomes a different (derived) zone, in the same spot.
-        TRANSFORM,
-        // The zone stays what it is but becomes charged: the next player or
-        // dummy to touch it takes CHARGE_DISCHARGE_DAMAGE and the charge ends.
-        CHARGE
+        TRANSFORM
     }
 
     public record Reaction(
@@ -57,9 +54,6 @@ public final class Reactions {
             }
         }
     }
-
-    // Damage a charged zone deals when it discharges.
-    public static final float CHARGE_DISCHARGE_DAMAGE = 20f;   // PLACEHOLDER
 
     // ---- Staff matrix (cast on field) ----
 
@@ -107,9 +101,5 @@ public final class Reactions {
 
     private static Reaction transform(Element cast, Element field, ZoneKind into) {
         return new Reaction(Weapon.STAFF, cast, field, Result.TRANSFORM, into);
-    }
-
-    private static Reaction charge(Element cast, Element field) {
-        return new Reaction(Weapon.STAFF, cast, field, Result.CHARGE, null);
     }
 }

@@ -38,6 +38,7 @@ public final class ZoneKind {
     private final float playerGravitySpeedStep;
     private final float expirationExplosionRadius;
     private final float expirationExplosionDamage;
+    private final float driftSpeed;
 
     private final boolean coversPlayers;
     private final int tint;
@@ -65,6 +66,7 @@ public final class ZoneKind {
         this.playerGravitySpeedStep = b.playerGravitySpeedStep;
         this.expirationExplosionRadius = b.expirationExplosionRadius;
         this.expirationExplosionDamage = b.expirationExplosionDamage;
+        this.driftSpeed = b.driftSpeed;
         this.coversPlayers = b.coversPlayers;
         this.tint = b.tint;
         this.plannedEffect = b.plannedEffect;
@@ -113,6 +115,9 @@ public final class ZoneKind {
     public float playerGravitySpeedStep() { return playerGravitySpeedStep; }
     public float expirationExplosionRadius() { return expirationExplosionRadius; }
     public float expirationExplosionDamage() { return expirationExplosionDamage; }
+    // Tiles per second a derived zone drifts, in the direction of the hit
+    // that created it, once it is placed. Zero means it stays put.
+    public float driftSpeed() { return driftSpeed; }
 
     // Drawn over players instead of under them, like a cloud.
     public boolean coversPlayers() { return coversPlayers; }
@@ -163,6 +168,7 @@ public final class ZoneKind {
         private float playerGravitySpeedStep;
         private float expirationExplosionRadius;
         private float expirationExplosionDamage;
+        private float driftSpeed;
         private boolean coversPlayers;
         private int tint = 0xFFFFFF99;
         private String plannedEffect = "";
@@ -208,6 +214,7 @@ public final class ZoneKind {
             this.expirationExplosionDamage = damage;
             return this;
         }
+        public Builder drift(float tilesPerSecond) { this.driftSpeed = tilesPerSecond; return this; }
         public Builder coversPlayers() { this.coversPlayers = true; return this; }
         public Builder tint(int rgba) { this.tint = rgba; return this; }
         public Builder planned(String effect) { this.plannedEffect = effect; return this; }
@@ -261,6 +268,7 @@ public final class ZoneKind {
                     == (expirationExplosionDamage == 0f),
                 "expiration explosion needs both radius and damage"
             );
+            require(driftSpeed >= 0f, "drift speed cannot be negative");
 
             if (origin == ZoneOrigin.BASE) {
                 require(element != null, "a base zone needs an element");

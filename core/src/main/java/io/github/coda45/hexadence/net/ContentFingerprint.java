@@ -69,6 +69,7 @@ public final class ContentFingerprint {
                 .append(" playerGravityStep=").append(z.playerGravitySpeedStep())
                 .append(" explosionRadius=").append(z.expirationExplosionRadius())
                 .append(" explosionDamage=").append(z.expirationExplosionDamage())
+                .append(" driftSpeed=").append(z.driftSpeed())
                 .append(' ').append(z.tint())
                 .append('\n');
         }
@@ -80,7 +81,6 @@ public final class ContentFingerprint {
                 .append('\n');
         }
 
-        text.append("discharge ").append(Reactions.CHARGE_DISCHARGE_DAMAGE).append('\n');
         text.append("crystalSplitRange ")
             .append(Powers.BEAM_OF_LIGHT_CRYSTAL_RANGE)
             .append('\n');

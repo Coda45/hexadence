@@ -18,7 +18,7 @@ import io.github.coda45.hexadence.zone.ZoneKinds;
 public final class Powers {
 
     public static final float BEAM_OF_LIGHT_CRYSTAL_RANGE = 6f;
-    public static final float BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER = 2f;
+    public static final float BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER = 1.5f;
 
     // ---- Fire ----
 
@@ -140,7 +140,7 @@ public final class Powers {
         .element(Element.LIGHT)
         .form(PowerForm.BASIC)
         .behavior(Behavior.BEAM)
-        .damage(2f)          // PLACEHOLDER: damage per channel tick
+        .damage(1f)          // PLACEHOLDER: damage per channel tick
         .cooldown(0.7f)      // PLACEHOLDER: begins when the channel is released
         .channel(0.15f)      // PLACEHOLDER: damage tick interval while held
         .range(4f)

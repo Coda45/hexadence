@@ -95,7 +95,7 @@ Where zones overlap, only the **newest** one counts at that spot.
 
 ```java
 transform(FIRE, WATER, ZoneKinds.STEAM),   // Fire hits a Water zone -> Steam
-charge(STORM, WATER),                      // Storm hits a Water zone -> charged
+transform(STORM, LIGHT, ZoneKinds.DROUGHT), // Storm hits a Light zone -> Drought
 ```
 
 To add a new result, define its derived zone in `ZoneKinds` (next unused ID,
