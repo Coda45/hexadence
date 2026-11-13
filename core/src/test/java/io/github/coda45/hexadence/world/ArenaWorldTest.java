@@ -1079,10 +1079,10 @@ class ArenaWorldTest {
         target.takeDamage(target.getMaxHealth() - Powers.FIREBALL.damage());
 
         world.setStatsFrozen(true);
-        world.step(fireRight());
+        List<WorldEvent> events = new ArrayList<>(world.step(fireRight()).events());
 
         for (int i = 0; i < 20; i++) {
-            world.step(PlayerCommand.IDLE);
+            events.addAll(world.step(PlayerCommand.IDLE).events());
         }
 
         // The hit still lands and kills...
@@ -1092,6 +1092,10 @@ class ArenaWorldTest {
         assertEquals(0, attacker.getKills());
         assertEquals(0, target.getDeaths());
         assertEquals(0f, attacker.getDamageDealt(), EPSILON);
+        assertFalse(
+            events.stream().anyMatch(event -> event instanceof PlayerKilledEvent),
+            "Kills after the clock runs out stay out of the kill feed"
+        );
 
         world.resetForNewMatch();
         assertFalse(world.areStatsFrozen());

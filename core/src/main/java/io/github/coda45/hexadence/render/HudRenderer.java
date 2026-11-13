@@ -165,7 +165,10 @@ public class HudRenderer {
         batch.begin();
 
         drawScore(player);
-        killFeed.draw(batch, font, SCORE_X, KILL_FEED_BOTTOM);
+        // The match is over once the clock runs out: no kill feed.
+        if (matchEndProgress < 0f) {
+            killFeed.draw(batch, font, SCORE_X, KILL_FEED_BOTTOM);
+        }
         drawHealth(player);
         drawSpawnShield(player);
         drawMatchTimer();

@@ -2525,10 +2525,14 @@ public class ArenaWorld {
             }
         }
 
-        deathEvents.add(new PlayerKilledEvent(
-            victimPlayerId,
-            attacker != null ? attackerPlayerId : PlayerKilledEvent.NO_KILLER
-        ));
+        // Kills after the clock runs out do not count, so they are not
+        // announced in the kill feed either.
+        if (!statsFrozen) {
+            deathEvents.add(new PlayerKilledEvent(
+                victimPlayerId,
+                attacker != null ? attackerPlayerId : PlayerKilledEvent.NO_KILLER
+            ));
+        }
     }
 
     // Clears the arena for a rematch with the same players: every projectile,
