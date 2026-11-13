@@ -507,6 +507,79 @@ class ZoneEffectsTest {
         assertTrue(world.getZones().isEmpty());
     }
 
+    @Test
+    void spawnShieldIgnoresSingularityPull() {
+        ArenaWorld world = world();
+        Player player = world.getPlayer();
+        float startX = player.getX();
+        addZone(
+            world,
+            1,
+            ZoneKinds.SINGULARITY,
+            player.getCollisionX() + 1.5f,
+            player.getCollisionY()
+        );
+        player.startSpawnShield(ArenaWorld.SPAWN_SHIELD_SECONDS);
+
+        world.step(PlayerCommand.IDLE);
+        assertEquals(startX, player.getX(), 0.0001f, "Shielded players are not dragged in");
+
+        // Walking away works at full speed.
+        world.step(new PlayerCommand(-1f, 0f, -1f, 0f, false, false, false));
+        assertTrue(player.getX() < startX);
+    }
+
+    @Test
+    void spawnShieldIgnoresVortexKnockback() {
+        ArenaWorld world = world();
+        Player player = world.getPlayer();
+        float startX = player.getX();
+        addZone(
+            world,
+            1,
+            ZoneKinds.VORTEX,
+            player.getCollisionX() + 0.5f,
+            player.getCollisionY()
+        );
+        player.startSpawnShield(ArenaWorld.SPAWN_SHIELD_SECONDS);
+
+        stepIdle(world, 10);
+
+        assertEquals(startX, player.getX(), 0.0001f, "Shielded players are not knocked back");
+        assertEquals(0f, player.getKnockbackVelocityX(), 0.0001f);
+    }
+
+    @Test
+    void spawnShieldIgnoresSlows() {
+        ArenaWorld slowed = world();
+        ArenaWorld shielded = world();
+
+        for (ArenaWorld world : List.of(slowed, shielded)) {
+            Player player = world.getPlayer();
+            addZone(
+                world,
+                1,
+                ZoneKinds.QUICKSAND,
+                player.getCollisionX(),
+                player.getCollisionY()
+            );
+        }
+
+        shielded.getPlayer().startSpawnShield(ArenaWorld.SPAWN_SHIELD_SECONDS);
+
+        PlayerCommand right = new PlayerCommand(1f, 0f, 1f, 0f, false, false, false);
+        float slowedStart = slowed.getPlayer().getX();
+        float shieldedStart = shielded.getPlayer().getX();
+        slowed.step(right);
+        shielded.step(right);
+
+        float slowedDistance = slowed.getPlayer().getX() - slowedStart;
+        float shieldedDistance = shielded.getPlayer().getX() - shieldedStart;
+
+        assertTrue(slowedDistance < shieldedDistance, "Quicksand must still slow the unshielded");
+        assertEquals(5f * ArenaWorld.STEP, shieldedDistance, 0.0001f);
+    }
+
     private static ArenaWorld world() {
         return new ArenaWorld(new ArenaDefinition(
             new ArenaCollision(new float[20][12]),

@@ -425,11 +425,16 @@ public class ArenaWorld {
             moveY /= length;
         }
 
-        // A zone like quicksand slows whoever stands in it.
-        Zone underfoot = topZoneOverlapping(player);
+        // A zone like quicksand slows whoever stands in it, and a singularity
+        // drags them in. A spawn shield ignores both: a shielded player is
+        // untouchable, so nothing can hold them at their spawn.
+        boolean shielded = player.hasSpawnShield();
+        Zone underfoot = shielded ? null : topZoneOverlapping(player);
         float speed = PLAYER_SPEED
             * (underfoot == null ? 1f : underfoot.getKind().speedMultiplier());
-        float[] gravityPull = singularityPlayerPull(player);
+        float[] gravityPull = shielded
+            ? new float[] { 0f, 0f }
+            : singularityPlayerPull(player);
 
         float dx = (
             moveX * speed
@@ -1253,8 +1258,10 @@ public class ArenaWorld {
         for (Map.Entry<Integer, Player> entry : players.entrySet()) {
             Player player = entry.getValue();
 
+            // Shielded players cannot be knocked back.
             if (
                 !player.isAlive()
+                || player.hasSpawnShield()
                 || !circleOverlapsPlayer(source.x(), source.y(), source.radius(), player)
             ) {
                 continue;
