@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import org.junit.jupiter.api.AfterEach;
@@ -280,6 +281,96 @@ class RoomsTest {
         assertEquals(BEAM_FIRST.slots(), slotPowers(client));
 
         client.close();
+    }
+
+    @Test
+    void matchEndsWithResultsAndReturnsToTheSameLobby() {
+        server.setMatchSeconds(1f);
+
+        LobbyConnection host = createRoom();
+        LobbyConnection joiner = joinRoom(host.roomCode());
+        awaitStatus(joiner, Status.IN_LOBBY);
+        startMatch(host, joiner);
+
+        NetSession hostSession = host.handOff();
+        NetSession joinerSession = joiner.handOff();
+        assertTrue(hostSession.isHost());
+        assertFalse(joinerSession.isHost());
+
+        await(() ->
+            hostSession.client().getMatchResults() != null
+            && joinerSession.client().getMatchResults() != null
+        );
+        assertEquals(2, hostSession.client().getMatchResults().results().size());
+        assertFalse(hostSession.client().isRoomClosed());
+
+        // Same connections, same room, back in its lobby with nobody locked in.
+        LobbyConnection hostLobby = LobbyConnection.resume(hostSession);
+        LobbyConnection joinerLobby = LobbyConnection.resume(joinerSession);
+        connections.add(hostLobby);
+        connections.add(joinerLobby);
+
+        awaitStatus(hostLobby, Status.IN_LOBBY);
+        awaitStatus(joinerLobby, Status.IN_LOBBY);
+        assertEquals(host.roomCode(), hostLobby.roomCode());
+        await(() -> hostLobby.playerCount() == 2 && hostLobby.lockedCount() == 0);
+
+        // A rematch starts as normal and clears the old results.
+        startMatch(hostLobby, joinerLobby);
+        assertNull(joinerSession.client().getMatchResults());
+    }
+
+    @Test
+    void hostLeavingDuringTheMatchClosesTheRoomWhenItEnds() {
+        server.setMatchSeconds(1f);
+
+        LobbyConnection host = createRoom();
+        LobbyConnection joiner = joinRoom(host.roomCode());
+        awaitStatus(joiner, Status.IN_LOBBY);
+        startMatch(host, joiner);
+
+        NetSession hostSession = host.handOff();
+        NetSession joinerSession = joiner.handOff();
+        await(joinerSession.client()::isReady);
+
+        hostSession.close();
+
+        // The joiner still gets their results, but there is no lobby to go
+        // back to.
+        await(() -> joinerSession.client().getMatchResults() != null);
+        assertEquals(1, joinerSession.client().getMatchResults().results().size());
+        await(joinerSession.client()::isRoomClosed);
+
+        joinerSession.close();
+    }
+
+    @Test
+    void snapshotsCountDownTheMatchTimer() {
+        server.setMatchSeconds(30f);
+
+        LobbyConnection host = createRoom();
+        lockIn(host);
+        await(host::everyoneLocked);
+        host.requestStart();
+        awaitStatus(host, Status.STARTED);
+
+        NetClient client = host.handOff().client();
+        await(client::isReady);
+
+        float remaining = client.getLatestSnapshot().matchSecondsRemaining();
+        assertTrue(remaining > 25f && remaining <= 30f, "was " + remaining);
+
+        client.close();
+    }
+
+    // Locks everyone in and starts the match from the host's connection.
+    private static void startMatch(LobbyConnection host, LobbyConnection joiner) {
+        lockIn(host);
+        lockIn(joiner);
+        await(host::everyoneLocked);
+        host.requestStart();
+        awaitStatus(host, Status.STARTED);
+        awaitStatus(joiner, Status.STARTED);
     }
 
     private static void lockIn(LobbyConnection connection) {

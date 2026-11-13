@@ -11,11 +11,19 @@ import io.github.coda45.hexadence.zone.ZoneKind;
 // bytes, and the client copies it back into its local ArenaWorld for drawing.
 public record WorldSnapshot(
     long tick,
+    // Seconds left in a timed match, or NO_TIMER.
+    float matchSecondsRemaining,
     List<PlayerState> players,
     List<DummyState> dummies,
     List<ProjectileState> projectiles,
     List<ZoneState> zones
 ) {
+
+    public static final float NO_TIMER = -1f;
+
+    public boolean hasTimer() {
+        return matchSecondsRemaining >= 0f;
+    }
 
     public WorldSnapshot {
         // Freeze the lists so a snapshot can be shared between threads safely.
@@ -38,6 +46,8 @@ public record WorldSnapshot(
         float respawnRemaining,
         int kills,
         int deaths,
+        // Seconds of spawn protection left; 0 when unprotected.
+        float spawnShieldRemaining,
         List<SlotState> slots
     ) {
         public PlayerState {

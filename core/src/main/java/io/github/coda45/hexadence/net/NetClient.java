@@ -46,6 +46,7 @@ public class NetClient {
     private volatile JoinRejected.Reason rejection;
     private volatile LobbyState lobbyState;
     private volatile boolean gameStarted;
+    private volatile MatchEnded matchResults;
     private volatile boolean roomClosed;
     private volatile boolean disconnected;
     private final AtomicReference<WorldSnapshot> latestSnapshot = new AtomicReference<>();
@@ -136,9 +137,15 @@ public class NetClient {
         return lobbyState;
     }
 
-    // True once the host has started the match.
+    // True while a match is running: from GameStarted until it ends.
     public boolean isGameStarted() {
         return gameStarted;
+    }
+
+    // The final stats of the match that just ended, or null while a match is
+    // running or before the first one ends. Cleared when the next one starts.
+    public MatchEnded getMatchResults() {
+        return matchResults;
     }
 
     // True if the host left the lobby and the room no longer exists.
@@ -217,7 +224,15 @@ public class NetClient {
             } else if (msg instanceof LobbyState state) {
                 lobbyState = state;
             } else if (msg instanceof GameStarted) {
+                // A rematch starts clean: nothing left over from the last one.
+                matchResults = null;
+                latestSnapshot.set(null);
+                pendingEvents.clear();
                 gameStarted = true;
+            } else if (msg instanceof MatchEnded ended) {
+                // The room is back in its lobby (or closing) after this.
+                gameStarted = false;
+                matchResults = ended;
             } else if (msg instanceof JoinRejected rejected) {
                 rejection = rejected.reason();
             } else if (msg instanceof RoomClosed) {

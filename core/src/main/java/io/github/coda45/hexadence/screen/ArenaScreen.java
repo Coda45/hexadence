@@ -12,6 +12,7 @@ import io.github.coda45.hexadence.HexadenceGame;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.input.PlayerInputController;
+import io.github.coda45.hexadence.net.MatchEnded;
 import io.github.coda45.hexadence.net.NetSession;
 import io.github.coda45.hexadence.render.HudRenderer;
 import io.github.coda45.hexadence.render.SteamViewOverlay;
@@ -46,6 +47,9 @@ public class ArenaScreen implements Screen {
     private float accumulator;
     private boolean menuOpen;
     private boolean disposed;
+    // Set when the results screen takes over the connection, so hiding this
+    // screen does not close it.
+    private boolean sessionHandedOff;
 
     // Multiplayer: a match on the dedicated server. The lobby hands over a
     // session whose match has already started.
@@ -101,6 +105,16 @@ public class ArenaScreen implements Screen {
 
     @Override
     public void render(float delta) {
+
+        // The server ended the match: show everyone's stats.
+        if (session != null) {
+            MatchEnded results = session.client().getMatchResults();
+
+            if (results != null) {
+                showResults(results);
+                return;
+            }
+        }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             setMenuOpen(!menuOpen);
@@ -170,8 +184,10 @@ public class ArenaScreen implements Screen {
             frameEvents
         );
 
+        hudRenderer.recordEvents(frameEvents, world.getPlayers(), localPlayerId());
+
         if (player != null) {
-            hudRenderer.render(player);
+            hudRenderer.render(player, presentationDelta);
         }
 
         steamViewOverlay.render(
@@ -216,6 +232,23 @@ public class ArenaScreen implements Screen {
         dispose();
     }
 
+    private void showResults(MatchEnded results) {
+        Player player = localPlayer();
+
+        sessionHandedOff = true;
+        game.setScreen(new ResultsScreen(
+            game,
+            session,
+            results,
+            player == null ? null : player.getLoadout()
+        ));
+        dispose();
+    }
+
+    private int localPlayerId() {
+        return session == null ? 0 : session.client().getPlayerId();
+    }
+
     private void resetFrameState() {
         accumulator = 0f;
         inputController.clearLatchedActions();
@@ -255,7 +288,7 @@ public class ArenaScreen implements Screen {
     public void hide() {
         resetFrameState();
 
-        if (session != null) {
+        if (session != null && !sessionHandedOff) {
             session.close();
         }
         
@@ -301,6 +334,7 @@ public class ArenaScreen implements Screen {
         if (snapshot != null && snapshot.tick() != lastAppliedTick) {
             world.applySnapshot(snapshot);
             lastAppliedTick = snapshot.tick();
+            hudRenderer.setMatchTimer(snapshot.matchSecondsRemaining());
         }
 
         frameEvents.addAll(

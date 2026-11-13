@@ -21,8 +21,10 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import io.github.coda45.hexadence.HexadenceGame;
 import io.github.coda45.hexadence.net.LobbyConnection;
+import io.github.coda45.hexadence.net.NetSession;
 import io.github.coda45.hexadence.net.RoomCodes;
 import io.github.coda45.hexadence.net.ServerAddress;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.world.ArenaMaps;
 
 // The joining player's lobby, laid out like HostLobbyScreen. The player types
@@ -64,7 +66,14 @@ public class JoinLobbyScreen implements Screen {
     private boolean joinRequested;
     private boolean leaveRequested;
 
+    // JOIN GAME: the player types a code.
     public JoinLobbyScreen(HexadenceGame game) {
+        this(game, null, null);
+    }
+
+    // Back to the same room after a match, on the connection that played it,
+    // with the powers used last time already picked.
+    public JoinLobbyScreen(HexadenceGame game, NetSession session, Loadout lastLoadout) {
         this.game = game;
         image = new Texture("host_lobbytest2.png");
         font = new BitmapFont();
@@ -167,6 +176,19 @@ public class JoinLobbyScreen implements Screen {
                 return false;
             }
         });
+
+        if (lastLoadout != null) {
+            picker.setLoadout(lastLoadout);
+        }
+
+        if (session != null) {
+            connection = LobbyConnection.resume(session);
+            String code = session.client().getRoomCode();
+
+            if (code != null) {
+                typedCode.append(code);
+            }
+        }
 
         updateLabels();
     }

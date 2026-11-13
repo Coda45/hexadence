@@ -1,6 +1,7 @@
 package io.github.coda45.hexadence.render;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.badlogic.gdx.Gdx;
@@ -10,6 +11,7 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
@@ -18,6 +20,8 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.world.PlayerKilledEvent;
+import io.github.coda45.hexadence.world.WorldEvent;
 
 public class HudRenderer {
 
@@ -29,6 +33,12 @@ public class HudRenderer {
     private static final float ABILITY_BOTTOM = 8f;
     private static final float COOLDOWN_RADIUS = 16f;
     private static final int COOLDOWN_SEGMENTS = 48;
+    // The K/D line; the kill feed stacks upward from just above it.
+    private static final float SCORE_X = 20f;
+    private static final float SCORE_Y = 150f;
+    private static final float KILL_FEED_BOTTOM = SCORE_Y + 22f;
+    // The timer turns red for the final seconds.
+    private static final float TIMER_WARNING_SECONDS = 10f;
 
     // Key shown on each loadout slot's icon.
     private static final String[] SLOT_BINDINGS = { "LMB", "RMB", "Q" };
@@ -43,6 +53,11 @@ public class HudRenderer {
     private final SpriteBatch batch;
     private final BitmapFont font;
     private final Texture pixelTexture;
+    private final KillFeed killFeed = new KillFeed();
+    private final GlyphLayout layout = new GlyphLayout();
+
+    // Seconds left in a timed match, or negative for no timer.
+    private float matchSecondsRemaining = -1f;
 
     public HudRenderer() {
         camera = new OrthographicCamera();
@@ -70,7 +85,27 @@ public class HudRenderer {
         viewport.update(width, height, true);
     }
 
-    public void render(Player player) {
+    // Negative hides the timer (single-player, or before the first snapshot).
+    public void setMatchTimer(float secondsRemaining) {
+        matchSecondsRemaining = secondsRemaining;
+    }
+
+    // Feeds this frame's world events to the kill feed. Call before render.
+    public void recordEvents(
+        List<WorldEvent> events,
+        Map<Integer, Player> players,
+        int localPlayerId
+    ) {
+        for (WorldEvent event : events) {
+            if (event instanceof PlayerKilledEvent killed) {
+                killFeed.add(killed, players, localPlayerId);
+            }
+        }
+    }
+
+    public void render(Player player, float deltaSeconds) {
+        killFeed.update(deltaSeconds);
+
         viewport.apply();
 
         batch.setProjectionMatrix(camera.combined);
@@ -80,7 +115,10 @@ public class HudRenderer {
         batch.begin();
 
         drawScore(player);
+        killFeed.draw(batch, font, SCORE_X, KILL_FEED_BOTTOM);
         drawHealth(player);
+        drawSpawnShield(player);
+        drawMatchTimer();
 
         if (!player.isAlive()) {
             font.draw(
@@ -152,8 +190,42 @@ public class HudRenderer {
             width,
             height,
             healthFraction,
-            Color.LIME
+            player.isLowHealth() ? Color.RED : Color.LIME
         );
+    }
+
+    private void drawSpawnShield(Player player) {
+        if (!player.isAlive() || !player.hasSpawnShield()) {
+            return;
+        }
+
+        font.setColor(Color.CYAN);
+        font.draw(
+            batch,
+            String.format("Spawn shield %.1fs", player.getSpawnShieldRemaining()),
+            20f,
+            308f
+        );
+        font.setColor(Color.WHITE);
+    }
+
+    // m:ss at the top center.
+    private void drawMatchTimer() {
+        if (matchSecondsRemaining < 0f) {
+            return;
+        }
+
+        int totalSeconds = (int) Math.ceil(matchSecondsRemaining);
+        String text = String.format("%d:%02d", totalSeconds / 60, totalSeconds % 60);
+
+        font.getData().setScale(1.5f);
+        font.setColor(
+            matchSecondsRemaining <= TIMER_WARNING_SECONDS ? Color.RED : Color.WHITE
+        );
+        layout.setText(font, text);
+        font.draw(batch, layout, (HUD_WIDTH - layout.width) / 2f, HUD_HEIGHT - 10f);
+        font.getData().setScale(1f);
+        font.setColor(Color.WHITE);
     }
 
     private float abilityX(int index) {
@@ -306,8 +378,8 @@ public class HudRenderer {
             batch,
             "Kills: " + player.getKills()
                 + "  Deaths: " + player.getDeaths(),
-            20f,
-            150f
+            SCORE_X,
+            SCORE_Y
         );
     }
 

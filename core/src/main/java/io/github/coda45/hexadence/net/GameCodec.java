@@ -14,6 +14,7 @@ import io.github.coda45.hexadence.zone.ZoneKind;
 import io.github.coda45.hexadence.zone.ZoneKinds;
 import io.github.coda45.hexadence.world.BeamChannelEndEvent;
 import io.github.coda45.hexadence.world.BeamStrikeEvent;
+import io.github.coda45.hexadence.world.PlayerKilledEvent;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -45,7 +46,9 @@ public final class GameCodec {
     // 13: held beams identify their caster and send an explicit release event.
     // 14: zone snapshots carry health for destructible solid zones.
     // 15: beam events identify primary and crystal-split branches.
-    public static final int PROTOCOL_VERSION = 15;
+    // 16: timed matches (timer in snapshots, MatchEnded with results),
+    //     spawn shields in snapshots, and kill events for the kill feed.
+    public static final int PROTOCOL_VERSION = 16;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -61,6 +64,8 @@ public final class GameCodec {
     private static final byte TYPE_KEEP_ALIVE = 12;
     private static final byte TYPE_SELECT_LOADOUT = 13;
     private static final byte TYPE_BEAM_CHANNEL_END = 14;
+    private static final byte TYPE_PLAYER_KILLED = 15;
+    private static final byte TYPE_MATCH_ENDED = 16;
 
     private static final int LENGTH_FIELD_BYTES = 4;
     private static final int MAX_MAP_ID_BYTES = 128;
@@ -123,6 +128,12 @@ public final class GameCodec {
                 out.writeByte(TYPE_BEAM_CHANNEL_END);
                 out.writeInt(event.ownerPlayerId());
                 writePower(out, event.power());
+            } else if (message instanceof PlayerKilledEvent killed) {
+                out.writeByte(TYPE_PLAYER_KILLED);
+                out.writeInt(killed.victimPlayerId());
+                out.writeInt(killed.killerPlayerId());
+            } else if (message instanceof MatchEnded ended) {
+                writeMatchEnded(out, ended);
             } else if (message instanceof JoinRejected rejected) {
                 out.writeByte(TYPE_JOIN_REJECTED);
                 out.writeByte(rejectReasonId(rejected.reason()));
@@ -184,6 +195,11 @@ public final class GameCodec {
                     in.readInt(),
                     readPower(in)
                 ));
+                case TYPE_PLAYER_KILLED -> out.add(new PlayerKilledEvent(
+                    in.readInt(),
+                    in.readInt()
+                ));
+                case TYPE_MATCH_ENDED -> out.add(readMatchEnded(in));
                 case TYPE_JOIN_REJECTED -> out.add(new JoinRejected(
                     rejectReasonFromId(in.readUnsignedByte())
                 ));
@@ -263,6 +279,7 @@ public final class GameCodec {
     private static void writeSnapshot(ByteBuf out, WorldSnapshot snapshot) {
         out.writeByte(TYPE_SNAPSHOT);
         out.writeLong(snapshot.tick());
+        out.writeFloat(snapshot.matchSecondsRemaining());
 
         out.writeShort(snapshot.players().size());
         for (WorldSnapshot.PlayerState p : snapshot.players()) {
@@ -277,6 +294,7 @@ public final class GameCodec {
             out.writeFloat(p.respawnRemaining());
             out.writeInt(p.kills());
             out.writeInt(p.deaths());
+            out.writeFloat(p.spawnShieldRemaining());
 
             out.writeByte(p.slots().size());
             for (WorldSnapshot.SlotState slot : p.slots()) {
@@ -318,6 +336,7 @@ public final class GameCodec {
 
     private static WorldSnapshot readSnapshot(ByteBuf in) {
         long tick = in.readLong();
+        float matchSecondsRemaining = in.readFloat();
 
         int playerCount = in.readUnsignedShort();
         List<WorldSnapshot.PlayerState> players = new ArrayList<>(playerCount);
@@ -334,6 +353,7 @@ public final class GameCodec {
                 in.readFloat(),
                 in.readInt(),
                 in.readInt(),
+                in.readFloat(),
                 readSlots(in)
             ));
         }
@@ -378,7 +398,55 @@ public final class GameCodec {
             ));
         }
 
-        return new WorldSnapshot(tick, players, dummies, projectiles, zones);
+        return new WorldSnapshot(
+            tick,
+            matchSecondsRemaining,
+            players,
+            dummies,
+            projectiles,
+            zones
+        );
+    }
+
+    // ---- MatchEnded ----
+
+    private static void writeMatchEnded(ByteBuf out, MatchEnded ended) {
+        if (ended.results().size() > GameServer.MAX_PLAYERS) {
+            throw new IllegalArgumentException("Too many match results");
+        }
+
+        out.writeByte(TYPE_MATCH_ENDED);
+        out.writeByte(ended.results().size());
+
+        for (MatchEnded.PlayerResult result : ended.results()) {
+            out.writeInt(result.playerId());
+            out.writeByte(playerColorId(result.color()));
+            out.writeInt(result.kills());
+            out.writeInt(result.deaths());
+            out.writeFloat(result.damageDealt());
+        }
+    }
+
+    private static MatchEnded readMatchEnded(ByteBuf in) {
+        int count = in.readUnsignedByte();
+
+        if (count > GameServer.MAX_PLAYERS) {
+            throw new IllegalArgumentException("Too many match results: " + count);
+        }
+
+        List<MatchEnded.PlayerResult> results = new ArrayList<>(count);
+
+        for (int i = 0; i < count; i++) {
+            results.add(new MatchEnded.PlayerResult(
+                in.readInt(),
+                playerColorFromId(in.readUnsignedByte()),
+                in.readInt(),
+                in.readInt(),
+                in.readFloat()
+            ));
+        }
+
+        return new MatchEnded(results);
     }
 
     private static void writeMapId(ByteBuf out, String mapId) {

@@ -19,9 +19,18 @@ public final class SnapshotFactory {
     private SnapshotFactory() {
     }
 
+    // An untimed match.
+    public static WorldSnapshot capture(ArenaWorld world, StepResult result) {
+        return capture(world, result, WorldSnapshot.NO_TIMER);
+    }
+
     // Call once after each world.step(); StepResult supplies the authoritative
     // tick. Transient events travel separately from replaceable snapshots.
-    public static WorldSnapshot capture(ArenaWorld world, StepResult result) {
+    public static WorldSnapshot capture(
+        ArenaWorld world,
+        StepResult result,
+        float matchSecondsRemaining
+    ) {
         List<WorldSnapshot.PlayerState> players = new ArrayList<>();
 
         for (Map.Entry<Integer, Player> entry : world.getPlayers().entrySet()) {
@@ -47,6 +56,7 @@ public final class SnapshotFactory {
                 player.getRespawnRemaining(),
                 player.getKills(),
                 player.getDeaths(),
+                player.getSpawnShieldRemaining(),
                 slots
             ));
         }
@@ -92,6 +102,7 @@ public final class SnapshotFactory {
 
         return new WorldSnapshot(
             result.tick(),
+            matchSecondsRemaining,
             players,
             dummies,
             projectiles,

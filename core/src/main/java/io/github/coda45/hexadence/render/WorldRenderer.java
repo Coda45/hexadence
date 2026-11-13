@@ -46,6 +46,8 @@ public class WorldRenderer {
     private final SpriteBatch batch;
     private final GameTextures textures;
     private final Texture pixelTexture;
+    // Soft bubble drawn around a player whose spawn shield is up.
+    private final Texture shieldTexture;
     private final ShaderProgram whiteFlashShader;
     private final int[] groundLayers;
     private final int[] lowerTerrainLayers;
@@ -109,7 +111,43 @@ public class WorldRenderer {
         // Texture has its own copy; the temporary pixel data can be released now.
         pixmap.dispose();
 
+        shieldTexture = createShieldTexture();
+
         whiteFlashShader = createWhiteFlashShader();
+    }
+
+    // A white disc that is faint in the middle and bright at the rim, tinted
+    // when drawn.
+    private static Texture createShieldTexture() {
+        int size = 64;
+        float radius = size / 2f;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
+
+        for (int py = 0; py < size; py++) {
+            for (int px = 0; px < size; px++) {
+                float dx = px + 0.5f - radius;
+                float dy = py + 0.5f - radius;
+                float distance = (float) Math.sqrt(dx * dx + dy * dy) / radius;
+
+                if (distance > 1f) {
+                    continue;
+                }
+
+                float rim = MathUtils.clamp((distance - 0.7f) / 0.3f, 0f, 1f);
+                float alpha = 0.25f + 0.75f * rim * rim;
+
+                // Soften the outermost pixel so the edge is not jagged.
+                alpha *= MathUtils.clamp((1f - distance) * radius, 0f, 1f);
+
+                pixmap.drawPixel(px, py, Color.rgba8888(1f, 1f, 1f, alpha));
+            }
+        }
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+        return texture;
     }
 
     private static ShaderProgram createWhiteFlashShader() {
@@ -247,6 +285,10 @@ public class WorldRenderer {
                 playerDamageFlashes.containsKey(playerId),
                 Color.WHITE
             );
+
+            if (player.isAlive() && player.hasSpawnShield()) {
+                renderSpawnShield(player);
+            }
         }   
 
         for (Projectile projectile : world.getProjectiles()) {
@@ -898,6 +940,29 @@ public class WorldRenderer {
         }
     }
 
+    private static final float SHIELD_RADIUS = 0.95f;
+    private static final float SHIELD_FADE_SECONDS = 0.5f;
+
+    private void renderSpawnShield(Player player) {
+        float remaining = player.getSpawnShieldRemaining();
+
+        // Pulses gently, then fades out over its last half second.
+        float alpha = 0.55f + 0.15f * MathUtils.sin(remaining * 10f);
+        alpha *= Math.min(1f, remaining / SHIELD_FADE_SECONDS);
+
+        float size = SHIELD_RADIUS * 2f;
+
+        batch.setColor(0.55f, 0.9f, 1f, alpha);
+        batch.draw(
+            shieldTexture,
+            player.getCombatCenterX() - SHIELD_RADIUS,
+            player.getCombatCenterY() - SHIELD_RADIUS,
+            size,
+            size
+        );
+        batch.setColor(Color.WHITE);
+    }
+
     private void renderPlayerHealthBar(
         Player player,
         float spriteHeight
@@ -923,7 +988,7 @@ public class WorldRenderer {
             barHeight
         );
 
-        batch.setColor(Color.LIME);
+        batch.setColor(player.isLowHealth() ? Color.RED : Color.LIME);
         batch.draw(
             pixelTexture,
             left,
@@ -1037,6 +1102,7 @@ public class WorldRenderer {
         whiteFlashShader.dispose();
         
         pixelTexture.dispose();
+        shieldTexture.dispose();
     }
 
     

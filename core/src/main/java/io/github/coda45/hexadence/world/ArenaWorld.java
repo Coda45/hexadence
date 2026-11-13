@@ -32,6 +32,8 @@ public class ArenaWorld {
 
     private static final float PLAYER_SPEED = 5f;
     private static final float PLAYER_RESPAWN_DELAY = 3f;
+    // How long a respawned player is protected, unless they cast first.
+    public static final float SPAWN_SHIELD_SECONDS = 3f;
     private static final float DUMMY_RESPAWN_DELAY = 2f;
     private static final float KNOCKBACK_DAMPING_PER_STEP = 0.9f;
     private static final float VORTEX_ORBIT_SPEED = 8f;
@@ -55,6 +57,8 @@ public class ArenaWorld {
     private final Map<Integer, Integer> vortexZoneSourceKeys =
         new LinkedHashMap<>();
     private final Set<VortexPlayerContact> vortexPlayerContacts = new HashSet<>();
+    // Deaths during the current step, added to its StepResult at the end.
+    private final List<WorldEvent> deathEvents = new ArrayList<>();
 
     private long tick;
     private int nextPlayerId = 1;
@@ -276,6 +280,9 @@ public class ArenaWorld {
         applyDotEffects();
         updatePlayerRespawns();
         updateDummyRespawns();
+
+        events.addAll(deathEvents);
+        deathEvents.clear();
         return new StepResult(tick, events);
     }
         
@@ -294,6 +301,8 @@ public class ArenaWorld {
         PlayerCommand command,
         List<WorldEvent> events
     ) {
+        player.updateSpawnShield(STEP);
+
         float aimX = command.aimX();
         float aimY = command.aimY();
 
@@ -359,6 +368,8 @@ public class ArenaWorld {
                             currentPower.channelTickSeconds()
                         )
                     );
+                    // Attacking gives up spawn protection.
+                    player.dropSpawnShield();
                     castChannelTick(playerId, player, currentPower, cast, events);
                 } else {
                     tryCast(playerId, player, cast, events);
@@ -1604,6 +1615,13 @@ public class ArenaWorld {
             return;
         }
 
+        Player target = players.get(targetPlayerId);
+
+        // A spawn shield blocks the lingering damage along with the hit.
+        if (target != null && target.hasSpawnShield()) {
+            return;
+        }
+
         DotEffect existing = playerDotEffects.get(targetPlayerId);
 
         if (existing != null) {
@@ -1819,6 +1837,11 @@ public class ArenaWorld {
                     spawn.x(),
                     spawn.y()
                 );
+
+                // Just came back: protect them from spawn camping.
+                if (player.isAlive()) {
+                    player.startSpawnShield(SPAWN_SHIELD_SECONDS);
+                }
             }
         }
     }
@@ -1869,6 +1892,7 @@ public class ArenaWorld {
                 state.respawnRemaining(),
                 state.kills(),
                 state.deaths(),
+                state.spawnShieldRemaining(),
                 state.color()
             );
 
@@ -2424,6 +2448,8 @@ public class ArenaWorld {
 
         if (accepted) {
             player.startCooldown(slot);
+            // Attacking gives up spawn protection.
+            player.dropSpawnShield();
         }
     }
 
@@ -2458,7 +2484,22 @@ public class ArenaWorld {
             return;
         }
 
+        // Freshly respawned players cannot be hurt until the shield ends.
+        if (victim.hasSpawnShield()) {
+            return;
+        }
+
+        float healthBefore = victim.getHealth();
         victim.takeDamage(amount);
+
+        Player attacker = attackerPlayerId == victimPlayerId
+            ? null
+            : players.get(attackerPlayerId);
+
+        // Only damage actually taken counts, so overkill is not inflated.
+        if (attacker != null) {
+            attacker.recordDamageDealt(healthBefore - victim.getHealth());
+        }
 
         if (victim.isAlive()) {
             return;
@@ -2467,14 +2508,43 @@ public class ArenaWorld {
         victim.recordDeath();
         victim.beginRespawn(PLAYER_RESPAWN_DELAY);
 
-        if (attackerPlayerId == victimPlayerId) {
-            return;
-        }
-
-        Player attacker = players.get(attackerPlayerId);
-
         if (attacker != null) {
             attacker.recordKill();
+        }
+
+        deathEvents.add(new PlayerKilledEvent(
+            victimPlayerId,
+            attacker != null ? attackerPlayerId : PlayerKilledEvent.NO_KILLER
+        ));
+    }
+
+    // Clears the arena for a rematch with the same players: every projectile,
+    // zone and lingering effect is removed, and each player returns to their
+    // spawn with full health and no kills, deaths or damage.
+    public void resetForNewMatch() {
+        projectiles.clear();
+        zones.clear();
+        playerDotEffects.clear();
+        dummyDotEffects.clear();
+        activeChannels.clear();
+        vortexOrbits.clear();
+        vortexZoneSourceKeys.clear();
+        vortexPlayerContacts.clear();
+        deathEvents.clear();
+
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            SpawnPoint spawn = assignedPlayerSpawns.get(entry.getKey());
+            Player player = entry.getValue();
+
+            if (spawn != null) {
+                player.resetForNewMatch(spawn.x(), spawn.y());
+            } else {
+                player.resetForNewMatch(player.getX(), player.getY());
+            }
+        }
+
+        for (TargetDummy dummy : dummies) {
+            dummy.setHealth(dummy.getMaxHealth());
         }
     }
 

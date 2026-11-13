@@ -16,6 +16,7 @@ import io.github.coda45.hexadence.zone.ZoneKind;
 import io.github.coda45.hexadence.zone.ZoneKinds;
 import io.github.coda45.hexadence.world.BeamStrikeEvent;
 import io.github.coda45.hexadence.world.BeamChannelEndEvent;
+import io.github.coda45.hexadence.world.PlayerKilledEvent;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 
@@ -112,6 +113,7 @@ class GameCodecTest {
     void roundTripsSnapshotEntityIds() {
         WorldSnapshot expected = new WorldSnapshot(
             99L,
+            123.5f,
             List.of(
                 new WorldSnapshot.PlayerState(
                     7,
@@ -125,6 +127,7 @@ class GameCodecTest {
                     -1f,
                     3,
                     2,
+                    1.25f,
                     List.of(
                         new WorldSnapshot.SlotState(Powers.FIREBALL, 0.1f),
                         new WorldSnapshot.SlotState(Powers.WATER_PUDDLE, 0.2f),
@@ -168,13 +171,38 @@ class GameCodecTest {
     }
 
     @Test
+    void roundTripsPlayerKilledEvent() {
+        PlayerKilledEvent expected = new PlayerKilledEvent(3, 5);
+
+        assertEquals(expected, roundTrip(expected));
+    }
+
+    @Test
+    void roundTripsKillWithNoKiller() {
+        PlayerKilledEvent expected =
+            new PlayerKilledEvent(3, PlayerKilledEvent.NO_KILLER);
+
+        assertEquals(expected, roundTrip(expected));
+    }
+
+    @Test
+    void roundTripsMatchResults() {
+        MatchEnded expected = new MatchEnded(List.of(
+            new MatchEnded.PlayerResult(1, PlayerColor.CYAN, 7, 2, 412.5f),
+            new MatchEnded.PlayerResult(4, PlayerColor.GOLD, 0, 9, 18f)
+        ));
+
+        assertEquals(expected, roundTrip(expected));
+    }
+
+    @Test
     void everyPowerSurvivesTheNetwork() {
         for (Power power : Powers.ALL) {
             WorldSnapshot.ProjectileState expected =
                 new WorldSnapshot.ProjectileState(1, power, 2, 3f, 4f, 1f, 0f);
 
             WorldSnapshot snapshot = new WorldSnapshot(
-                1L, List.of(), List.of(), List.of(expected), List.of()
+                1L, WorldSnapshot.NO_TIMER, List.of(), List.of(), List.of(expected), List.of()
             );
 
             assertEquals(snapshot, roundTrip(snapshot), power.name());
@@ -190,7 +218,7 @@ class GameCodecTest {
                 );
 
             WorldSnapshot snapshot = new WorldSnapshot(
-                1L, List.of(), List.of(), List.of(), List.of(expected)
+                1L, WorldSnapshot.NO_TIMER, List.of(), List.of(), List.of(), List.of(expected)
             );
 
             assertEquals(snapshot, roundTrip(snapshot), kind.name());

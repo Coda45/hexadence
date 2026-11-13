@@ -20,10 +20,16 @@ public class Player {
     private float knockbackVelocityY;
 
     private static final float MAX_HEALTH = 100f;
+    // At or below this much health, health bars turn red.
+    public static final float LOW_HEALTH = 20f;
     private float health = MAX_HEALTH;
     private float respawnRemaining = -1f;
     private int kills;
     private int deaths;
+    // Damage this player has dealt to other players this match.
+    private float damageDealt;
+    // Seconds of spawn protection left; 0 when unprotected.
+    private float spawnShieldRemaining;
     private PlayerColor color;
 
     // Collision covers the feet, not the full sprite.
@@ -188,6 +194,10 @@ public class Player {
         return MAX_HEALTH;
     }
 
+    public boolean isLowHealth() {
+        return isAlive() && health <= LOW_HEALTH;
+    }
+
     public float getCollisionX() {
         return x + COLLISION_OFFSET_X;
     }
@@ -257,6 +267,53 @@ public class Player {
         return deaths;
     }
 
+    public void recordDamageDealt(float amount) {
+        damageDealt += Math.max(0f, amount);
+    }
+
+    public float getDamageDealt() {
+        return damageDealt;
+    }
+
+    // ---- Spawn shield ----
+    // A freshly respawned player cannot be damaged for a few seconds, so they
+    // cannot be spawn camped. Casting anything drops the shield early.
+
+    public void startSpawnShield(float seconds) {
+        spawnShieldRemaining = Math.max(0f, seconds);
+    }
+
+    public void dropSpawnShield() {
+        spawnShieldRemaining = 0f;
+    }
+
+    public void updateSpawnShield(float deltaSeconds) {
+        spawnShieldRemaining = Math.max(0f, spawnShieldRemaining - deltaSeconds);
+    }
+
+    public boolean hasSpawnShield() {
+        return spawnShieldRemaining > 0f;
+    }
+
+    public float getSpawnShieldRemaining() {
+        return spawnShieldRemaining;
+    }
+
+    // Puts this player back to how they entered the match: full health at
+    // the given spawn, no stats, no cooldowns, no shield. Keeps the loadout.
+    public void resetForNewMatch(float spawnX, float spawnY) {
+        health = MAX_HEALTH;
+        respawnRemaining = -1f;
+        kills = 0;
+        deaths = 0;
+        damageDealt = 0f;
+        spawnShieldRemaining = 0f;
+        aimX = 1f;
+        aimY = 0f;
+        setPosition(spawnX, spawnY);
+        resetCooldowns();
+    }
+
     // Overwrites this player with state received from the host (clients only).
     public void restoreState(
         float x,
@@ -268,6 +325,7 @@ public class Player {
         float respawnRemaining,
         int kills,
         int deaths,
+        float spawnShieldRemaining,
         PlayerColor color
     ) {
         this.x = x;
@@ -279,6 +337,7 @@ public class Player {
         this.respawnRemaining = respawnRemaining;
         this.kills = kills;
         this.deaths = deaths;
+        this.spawnShieldRemaining = Math.max(0f, spawnShieldRemaining);
         this.color = Objects.requireNonNull(color);
     }
 

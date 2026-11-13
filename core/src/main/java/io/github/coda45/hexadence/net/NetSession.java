@@ -15,9 +15,12 @@ import java.util.concurrent.CompletionException;
 public final class NetSession {
 
     private final NetClient client;
+    // True for the player who created the room.
+    private final boolean host;
 
-    private NetSession(NetClient client) {
+    private NetSession(NetClient client, boolean host) {
         this.client = client;
+        this.host = host;
     }
 
     // Asks the server for a new room; this player becomes its host.
@@ -25,7 +28,7 @@ public final class NetSession {
         ServerAddress server,
         String mapId
     ) {
-        return open(server, ClientHello.createRoom(mapId));
+        return open(server, ClientHello.createRoom(mapId), true);
     }
 
     // Joins the room with the code another player shared.
@@ -34,12 +37,17 @@ public final class NetSession {
         String mapId,
         String roomCode
     ) {
-        return open(server, ClientHello.joinRoom(mapId, RoomCodes.normalize(roomCode)));
+        return open(
+            server,
+            ClientHello.joinRoom(mapId, RoomCodes.normalize(roomCode)),
+            false
+        );
     }
 
     private static CompletableFuture<NetSession> open(
         ServerAddress server,
-        ClientHello hello
+        ClientHello hello,
+        boolean host
     ) {
         return CompletableFuture.supplyAsync(() -> {
             NetClient client = new NetClient(server.host(), server.port(), hello);
@@ -51,12 +59,16 @@ public final class NetSession {
                 throw new CompletionException(e);
             }
 
-            return new NetSession(client);
+            return new NetSession(client, host);
         });
     }
 
     public NetClient client() {
         return client;
+    }
+
+    public boolean isHost() {
+        return host;
     }
 
     public void close() {
