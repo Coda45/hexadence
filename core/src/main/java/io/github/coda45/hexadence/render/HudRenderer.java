@@ -39,6 +39,11 @@ public class HudRenderer {
     private static final float KILL_FEED_BOTTOM = SCORE_Y + 22f;
     // The timer turns red for the final seconds.
     private static final float TIMER_WARNING_SECONDS = 10f;
+    // Of the ending (0 to 1): the GAME OVER banner pops in over the first
+    // part, and the screen starts fading to black a moment after it appears.
+    private static final float BANNER_POP_PROGRESS = 0.1f;
+    private static final float FADE_START_PROGRESS = 0.15f;
+    private static final float BANNER_SCALE = 3f;
 
     // Key shown on each loadout slot's icon.
     private static final String[] SLOT_BINDINGS = { "LMB", "RMB", "Q" };
@@ -58,6 +63,9 @@ public class HudRenderer {
 
     // Seconds left in a timed match, or negative for no timer.
     private float matchSecondsRemaining = -1f;
+    // 0 to 1 once the clock has run out; negative before that.
+    private float matchEndProgress = -1f;
+    private final ScreenFade screenFade = new ScreenFade();
 
     public HudRenderer() {
         camera = new OrthographicCamera();
@@ -88,6 +96,48 @@ public class HudRenderer {
     // Negative hides the timer (single-player, or before the first snapshot).
     public void setMatchTimer(float secondsRemaining) {
         matchSecondsRemaining = secondsRemaining;
+    }
+
+    // Negative before the clock runs out; then 0 rising to 1 as the match
+    // fades out.
+    public void setMatchEndProgress(float progress) {
+        matchEndProgress = progress;
+    }
+
+    // GAME OVER and the fade to black, over everything else. Call last in
+    // the frame (before any pause menu), whether or not there is a player.
+    public void renderMatchEnd() {
+        if (matchEndProgress < 0f) {
+            return;
+        }
+
+        float fade = (matchEndProgress - FADE_START_PROGRESS) / (1f - FADE_START_PROGRESS);
+        // Ease in, so the darkening speeds up toward the end.
+        fade = Math.max(0f, Math.min(1f, fade));
+        screenFade.draw(fade * fade * (3f - 2f * fade));
+
+        // The fade resets the GL viewport; the banner uses the HUD's.
+        viewport.apply();
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        float pop = Math.min(1f, matchEndProgress / BANNER_POP_PROGRESS);
+        // Starts a little large and settles, so it lands with some weight.
+        float scale = BANNER_SCALE * (1f + 0.4f * (1f - pop));
+
+        font.getData().setScale(scale);
+        font.setColor(1f, 0.25f, 0.2f, pop);
+        layout.setText(font, "GAME OVER");
+        font.draw(
+            batch,
+            layout,
+            (HUD_WIDTH - layout.width) / 2f,
+            (HUD_HEIGHT + layout.height) / 2f + 20f
+        );
+        font.getData().setScale(1f);
+        font.setColor(Color.WHITE);
+
+        batch.end();
     }
 
     // Feeds this frame's world events to the kill feed. Call before render.
@@ -399,6 +449,7 @@ public class HudRenderer {
     }
 
     public void dispose() {
+        screenFade.dispose();
         batch.dispose();
         font.dispose();
         pixelTexture.dispose();

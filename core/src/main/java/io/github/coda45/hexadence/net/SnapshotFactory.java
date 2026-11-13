@@ -21,7 +21,7 @@ public final class SnapshotFactory {
 
     // An untimed match.
     public static WorldSnapshot capture(ArenaWorld world, StepResult result) {
-        return capture(world, result, WorldSnapshot.NO_TIMER);
+        return capture(world, result, WorldSnapshot.NO_TIMER, WorldSnapshot.NOT_ENDING);
     }
 
     // Call once after each world.step(); StepResult supplies the authoritative
@@ -29,7 +29,8 @@ public final class SnapshotFactory {
     public static WorldSnapshot capture(
         ArenaWorld world,
         StepResult result,
-        float matchSecondsRemaining
+        float matchSecondsRemaining,
+        float matchEndProgress
     ) {
         List<WorldSnapshot.PlayerState> players = new ArrayList<>();
 
@@ -103,6 +104,7 @@ public final class SnapshotFactory {
         return new WorldSnapshot(
             result.tick(),
             matchSecondsRemaining,
+            matchEndProgress,
             players,
             dummies,
             projectiles,

@@ -27,6 +27,7 @@ import io.github.coda45.hexadence.net.NetClient;
 import io.github.coda45.hexadence.net.NetSession;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.render.PlayerTextColors;
+import io.github.coda45.hexadence.render.ScreenFade;
 
 // Shown when a match's timer runs out: every player's kills, deaths and
 // damage dealt, best first. RETURN TO LOBBY goes back to the same room for a
@@ -42,6 +43,8 @@ public class ResultsScreen implements Screen {
     private static final float MENU_HEIGHT = 360f;
     private static final float NAME_COLUMN_WIDTH = 140f;
     private static final float STAT_COLUMN_WIDTH = 80f;
+    // The match faded to black; this screen fades in from it.
+    private static final float FADE_IN_SECONDS = 0.8f;
 
     private final HexadenceGame game;
     private final NetSession session;
@@ -54,6 +57,8 @@ public class ResultsScreen implements Screen {
     private final Stage stage;
     private final TextButton lobbyButton;
     private final Label statusLabel;
+    private final ScreenFade screenFade = new ScreenFade();
+    private float fadeInElapsed;
 
     // Set by button listeners and handled after stage.act(), so the stage is
     // never disposed while it is still processing input.
@@ -228,6 +233,10 @@ public class ResultsScreen implements Screen {
         stage.act(delta);
         stage.draw();
 
+        fadeInElapsed += Math.min(delta, 0.1f);
+        screenFade.draw(1f - fadeInElapsed / FADE_IN_SECONDS);
+        stage.getViewport().apply();
+
         NetClient client = session.client();
 
         if (client.isGameStarted()) {
@@ -295,6 +304,7 @@ public class ResultsScreen implements Screen {
             session.close();
         }
 
+        screenFade.dispose();
         stage.dispose();
         font.dispose();
         smallFont.dispose();

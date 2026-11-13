@@ -48,6 +48,8 @@ class RoomsTest {
         );
 
         server = new GameServer(arena, MAP, 0);
+        // Short endings keep the match tests quick.
+        server.setEndingSeconds(0.5f);
         server.start();
         address = new ServerAddress("127.0.0.1", server.boundPort());
     }
@@ -342,6 +344,36 @@ class RoomsTest {
         await(joinerSession.client()::isRoomClosed);
 
         joinerSession.close();
+    }
+
+    @Test
+    void playContinuesThroughTheEndingBeforeResults() {
+        server.setMatchSeconds(0.5f);
+        server.setEndingSeconds(1f);
+
+        LobbyConnection host = createRoom();
+        lockIn(host);
+        await(host::everyoneLocked);
+        host.requestStart();
+        awaitStatus(host, Status.STARTED);
+
+        NetClient client = host.handOff().client();
+
+        // The clock hits zero first, and snapshots keep coming with the
+        // ending's progress while there are no results yet.
+        await(() -> {
+            WorldSnapshot snapshot = client.getLatestSnapshot();
+            return snapshot != null && snapshot.isEnding();
+        });
+        WorldSnapshot ending = client.getLatestSnapshot();
+        assertEquals(0f, ending.matchSecondsRemaining(), 0.0001f);
+        assertTrue(ending.matchEndProgress() < 1f);
+        assertNull(client.getMatchResults());
+        assertTrue(client.isGameStarted());
+
+        await(() -> client.getMatchResults() != null);
+
+        client.close();
     }
 
     @Test

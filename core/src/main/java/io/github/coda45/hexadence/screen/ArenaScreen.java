@@ -195,6 +195,8 @@ public class ArenaScreen implements Screen {
             world.isPlayerOverlappingZoneKind(player, ZoneKinds.STEAM)
         );
 
+        hudRenderer.renderMatchEnd();
+
         if (menuOpen) {
             pauseMenu.render(presentationDelta);
             applyTrainingLoadoutChange();
@@ -335,6 +337,7 @@ public class ArenaScreen implements Screen {
             world.applySnapshot(snapshot);
             lastAppliedTick = snapshot.tick();
             hudRenderer.setMatchTimer(snapshot.matchSecondsRemaining());
+            hudRenderer.setMatchEndProgress(snapshot.matchEndProgress());
         }
 
         frameEvents.addAll(

@@ -26,8 +26,10 @@ import io.netty.channel.Channel;
 // switch it to PLAYING: each player's loadout is applied and it ticks at 60 Hz.
 // Loadouts cannot change after that.
 //
-// A match lasts a fixed time. When the timer runs out every player gets a
-// MatchEnded with the final stats, and the room goes back to LOBBY with the
+// A match lasts a fixed time. When the clock runs out the stats are frozen,
+// but play goes on for a few seconds while clients show GAME OVER and fade
+// to black; nothing done then counts. After that every player gets a
+// MatchEnded with the frozen stats, and the room goes back to LOBBY with the
 // same players and code, ready for a rematch. If the host left during the
 // match there is nobody to start one, so the room closes instead.
 //
@@ -38,12 +40,15 @@ final class GameRoom {
 
     private static final int MAX_PENDING_EVENTS_PER_CLIENT = 64;
     static final float DEFAULT_MATCH_SECONDS = 180f;
+    // How long play continues after the clock runs out.
+    static final float DEFAULT_ENDING_SECONDS = 3f;
 
     private final String code;
     private final String mapId;
     private final ArenaWorld world;
     private final int capacity;
     private final int matchTicks;
+    private final int endingTicks;
 
     private final Map<Integer, Channel> channels = new LinkedHashMap<>();
     private final Map<Integer, GameServer.PendingCommand> pending = new LinkedHashMap<>();
@@ -56,23 +61,30 @@ final class GameRoom {
 
     private State state = State.LOBBY;
     private int hostPlayerId = -1;
-    // Simulation steps left in the running match.
+    // Simulation steps left on the match clock.
     private int ticksRemaining;
+    // After the clock runs out: the frozen stats, and steps left until they
+    // are sent.
+    private boolean ending;
+    private int endingTicksRemaining;
+    private List<MatchEnded.PlayerResult> frozenResults = List.of();
 
     GameRoom(String code, ArenaDefinition definition, String mapId) {
-        this(code, definition, mapId, DEFAULT_MATCH_SECONDS);
+        this(code, definition, mapId, DEFAULT_MATCH_SECONDS, DEFAULT_ENDING_SECONDS);
     }
 
     GameRoom(
         String code,
         ArenaDefinition definition,
         String mapId,
-        float matchSeconds
+        float matchSeconds,
+        float endingSeconds
     ) {
         this.code = Objects.requireNonNull(code);
         this.mapId = Objects.requireNonNull(mapId);
         this.world = new ArenaWorld(definition);
         this.matchTicks = Math.max(1, Math.round(matchSeconds / ArenaWorld.STEP));
+        this.endingTicks = Math.max(1, Math.round(endingSeconds / ArenaWorld.STEP));
 
         // ArenaWorld always creates player 0 for single-player. A room has
         // no local player; every player here is a connected client.
@@ -227,6 +239,7 @@ final class GameRoom {
 
         state = State.PLAYING;
         ticksRemaining = matchTicks;
+        ending = false;
         broadcast(new GameStarted());
         log("Match started with " + channels.size() + " player(s)");
     }
@@ -259,7 +272,16 @@ final class GameRoom {
         }
 
         StepResult result = world.step(commands);
-        ticksRemaining--;
+
+        if (ending) {
+            endingTicksRemaining--;
+        } else {
+            ticksRemaining--;
+
+            if (ticksRemaining <= 0) {
+                beginEnding();
+            }
+        }
 
         if (channels.isEmpty()) {
             return;
@@ -270,7 +292,10 @@ final class GameRoom {
         WorldSnapshot snapshot = SnapshotFactory.capture(
             world,
             result,
-            Math.max(0, ticksRemaining) * ArenaWorld.STEP
+            Math.max(0, ticksRemaining) * ArenaWorld.STEP,
+            ending
+                ? 1f - (float) Math.max(0, endingTicksRemaining) / endingTicks
+                : WorldSnapshot.NOT_ENDING
         );
 
         for (Map.Entry<Integer, Channel> entry : channels.entrySet()) {
@@ -298,14 +323,24 @@ final class GameRoom {
         }
 
         // After this tick's snapshot and events, so they arrive first.
-        if (ticksRemaining <= 0) {
+        if (ending && endingTicksRemaining <= 0) {
             endMatch();
         }
     }
 
     // ---- Match to results ----
 
-    private void endMatch() {
+    // The clock ran out: lock in the results. Play continues until the
+    // ending finishes, but nothing more counts.
+    private void beginEnding() {
+        ending = true;
+        endingTicksRemaining = endingTicks;
+        frozenResults = currentResults();
+        world.setStatsFrozen(true);
+        log("Clock ran out");
+    }
+
+    private List<MatchEnded.PlayerResult> currentResults() {
         List<MatchEnded.PlayerResult> results = new ArrayList<>();
 
         for (Map.Entry<Integer, Player> entry : world.getPlayers().entrySet()) {
@@ -320,7 +355,12 @@ final class GameRoom {
             ));
         }
 
-        broadcast(new MatchEnded(results));
+        return results;
+    }
+
+    private void endMatch() {
+        ending = false;
+        broadcast(new MatchEnded(frozenResults));
         log("Match ended");
 
         // Without the host nobody can start a rematch.

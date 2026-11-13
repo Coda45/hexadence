@@ -114,6 +114,7 @@ class GameCodecTest {
         WorldSnapshot expected = new WorldSnapshot(
             99L,
             123.5f,
+            0.25f,
             List.of(
                 new WorldSnapshot.PlayerState(
                     7,
@@ -202,7 +203,7 @@ class GameCodecTest {
                 new WorldSnapshot.ProjectileState(1, power, 2, 3f, 4f, 1f, 0f);
 
             WorldSnapshot snapshot = new WorldSnapshot(
-                1L, WorldSnapshot.NO_TIMER, List.of(), List.of(), List.of(expected), List.of()
+                1L, WorldSnapshot.NO_TIMER, WorldSnapshot.NOT_ENDING, List.of(), List.of(), List.of(expected), List.of()
             );
 
             assertEquals(snapshot, roundTrip(snapshot), power.name());
@@ -218,7 +219,7 @@ class GameCodecTest {
                 );
 
             WorldSnapshot snapshot = new WorldSnapshot(
-                1L, WorldSnapshot.NO_TIMER, List.of(), List.of(), List.of(), List.of(expected)
+                1L, WorldSnapshot.NO_TIMER, WorldSnapshot.NOT_ENDING, List.of(), List.of(), List.of(), List.of(expected)
             );
 
             assertEquals(snapshot, roundTrip(snapshot), kind.name());

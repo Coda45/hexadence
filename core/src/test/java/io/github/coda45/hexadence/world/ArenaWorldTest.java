@@ -605,6 +605,7 @@ class ArenaWorldTest {
         world.applySnapshot(new WorldSnapshot(
             1L,
             WorldSnapshot.NO_TIMER,
+            WorldSnapshot.NOT_ENDING,
             List.of(),
             List.of(),
             List.of(),
@@ -1060,6 +1061,40 @@ class ArenaWorldTest {
             events.contains(new PlayerKilledEvent(targetId, 0)),
             "The kill feed needs an event naming victim and killer"
         );
+    }
+
+    @Test
+    void frozenStatsIgnoreKillsButFightingGoesOn() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+
+        Player attacker = world.getPlayer();
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+        target.takeDamage(target.getMaxHealth() - Powers.FIREBALL.damage());
+
+        world.setStatsFrozen(true);
+        world.step(fireRight());
+
+        for (int i = 0; i < 20; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        // The hit still lands and kills...
+        assertFalse(target.isAlive());
+        assertTrue(target.hasRespawnPending());
+        // ...but nothing is recorded for the results.
+        assertEquals(0, attacker.getKills());
+        assertEquals(0, target.getDeaths());
+        assertEquals(0f, attacker.getDamageDealt(), EPSILON);
+
+        world.resetForNewMatch();
+        assertFalse(world.areStatsFrozen());
     }
 
     @Test

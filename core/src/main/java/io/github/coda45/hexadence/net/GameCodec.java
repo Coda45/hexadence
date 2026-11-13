@@ -48,7 +48,8 @@ public final class GameCodec {
     // 15: beam events identify primary and crystal-split branches.
     // 16: timed matches (timer in snapshots, MatchEnded with results),
     //     spawn shields in snapshots, and kill events for the kill feed.
-    public static final int PROTOCOL_VERSION = 16;
+    // 17: snapshots carry the match-ending progress (GAME OVER fade).
+    public static final int PROTOCOL_VERSION = 17;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -280,6 +281,7 @@ public final class GameCodec {
         out.writeByte(TYPE_SNAPSHOT);
         out.writeLong(snapshot.tick());
         out.writeFloat(snapshot.matchSecondsRemaining());
+        out.writeFloat(snapshot.matchEndProgress());
 
         out.writeShort(snapshot.players().size());
         for (WorldSnapshot.PlayerState p : snapshot.players()) {
@@ -337,6 +339,7 @@ public final class GameCodec {
     private static WorldSnapshot readSnapshot(ByteBuf in) {
         long tick = in.readLong();
         float matchSecondsRemaining = in.readFloat();
+        float matchEndProgress = in.readFloat();
 
         int playerCount = in.readUnsignedShort();
         List<WorldSnapshot.PlayerState> players = new ArrayList<>(playerCount);
@@ -401,6 +404,7 @@ public final class GameCodec {
         return new WorldSnapshot(
             tick,
             matchSecondsRemaining,
+            matchEndProgress,
             players,
             dummies,
             projectiles,

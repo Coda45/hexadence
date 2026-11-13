@@ -57,6 +57,9 @@ public class ArenaWorld {
     private final Map<Integer, Integer> vortexZoneSourceKeys =
         new LinkedHashMap<>();
     private final Set<VortexPlayerContact> vortexPlayerContacts = new HashSet<>();
+    // True once a match's clock has run out: fighting goes on, but kills,
+    // deaths and damage no longer count toward the results.
+    private boolean statsFrozen;
     // Deaths during the current step, added to its StepResult at the end.
     private final List<WorldEvent> deathEvents = new ArrayList<>();
 
@@ -2504,7 +2507,7 @@ public class ArenaWorld {
             : players.get(attackerPlayerId);
 
         // Only damage actually taken counts, so overkill is not inflated.
-        if (attacker != null) {
+        if (attacker != null && !statsFrozen) {
             attacker.recordDamageDealt(healthBefore - victim.getHealth());
         }
 
@@ -2512,11 +2515,14 @@ public class ArenaWorld {
             return;
         }
 
-        victim.recordDeath();
         victim.beginRespawn(PLAYER_RESPAWN_DELAY);
 
-        if (attacker != null) {
-            attacker.recordKill();
+        if (!statsFrozen) {
+            victim.recordDeath();
+
+            if (attacker != null) {
+                attacker.recordKill();
+            }
         }
 
         deathEvents.add(new PlayerKilledEvent(
@@ -2528,7 +2534,16 @@ public class ArenaWorld {
     // Clears the arena for a rematch with the same players: every projectile,
     // zone and lingering effect is removed, and each player returns to their
     // spawn with full health and no kills, deaths or damage.
+    public void setStatsFrozen(boolean frozen) {
+        statsFrozen = frozen;
+    }
+
+    public boolean areStatsFrozen() {
+        return statsFrozen;
+    }
+
     public void resetForNewMatch() {
+        statsFrozen = false;
         projectiles.clear();
         zones.clear();
         playerDotEffects.clear();
