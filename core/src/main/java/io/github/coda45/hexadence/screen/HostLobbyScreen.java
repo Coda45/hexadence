@@ -20,7 +20,9 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.coda45.hexadence.HexadenceGame;
 import io.github.coda45.hexadence.net.GameServer;
 import io.github.coda45.hexadence.net.LobbyConnection;
+import io.github.coda45.hexadence.net.NetSession;
 import io.github.coda45.hexadence.net.ServerAddress;
+import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.world.ArenaMaps;
 
 // The host's lobby, using a Scene2D table layout. Opening it creates a room
@@ -62,7 +64,14 @@ public class HostLobbyScreen implements Screen {
     private boolean startRequested;
     private boolean leaveRequested;
 
+    // HOST GAME: creates a new room.
     public HostLobbyScreen(HexadenceGame game) {
+        this(game, null, null);
+    }
+
+    // Back to the same room after a match, on the connection that played it,
+    // with the powers used last time already picked.
+    public HostLobbyScreen(HexadenceGame game, NetSession session, Loadout lastLoadout) {
         this.game = game;
         image = new Texture("host_lobbytest2.png");
         font = new BitmapFont();
@@ -140,11 +149,19 @@ public class HostLobbyScreen implements Screen {
 
         stage.addActor(root);
 
-        // Ask the server for a room right away; the code appears when it answers.
-        connection = LobbyConnection.createRoom(
-            ServerAddress.fromSettings(),
-            ArenaMaps.MULTIPLAYER
-        );
+        if (lastLoadout != null) {
+            picker.setLoadout(lastLoadout);
+        }
+
+        if (session != null) {
+            connection = LobbyConnection.resume(session);
+        } else {
+            // Ask the server for a room right away; the code appears when it answers.
+            connection = LobbyConnection.createRoom(
+                ServerAddress.fromSettings(),
+                ArenaMaps.MULTIPLAYER
+            );
+        }
         updateLabels();
     }
 

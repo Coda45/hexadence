@@ -1,0 +1,7 @@
+-proc:none
+-XDshould-stop.ifError=FLOW
+-Xmaxerrs
+100000
+-d
+/tmp/jc/out
+@/tmp/jc/files.txt

@@ -1,5 +1,6 @@
 package io.github.coda45.hexadence.net;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 import io.github.coda45.hexadence.power.Loadout;
@@ -30,8 +31,18 @@ public final class LobbyConnection {
         this.pending = pending;
     }
 
+    private LobbyConnection(NetSession session) {
+        this.session = session;
+    }
+
     public static LobbyConnection createRoom(ServerAddress server, String mapId) {
         return new LobbyConnection(NetSession.createRoom(server, mapId));
+    }
+
+    // Back to the same room's lobby after a match, on the connection that
+    // played it.
+    public static LobbyConnection resume(NetSession session) {
+        return new LobbyConnection(Objects.requireNonNull(session));
     }
 
     public static LobbyConnection joinRoom(

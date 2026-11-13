@@ -1,6 +1,8 @@
 package io.github.coda45.hexadence.world;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -602,6 +604,8 @@ class ArenaWorldTest {
 
         world.applySnapshot(new WorldSnapshot(
             1L,
+            WorldSnapshot.NO_TIMER,
+            WorldSnapshot.NOT_ENDING,
             List.of(),
             List.of(),
             List.of(),
@@ -1024,6 +1028,207 @@ class ArenaWorldTest {
             EPSILON,
             "Damage per tick should stop growing once stacks reach the cap"
         );
+    }
+
+    @Test
+    void killCountsDamageDealtAndReportsTheKill() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+
+        Player attacker = world.getPlayer();
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+
+        // Leave exactly one Ember hit worth of health.
+        target.takeDamage(target.getMaxHealth() - Powers.FIREBALL.damage());
+
+        List<WorldEvent> events = new ArrayList<>();
+        events.addAll(world.step(fireRight()).events());
+
+        for (int i = 0; i < 20; i++) {
+            events.addAll(world.step(PlayerCommand.IDLE).events());
+        }
+
+        assertFalse(target.isAlive());
+        assertEquals(Powers.FIREBALL.damage(), attacker.getDamageDealt(), EPSILON);
+        assertEquals(0f, target.getDamageDealt(), EPSILON);
+        assertTrue(
+            events.contains(new PlayerKilledEvent(targetId, 0)),
+            "The kill feed needs an event naming victim and killer"
+        );
+    }
+
+    @Test
+    void frozenStatsIgnoreKillsButFightingGoesOn() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+
+        Player attacker = world.getPlayer();
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+        target.takeDamage(target.getMaxHealth() - Powers.FIREBALL.damage());
+
+        world.setStatsFrozen(true);
+        List<WorldEvent> events = new ArrayList<>(world.step(fireRight()).events());
+
+        for (int i = 0; i < 20; i++) {
+            events.addAll(world.step(PlayerCommand.IDLE).events());
+        }
+
+        // The hit still lands and kills...
+        assertFalse(target.isAlive());
+        assertTrue(target.hasRespawnPending());
+        // ...but nothing is recorded for the results.
+        assertEquals(0, attacker.getKills());
+        assertEquals(0, target.getDeaths());
+        assertEquals(0f, attacker.getDamageDealt(), EPSILON);
+        assertFalse(
+            events.stream().anyMatch(event -> event instanceof PlayerKilledEvent),
+            "Kills after the clock runs out stay out of the kill feed"
+        );
+
+        world.resetForNewMatch();
+        assertFalse(world.areStatsFrozen());
+    }
+
+    @Test
+    void respawnedPlayerIsShieldedUntilItExpires() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+
+        assertFalse(target.hasSpawnShield(), "Entering the match is not a respawn");
+
+        killAndRespawn(world, target);
+        assertTrue(target.hasSpawnShield());
+
+        // A hit during the shield does nothing.
+        world.step(fireRight());
+
+        for (int i = 0; i < 20; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(target.getMaxHealth(), target.getHealth(), EPSILON);
+        assertEquals(0f, world.getPlayer().getDamageDealt(), EPSILON);
+
+        // Once it runs out, the same hit lands.
+        for (int i = 0; i < (int) (ArenaWorld.SPAWN_SHIELD_SECONDS / ArenaWorld.STEP); i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertFalse(target.hasSpawnShield());
+
+        world.step(fireRight());
+
+        for (int i = 0; i < 20; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            target.getMaxHealth() - Powers.FIREBALL.damage(),
+            target.getHealth(),
+            EPSILON
+        );
+    }
+
+    @Test
+    void castingDropsTheSpawnShield() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+
+        killAndRespawn(world, target);
+        assertTrue(target.hasSpawnShield());
+
+        // The respawned player fires straight up, away from everyone.
+        world.step(Map.of(
+            targetId,
+            new PlayerCommand(0f, 0f, 0f, 1f, true, false, false)
+        ));
+
+        assertFalse(target.hasSpawnShield());
+    }
+
+    @Test
+    void resetForNewMatchClearsStatsAndArena() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+
+        Player attacker = world.getPlayer();
+        int targetId = world.addPlayer();
+        Player target = world.getPlayers().get(targetId);
+        target.takeDamage(target.getMaxHealth() - Powers.FIREBALL.damage());
+
+        world.step(fireRight());
+
+        // Long enough for the kill and for the cooldown to end.
+        for (int i = 0; i < 40; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        // Leave a projectile in flight too.
+        world.step(fireRight());
+        assertFalse(world.getProjectiles().isEmpty());
+
+        world.resetForNewMatch();
+
+        assertTrue(world.getProjectiles().isEmpty());
+        assertTrue(world.getZones().isEmpty());
+        assertEquals(0, attacker.getKills());
+        assertEquals(0f, attacker.getDamageDealt(), EPSILON);
+        assertEquals(0, target.getDeaths());
+        assertTrue(target.isAlive());
+        assertFalse(target.hasRespawnPending());
+        assertEquals(target.getMaxHealth(), target.getHealth(), EPSILON);
+        assertEquals(3f, target.getX(), EPSILON);
+        assertEquals(1f, target.getY(), EPSILON);
+        assertTrue(attacker.isSlotReady(0));
+    }
+
+    // Player 0 fires slot 0 to the right.
+    private static PlayerCommand fireRight() {
+        return new PlayerCommand(0f, 0f, 1f, 0f, true, false, false);
+    }
+
+    // Kills a player outright and steps until they are back.
+    private static void killAndRespawn(ArenaWorld world, Player player) {
+        player.takeDamage(player.getMaxHealth());
+
+        for (int i = 0; i < 400 && !player.isAlive(); i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertTrue(player.isAlive(), "Player should have respawned");
     }
 
     private ArenaWorld createEmptyWorld(

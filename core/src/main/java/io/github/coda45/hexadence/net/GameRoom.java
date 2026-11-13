@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.LoadoutRules;
@@ -25,17 +26,29 @@ import io.netty.channel.Channel;
 // switch it to PLAYING: each player's loadout is applied and it ticks at 60 Hz.
 // Loadouts cannot change after that.
 //
+// A match lasts a fixed time. When the clock runs out the stats are frozen,
+// but play goes on for a few seconds while clients show GAME OVER and fade
+// to black; nothing done then counts. After that every player gets a
+// MatchEnded with the frozen stats, and the room goes back to LOBBY with the
+// same players and code, ready for a rematch. If the host left during the
+// match there is nobody to start one, so the room closes instead.
+//
 // Threading: only touched from GameServer's game thread, so no locks.
 final class GameRoom {
 
     enum State { LOBBY, PLAYING, CLOSED }
 
     private static final int MAX_PENDING_EVENTS_PER_CLIENT = 64;
+    static final float DEFAULT_MATCH_SECONDS = 180f;
+    // How long play continues after the clock runs out.
+    static final float DEFAULT_ENDING_SECONDS = 3f;
 
     private final String code;
     private final String mapId;
     private final ArenaWorld world;
     private final int capacity;
+    private final int matchTicks;
+    private final int endingTicks;
 
     private final Map<Integer, Channel> channels = new LinkedHashMap<>();
     private final Map<Integer, GameServer.PendingCommand> pending = new LinkedHashMap<>();
@@ -48,11 +61,30 @@ final class GameRoom {
 
     private State state = State.LOBBY;
     private int hostPlayerId = -1;
+    // Simulation steps left on the match clock.
+    private int ticksRemaining;
+    // After the clock runs out: the frozen stats, and steps left until they
+    // are sent.
+    private boolean ending;
+    private int endingTicksRemaining;
+    private List<MatchEnded.PlayerResult> frozenResults = List.of();
 
     GameRoom(String code, ArenaDefinition definition, String mapId) {
+        this(code, definition, mapId, DEFAULT_MATCH_SECONDS, DEFAULT_ENDING_SECONDS);
+    }
+
+    GameRoom(
+        String code,
+        ArenaDefinition definition,
+        String mapId,
+        float matchSeconds,
+        float endingSeconds
+    ) {
         this.code = Objects.requireNonNull(code);
         this.mapId = Objects.requireNonNull(mapId);
         this.world = new ArenaWorld(definition);
+        this.matchTicks = Math.max(1, Math.round(matchSeconds / ArenaWorld.STEP));
+        this.endingTicks = Math.max(1, Math.round(endingSeconds / ArenaWorld.STEP));
 
         // ArenaWorld always creates player 0 for single-player. A room has
         // no local player; every player here is a connected client.
@@ -123,14 +155,14 @@ final class GameRoom {
         log("Player " + playerId + " left");
 
         if (state == State.LOBBY && playerId == hostPlayerId) {
-            close();
+            close("the host left the lobby");
         } else {
             broadcastLobbyState();
         }
     }
 
-    // The host left the lobby: tell everyone else and disconnect them.
-    private void close() {
+    // The room is over: tell everyone else and disconnect them.
+    private void close(String reason) {
         state = State.CLOSED;
 
         List<Channel> others = new ArrayList<>(channels.values());
@@ -145,7 +177,7 @@ final class GameRoom {
             );
         }
 
-        log("Closed because the host left the lobby");
+        log("Closed because " + reason);
     }
 
     // ---- Drafting ----
@@ -206,6 +238,8 @@ final class GameRoom {
         }
 
         state = State.PLAYING;
+        ticksRemaining = matchTicks;
+        ending = false;
         broadcast(new GameStarted());
         log("Match started with " + channels.size() + " player(s)");
     }
@@ -239,13 +273,30 @@ final class GameRoom {
 
         StepResult result = world.step(commands);
 
+        if (ending) {
+            endingTicksRemaining--;
+        } else {
+            ticksRemaining--;
+
+            if (ticksRemaining <= 0) {
+                beginEnding();
+            }
+        }
+
         if (channels.isEmpty()) {
             return;
         }
 
         queueEvents(result);
 
-        WorldSnapshot snapshot = SnapshotFactory.capture(world, result);
+        WorldSnapshot snapshot = SnapshotFactory.capture(
+            world,
+            result,
+            Math.max(0, ticksRemaining) * ArenaWorld.STEP,
+            ending
+                ? 1f - (float) Math.max(0, endingTicksRemaining) / endingTicks
+                : WorldSnapshot.NOT_ENDING
+        );
 
         for (Map.Entry<Integer, Channel> entry : channels.entrySet()) {
             int playerId = entry.getKey();
@@ -270,6 +321,70 @@ final class GameRoom {
 
             channel.flush();
         }
+
+        // After this tick's snapshot and events, so they arrive first.
+        if (ending && endingTicksRemaining <= 0) {
+            endMatch();
+        }
+    }
+
+    // ---- Match to results ----
+
+    // The clock ran out: lock in the results. Play continues until the
+    // ending finishes, but nothing more counts.
+    private void beginEnding() {
+        ending = true;
+        endingTicksRemaining = endingTicks;
+        frozenResults = currentResults();
+        world.setStatsFrozen(true);
+        log("Clock ran out");
+    }
+
+    private List<MatchEnded.PlayerResult> currentResults() {
+        List<MatchEnded.PlayerResult> results = new ArrayList<>();
+
+        for (Map.Entry<Integer, Player> entry : world.getPlayers().entrySet()) {
+            Player player = entry.getValue();
+
+            results.add(new MatchEnded.PlayerResult(
+                entry.getKey(),
+                player.getColor(),
+                player.getKills(),
+                player.getDeaths(),
+                player.getDamageDealt()
+            ));
+        }
+
+        return results;
+    }
+
+    private void endMatch() {
+        ending = false;
+        broadcast(new MatchEnded(frozenResults));
+        log("Match ended");
+
+        // Without the host nobody can start a rematch.
+        if (!channels.containsKey(hostPlayerId)) {
+            close("the host left during the match");
+            return;
+        }
+
+        // Same room, same players: back to drafting for a rematch.
+        state = State.LOBBY;
+        world.resetForNewMatch();
+
+        for (Integer playerId : channels.keySet()) {
+            pending.put(playerId, new GameServer.PendingCommand());
+            pendingEvents.get(playerId).clear();
+
+            Draft draft = drafts.get(playerId);
+            drafts.put(
+                playerId,
+                new Draft(draft == null ? Loadout.DEFAULT : draft.loadout(), false)
+            );
+        }
+
+        broadcastLobbyState();
     }
 
     private void queueEvents(StepResult result) {

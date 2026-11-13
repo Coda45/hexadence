@@ -54,6 +54,9 @@ public class GameServer {
     private final int port;
     private final String mapId;
     private final ArenaDefinition definition;
+    // Length of each match. Only tests change it.
+    private volatile float matchSeconds = GameRoom.DEFAULT_MATCH_SECONDS;
+    private volatile float endingSeconds = GameRoom.DEFAULT_ENDING_SECONDS;
 
     // Game-thread state.
     private final Map<String, GameRoom> rooms = new HashMap<>();
@@ -87,7 +90,7 @@ public class GameServer {
         }
 
         String code = codes.next(rooms.keySet());
-        GameRoom room = new GameRoom(code, definition, mapId);
+        GameRoom room = new GameRoom(code, definition, mapId, matchSeconds, endingSeconds);
         rooms.put(code, room);
 
         System.out.println("[room " + code + "] Created ("
@@ -125,6 +128,16 @@ public class GameServer {
             System.out.println("[room " + room.code() + "] Removed ("
                 + rooms.size() + " room(s) open)");
         }
+    }
+
+    // Tests use short matches. Affects rooms created after the call.
+    void setMatchSeconds(float seconds) {
+        matchSeconds = seconds;
+    }
+
+    // Tests use a short ending too. Affects rooms created after the call.
+    void setEndingSeconds(float seconds) {
+        endingSeconds = seconds;
     }
 
     int roomCount() {

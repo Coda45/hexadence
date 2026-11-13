@@ -1,6 +1,7 @@
 package io.github.coda45.hexadence.render;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.badlogic.gdx.Gdx;
@@ -10,6 +11,7 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
@@ -18,6 +20,8 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.world.PlayerKilledEvent;
+import io.github.coda45.hexadence.world.WorldEvent;
 
 public class HudRenderer {
 
@@ -29,6 +33,17 @@ public class HudRenderer {
     private static final float ABILITY_BOTTOM = 8f;
     private static final float COOLDOWN_RADIUS = 16f;
     private static final int COOLDOWN_SEGMENTS = 48;
+    // The K/D line; the kill feed stacks upward from just above it.
+    private static final float SCORE_X = 20f;
+    private static final float SCORE_Y = 150f;
+    private static final float KILL_FEED_BOTTOM = SCORE_Y + 22f;
+    // The timer turns red for the final seconds.
+    private static final float TIMER_WARNING_SECONDS = 10f;
+    // Of the ending (0 to 1): the GAME OVER banner pops in over the first
+    // part, and the screen starts fading to black a moment after it appears.
+    private static final float BANNER_POP_PROGRESS = 0.1f;
+    private static final float FADE_START_PROGRESS = 0.15f;
+    private static final float BANNER_SCALE = 3f;
 
     // Key shown on each loadout slot's icon.
     private static final String[] SLOT_BINDINGS = { "LMB", "RMB", "Q" };
@@ -43,6 +58,14 @@ public class HudRenderer {
     private final SpriteBatch batch;
     private final BitmapFont font;
     private final Texture pixelTexture;
+    private final KillFeed killFeed = new KillFeed();
+    private final GlyphLayout layout = new GlyphLayout();
+
+    // Seconds left in a timed match, or negative for no timer.
+    private float matchSecondsRemaining = -1f;
+    // 0 to 1 once the clock has run out; negative before that.
+    private float matchEndProgress = -1f;
+    private final ScreenFade screenFade = new ScreenFade();
 
     public HudRenderer() {
         camera = new OrthographicCamera();
@@ -70,7 +93,69 @@ public class HudRenderer {
         viewport.update(width, height, true);
     }
 
-    public void render(Player player) {
+    // Negative hides the timer (single-player, or before the first snapshot).
+    public void setMatchTimer(float secondsRemaining) {
+        matchSecondsRemaining = secondsRemaining;
+    }
+
+    // Negative before the clock runs out; then 0 rising to 1 as the match
+    // fades out.
+    public void setMatchEndProgress(float progress) {
+        matchEndProgress = progress;
+    }
+
+    // GAME OVER and the fade to black, over everything else. Call last in
+    // the frame (before any pause menu), whether or not there is a player.
+    public void renderMatchEnd() {
+        if (matchEndProgress < 0f) {
+            return;
+        }
+
+        float fade = (matchEndProgress - FADE_START_PROGRESS) / (1f - FADE_START_PROGRESS);
+        // Ease in, so the darkening speeds up toward the end.
+        fade = Math.max(0f, Math.min(1f, fade));
+        screenFade.draw(fade * fade * (3f - 2f * fade));
+
+        // The fade resets the GL viewport; the banner uses the HUD's.
+        viewport.apply();
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        float pop = Math.min(1f, matchEndProgress / BANNER_POP_PROGRESS);
+        // Starts a little large and settles, so it lands with some weight.
+        float scale = BANNER_SCALE * (1f + 0.4f * (1f - pop));
+
+        font.getData().setScale(scale);
+        font.setColor(1f, 0.25f, 0.2f, pop);
+        layout.setText(font, "GAME OVER");
+        font.draw(
+            batch,
+            layout,
+            (HUD_WIDTH - layout.width) / 2f,
+            (HUD_HEIGHT + layout.height) / 2f + 20f
+        );
+        font.getData().setScale(1f);
+        font.setColor(Color.WHITE);
+
+        batch.end();
+    }
+
+    // Feeds this frame's world events to the kill feed. Call before render.
+    public void recordEvents(
+        List<WorldEvent> events,
+        Map<Integer, Player> players,
+        int localPlayerId
+    ) {
+        for (WorldEvent event : events) {
+            if (event instanceof PlayerKilledEvent killed) {
+                killFeed.add(killed, players, localPlayerId);
+            }
+        }
+    }
+
+    public void render(Player player, float deltaSeconds) {
+        killFeed.update(deltaSeconds);
+
         viewport.apply();
 
         batch.setProjectionMatrix(camera.combined);
@@ -80,7 +165,13 @@ public class HudRenderer {
         batch.begin();
 
         drawScore(player);
+        // The match is over once the clock runs out: no kill feed.
+        if (matchEndProgress < 0f) {
+            killFeed.draw(batch, font, SCORE_X, KILL_FEED_BOTTOM);
+        }
         drawHealth(player);
+        drawSpawnShield(player);
+        drawMatchTimer();
 
         if (!player.isAlive()) {
             font.draw(
@@ -152,8 +243,42 @@ public class HudRenderer {
             width,
             height,
             healthFraction,
-            Color.LIME
+            player.isLowHealth() ? Color.RED : Color.LIME
         );
+    }
+
+    private void drawSpawnShield(Player player) {
+        if (!player.isAlive() || !player.hasSpawnShield()) {
+            return;
+        }
+
+        font.setColor(Color.CYAN);
+        font.draw(
+            batch,
+            String.format("Spawn shield %.1fs", player.getSpawnShieldRemaining()),
+            20f,
+            308f
+        );
+        font.setColor(Color.WHITE);
+    }
+
+    // m:ss at the top center.
+    private void drawMatchTimer() {
+        if (matchSecondsRemaining < 0f) {
+            return;
+        }
+
+        int totalSeconds = (int) Math.ceil(matchSecondsRemaining);
+        String text = String.format("%d:%02d", totalSeconds / 60, totalSeconds % 60);
+
+        font.getData().setScale(1.5f);
+        font.setColor(
+            matchSecondsRemaining <= TIMER_WARNING_SECONDS ? Color.RED : Color.WHITE
+        );
+        layout.setText(font, text);
+        font.draw(batch, layout, (HUD_WIDTH - layout.width) / 2f, HUD_HEIGHT - 10f);
+        font.getData().setScale(1f);
+        font.setColor(Color.WHITE);
     }
 
     private float abilityX(int index) {
@@ -306,8 +431,8 @@ public class HudRenderer {
             batch,
             "Kills: " + player.getKills()
                 + "  Deaths: " + player.getDeaths(),
-            20f,
-            150f
+            SCORE_X,
+            SCORE_Y
         );
     }
 
@@ -327,6 +452,7 @@ public class HudRenderer {
     }
 
     public void dispose() {
+        screenFade.dispose();
         batch.dispose();
         font.dispose();
         pixelTexture.dispose();
