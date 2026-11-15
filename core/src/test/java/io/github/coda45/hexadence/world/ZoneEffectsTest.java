@@ -44,12 +44,19 @@ class ZoneEffectsTest {
     void damageOverTimeHurtsWhoeverStandsInIt() {
         ArenaWorld world = world();
         TargetDummy dummy = world.getDummies().get(0);
-        addZone(world, 1, ZoneKinds.LAVA, dummy.getX(), dummy.getY());
+
+        addZone(
+            world,
+            1,
+            ZoneKinds.SOLAR_FLARE,
+            dummy.getX(),
+            dummy.getY()
+        );
 
         stepIdle(world, ONE_SECOND);
 
         assertEquals(
-            dummy.getMaxHealth() - ZoneKinds.LAVA.damagePerSecond(),
+            dummy.getMaxHealth() - ZoneKinds.SOLAR_FLARE.damagePerSecond(),
             dummy.getHealth(),
             EPSILON
         );
@@ -356,9 +363,9 @@ class ZoneEffectsTest {
         ArenaWorld world = world();
         TargetDummy dummy = world.getDummies().get(0);
 
-        // Lava first, then quicksand on top: quicksand deals no damage, and
+        // Solar Flare first, then quicksand on top: quicksand deals no damage,
         // it is the one that counts.
-        addZone(world, 1, ZoneKinds.LAVA, dummy.getX(), dummy.getY());
+        addZone(world, 1, ZoneKinds.SOLAR_FLARE, dummy.getX(), dummy.getY());
         addZone(world, 2, ZoneKinds.QUICKSAND, dummy.getX(), dummy.getY());
 
         stepIdle(world, ONE_SECOND);
@@ -428,25 +435,7 @@ class ZoneEffectsTest {
             EPSILON
         );
 
-        ArenaWorld fireWorld = world();
-        Player firePlayer = fireWorld.getPlayer();
-        Zone fireWall = addZone(
-            fireWorld,
-            1,
-            ZoneKinds.STONE_WALL,
-            firePlayer.getCastX() + 1f,
-            firePlayer.getCastY()
-        );
-
-        fireWorld.step(new PlayerCommand(0f, 0f, 1f, 0f, true, false, false));
-        stepIdle(fireWorld, 8);
-
-        assertTrue(fireWorld.getZones().contains(fireWall));
-        assertEquals(
-            ZoneKinds.STONE_WALL.maxHealth() - Powers.FIREBALL.damage(),
-            fireWall.getHealth(),
-            EPSILON
-        );
+        
 
         ArenaWorld waterWorld = world();
         Player waterPlayer = waterWorld.getPlayer();

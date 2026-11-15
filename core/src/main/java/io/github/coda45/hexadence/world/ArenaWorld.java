@@ -305,6 +305,7 @@ public class ArenaWorld {
         List<WorldEvent> events
     ) {
         player.updateSpawnShield(STEP);
+        player.updateFrozen(STEP);
 
         float aimX = command.aimX();
         float aimY = command.aimY();
@@ -355,6 +356,10 @@ public class ArenaWorld {
                     castChannelTick(playerId, player, active.power(), cast, events);
                 }
 
+                continue;
+            }
+            
+            if (player.isFrozen()) {
                 continue;
             }
 
@@ -1553,12 +1558,26 @@ public class ArenaWorld {
 
             Zone zone = topZoneOverlapping(target);
 
-            if (zone != null && zone.getKind().damagePerSecond() > 0f) {
-                damagePlayer(
-                    entry.getKey(),
-                    zone.getKind().damagePerSecond() * STEP,
-                    zone.getDamageOwnerPlayerId()
-                );
+            if (zone != null) {
+
+                if (zone.getKind() == ZoneKinds.ICE_FIELD) {
+
+                    target.freeze(1.5f);
+
+                    damagePlayer(
+                        entry.getKey(),
+                        2f * STEP,
+                        Zone.NO_PLAYER
+                    );
+                }
+
+                if (zone.getKind().damagePerSecond() > 0f) {
+                    damagePlayer(
+                        entry.getKey(),
+                        zone.getKind().damagePerSecond() * STEP,
+                        zone.getDamageOwnerPlayerId()
+                    );
+                }
             }
         }
 

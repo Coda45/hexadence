@@ -41,7 +41,7 @@ public final class Powers {
         .element(Element.LIGHT)
         .form(PowerForm.ZONE)
         .behavior(Behavior.PLACED_ZONE)
-        .cooldown(1.2f)
+        .cooldown(5f)
         .range(8f)
         .zone(ZoneKinds.RADIANT_CIRCLE)
         .icon("ui/bg_radiant_circle.png", "ui/rim_yellow.png")
@@ -51,7 +51,7 @@ public final class Powers {
         .element(Element.FIRE)
         .form(PowerForm.ZONE)
         .behavior(Behavior.PLACED_ZONE)
-        .cooldown(1.5f)
+        .cooldown(5f)
         .range(8f)            // max placement distance
         .zone(ZoneKinds.EMBER_CIRCLE)
         .icon("ui/bg_amber_circle.png", "ui/rim_orange.png")
@@ -64,7 +64,7 @@ public final class Powers {
         .form(PowerForm.ZONE)
         .behavior(Behavior.THROWN_ZONE)
         .damage(5f)          // PLACEHOLDER: direct-hit damage before it splashes
-        .cooldown(0.85f)     // PLACEHOLDER
+        .cooldown(4f)     // PLACEHOLDER
         .speed(10f)          // PLACEHOLDER
         .range(8f)           // PLACEHOLDER
         .radius(0.12f)       // PLACEHOLDER
@@ -103,7 +103,7 @@ public final class Powers {
         .element(Element.STONE)
         .form(PowerForm.ZONE)
         .behavior(Behavior.PLACED_ZONE)
-        .cooldown(3f)
+        .cooldown(8f)
         .range(8f)
         .zone(ZoneKinds.STONE_WALL)
         .icon("ui/bg_stone_wall.png", "ui/rim_stone.png")
@@ -126,7 +126,7 @@ public final class Powers {
         .element(Element.STORM)
         .form(PowerForm.ZONE)
         .behavior(Behavior.THROWN_ZONE)
-        .cooldown(4f)
+        .cooldown(9f)
         .speed(12f)
         .range(4f)
         .radius(1f)          // traveling field uses its full effect radius
@@ -172,7 +172,7 @@ public final class Powers {
         .element(Element.VOID)
         .form(PowerForm.ZONE)
         .behavior(Behavior.PLACED_ZONE)
-        .cooldown(1f)
+        .cooldown(5f)
         .range(8f)
         .zone(ZoneKinds.NULL_ZONE)
         .icon("ui/bg_null_zone.png", "ui/rim_none.png")

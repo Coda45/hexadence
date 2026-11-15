@@ -30,6 +30,8 @@ public class GameTextures {
     private final Texture crystalWallSheet;
     private final Texture wearLinesSheet;
     private final Texture vortexSheet;
+    private final Texture icePrison;
+    private final Texture iceField;
 
     private static final int PLAYER_FRAME_WIDTH = 24;
     private static final int PLAYER_FRAME_HEIGHT = 36;
@@ -165,6 +167,8 @@ public class GameTextures {
         zoneCircle = createZoneCircle();
         zoneRing = createZoneRing();
         targetDummy = loadPixelArt("sprites/target_dummy.png");
+        icePrison = loadPixelArt("effects/ice_prison.png");
+        iceField = loadPixelArt("effects/ice_field.png");
     }
 
     private EnumMap<FacingDirection, Animation<TextureRegion>> createPlayerMoveAnimations(
@@ -849,6 +853,15 @@ public class GameTextures {
         return targetDummy;
     }
 
+    public Texture getIcePrison() {
+        return icePrison;
+    }
+
+
+    public Texture getIceField() {
+        return iceField;
+    }
+
     private record PlayerAnimationSet(
         Texture idleSheet,
         Texture moveSheet,
@@ -903,6 +916,8 @@ public class GameTextures {
         zoneCircle.dispose();
         zoneRing.dispose();
         targetDummy.dispose();
+        icePrison.dispose();
+        iceField.dispose();
         fireballSheet.dispose();
     }
 }

@@ -59,7 +59,6 @@ public final class Reactions {
 
     public static final List<Reaction> ALL = List.of(
         transform(FIRE,  WATER, ZoneKinds.STEAM),
-        transform(FIRE,  STONE, ZoneKinds.LAVA),
 
         transform(WATER, STONE, ZoneKinds.QUICKSAND),
         transform(WATER, STORM, ZoneKinds.HAILSTORM),
@@ -70,9 +69,12 @@ public final class Reactions {
         transform(STORM, FIRE,  ZoneKinds.INFERNO),
         transform(STORM, LIGHT, ZoneKinds.DROUGHT),
 
+        transform(FIRE, LIGHT, ZoneKinds.SOLAR_FLARE),
+
         transform(LIGHT, STONE, ZoneKinds.CRYSTAL_WALL),
         // Light: second reaction not decided yet
-
+        
+        transform(VOID, WATER, ZoneKinds.ICE_FIELD),
         transform(VOID,  STORM, ZoneKinds.SINGULARITY)
         // Void on Light: marked in the matrix, result not decided yet
     );

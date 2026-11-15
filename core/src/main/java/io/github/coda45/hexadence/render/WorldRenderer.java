@@ -196,6 +196,14 @@ public class WorldRenderer {
     ) {
         updateDamageFlashes(world, presentationDelta);
         consumeEvents(frameEvents);
+        Player localPlayer = world.getPlayer();
+
+
+        boolean solarFlareBlinded =
+            world.isPlayerOverlappingZoneKind(
+                localPlayer,
+                ZoneKinds.SOLAR_FLARE
+            );
         // TMX order: Ground, DecorationGround, Walls, DecorationOverlay, Spawns.
 
         projectileAnimationTime += presentationDelta;
@@ -218,12 +226,15 @@ public class WorldRenderer {
 
         batch.begin();
 
+
+        
         // Ground zones, oldest first, so the newest is drawn on top.
         for (Zone zone : world.getZones()) {
             if (!zone.getKind().coversPlayers()) {
                 renderZone(zone);
             }
         }
+
 
         batch.end();
 
@@ -274,7 +285,7 @@ public class WorldRenderer {
             float width =  playerRegion.getRegionWidth()  / ArenaMap.TILE_SIZE;
             float height = playerRegion.getRegionHeight() / ArenaMap.TILE_SIZE;
             playerSpriteHeight = height;
-
+            
             // Anchor the wizard at its feet; projectiles below are centered on their positions.
             drawEntitySprite(
                 playerRegion,
@@ -285,6 +296,20 @@ public class WorldRenderer {
                 playerDamageFlashes.containsKey(playerId),
                 Color.WHITE
             );
+
+            if (player.isFrozen()) {
+
+                float prisonWidth = width * 2.0f;
+                float prisonHeight = height * 1.8f;
+
+                batch.draw(
+                    textures.getIcePrison(),
+                    player.getX() - prisonWidth / 2f,
+                    player.getY() - height * 0.15f,
+                    prisonWidth,
+                    prisonHeight
+                );
+            }
 
             if (player.isAlive() && player.hasSpawnShield()) {
                 renderSpawnShield(player);
@@ -346,15 +371,31 @@ public class WorldRenderer {
         mapRenderer.render(foregroundLayers);
 
         batch.begin();
-        
-        for (Player player : world.getPlayers().values()) {
-            if (!player.isAlive()) {
-                continue;
+
+        if (solarFlareBlinded) {
+            batch.setColor(1f, 1f, 0.85f, 1.45f);
+
+            batch.draw(
+                pixelTexture,
+                worldCamera.getCamera().position.x
+                    - worldCamera.getCamera().viewportWidth / 2f,
+                worldCamera.getCamera().position.y
+                    - worldCamera.getCamera().viewportHeight / 2f,
+                worldCamera.getCamera().viewportWidth,
+                worldCamera.getCamera().viewportHeight
+            );
+
+            batch.setColor(Color.WHITE);
+        } else {
+            for (Player player : world.getPlayers().values()) {
+                if (!player.isAlive()) {
+                    continue;
+                }
+
+                renderPlayerHealthBar(player, playerSpriteHeight);
             }
-            renderPlayerHealthBar(player, playerSpriteHeight);
         }
 
-        // Cloud-like zones (steam) are drawn over players.
         for (Zone zone : world.getZones()) {
             if (zone.getKind().coversPlayers()) {
                 renderZone(zone);
@@ -783,6 +824,27 @@ public class WorldRenderer {
             batch.draw(frame, left, bottom, diameter, diameter);
             return;
         }
+        if (zone.getKind() == ZoneKinds.SOLAR_FLARE) {
+            renderSolarFlare(zone);
+            batch.setColor(Color.WHITE);
+            return;
+        }
+
+        if (zone.getKind() == ZoneKinds.ICE_FIELD) {
+
+            batch.setColor(Color.WHITE);
+
+            batch.draw(
+                textures.getIceField(),
+                left,
+                bottom,
+                diameter,
+                diameter
+            );
+
+            return;
+        }
+        
         
 
 
@@ -845,6 +907,69 @@ public class WorldRenderer {
             renderRingFlames(zone);
         }
     }
+
+    private void renderSolarFlare(Zone zone) {
+        float radius = zone.getRadius();
+
+        for (int i = 0; i < 8; i++) {
+            float angle =
+                projectileAnimationTime * 80f
+                    + i * 45f;
+
+            float offset =
+                radius * 0.25f;
+
+            float x =
+                zone.getX()
+                    + MathUtils.cosDeg(angle) * offset;
+
+            float y =
+                zone.getY()
+                    + MathUtils.sinDeg(angle) * offset;
+
+            float flareRadius =
+                radius * (
+                    0.8f
+                    + 0.2f
+                    * MathUtils.sinDeg(
+                        projectileAnimationTime * 200f
+                            + i * 40f
+                    )
+                );
+
+        batch.setColor(
+            1f,
+            0.9f,
+            0.2f,
+            0.20f
+        );
+
+        batch.draw(
+            textures.getZoneCircle(),
+            x - flareRadius,
+            y - flareRadius,
+            flareRadius * 2f,
+            flareRadius * 2f
+        );
+    }
+
+    batch.setColor(
+        1f,
+        1f,
+        0.85f,
+        0.9f
+    );
+
+    batch.draw(
+        textures.getZoneCircle(),
+        zone.getX() - radius * 0.5f,
+        zone.getY() - radius * 0.5f,
+        radius,
+        radius
+    );
+
+    batch.setColor(Color.WHITE);
+}
 
     private void renderStoneWall(Zone zone) {
         TextureRegion frame = textures.getStoneWallFrame(
