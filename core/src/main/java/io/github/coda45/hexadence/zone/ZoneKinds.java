@@ -26,7 +26,7 @@ public final class ZoneKinds {
     public static final ZoneKind NULL_ZONE =
     ZoneKind.base(10, "Null Zone", Element.VOID)
         .radius(0.8f)
-        .duration(3f)
+        .duration(5f)
         .damagePerSecond(10f)
         .tint(0x551A8BCC)
         .planned("Future Void field effects")
@@ -38,7 +38,7 @@ public final class ZoneKinds {
     public static final ZoneKind EMBER_CIRCLE = ZoneKind.base(12, "Ember Circle", Element.FIRE)
         .radius(0.8f)
         .innerRadius(0.4f)
-        .duration(5f)
+        .duration(7f)
         .damagePerSecond(5f)
         .tint(EMBER_RED)
         .build();
@@ -50,7 +50,7 @@ public final class ZoneKinds {
 
     public static final ZoneKind STONE_WALL = ZoneKind.base(13, "Stone Wall", Element.STONE)
         .radius(0.5f)
-        .duration(5f)
+        .duration(7f)
         .solidWall(0.5f, 0.5f)
         .health(STONE_WALL_HEALTH)
         .tint(0x8A7968FF)
@@ -58,7 +58,7 @@ public final class ZoneKinds {
 
     public static final ZoneKind VORTEX = ZoneKind.base(14, "Vortex", Element.STORM)
         .radius(1f)
-        .duration(6f)
+        .duration(8f)
         .capturesProjectiles()
         .pushesPlayers(9f)
         .tint(0xB8E6FFFF)
@@ -68,7 +68,7 @@ public final class ZoneKinds {
     public static final ZoneKind RADIANT_CIRCLE =
         ZoneKind.base(11, "Radiant Circle", Element.LIGHT)
         .radius(0.8f)
-        .duration(3f)
+        .duration(5f)
         .speedMultiplier(1.25f)
         .tint(0xFFF8CCB3)
         .build();
@@ -83,13 +83,7 @@ public final class ZoneKinds {
         .tint(0xCCCCCCD9)
         .build();
 
-    // Fire on Stone
-    public static final ZoneKind LAVA = ZoneKind.derived(3, "Lava")
-        .radius(1f)                 // PLACEHOLDER
-        .duration(4f)               // PLACEHOLDER
-        .damagePerSecond(15f)       // PLACEHOLDER
-        .tint(0xFF4D1AB3)
-        .build();
+    
 
     // Water on Stone
     public static final ZoneKind QUICKSAND = ZoneKind.derived(4, "Quicksand")
@@ -108,11 +102,19 @@ public final class ZoneKinds {
         .tint(0xBFE6FFB3)
         .build();
 
+    public static final ZoneKind ICE_FIELD = ZoneKind.derived(18, "Ice Field")
+        .radius(1.2f)
+        .duration(5f)
+        .coversPlayers()
+        .tint(0xD9F2FFFF)
+        .build();
+
     // Stone on Fire
     public static final ZoneKind HOT_COALS = ZoneKind.derived(6, "Hot Coals")
         .radius(1f)                 // PLACEHOLDER
         .duration(5f)               // PLACEHOLDER
         .damagePerSecond(6f)        // PLACEHOLDER
+        .speedMultiplier(1.4f)
         .tint(0xB33A14B3)
         .build();
 
@@ -156,6 +158,15 @@ public final class ZoneKinds {
         .tint(0xE6C84DB3)
         .build();
 
+    // Fire on Light
+    public static final ZoneKind SOLAR_FLARE = ZoneKind.derived(17, "Solar Flare")
+        .radius(1.2f)
+        .duration(5f)
+        .damagePerSecond(8f)
+        .coversPlayers()
+        .tint(0xFFFF66FF)
+        .build();
+
     // Stone on Void: the Null Zone gets crushed into a weaker gravity well
     // that also deals continuous damage.
     public static final ZoneKind COMPACTOR = ZoneKind.derived(16, "Compactor")
@@ -177,7 +188,6 @@ public final class ZoneKinds {
         STONE_WALL,
         VORTEX,
         STEAM,
-        LAVA,
         QUICKSAND,
         HAILSTORM,
         HOT_COALS,
@@ -185,7 +195,9 @@ public final class ZoneKinds {
         CRYSTAL_WALL,
         SINGULARITY,
         DROUGHT,
-        COMPACTOR
+        COMPACTOR,
+        SOLAR_FLARE,
+        ICE_FIELD
         );
 
     private static final Map<Integer, ZoneKind> BY_ID = indexById();

@@ -18,6 +18,7 @@ public class Player {
     private boolean moving;
     private float knockbackVelocityX;
     private float knockbackVelocityY;
+    private float frozenSeconds;
 
     private static final float MAX_HEALTH = 100f;
     // At or below this much health, health bars turn red.
@@ -65,6 +66,12 @@ public class Player {
     }
 
     public void move(float dx, float dy) {
+
+        if (isFrozen()) {
+            moving = false;
+            return;
+        }
+
         moving = dx * dx + dy * dy > 0.000001f;
         x += dx;
         y += dy;
@@ -72,6 +79,28 @@ public class Player {
 
     public boolean isMoving() {
         return moving;
+    }
+
+    public boolean isFrozen() {
+        return frozenSeconds > 0f;
+    }
+
+    public void freeze(float seconds) {
+        frozenSeconds = Math.max(
+            frozenSeconds,
+            seconds
+        );
+    }
+
+    public void updateFrozen(float deltaSeconds) {
+        frozenSeconds = Math.max(
+            0f,
+            frozenSeconds - deltaSeconds
+        );
+    }
+
+    public float getFrozenSeconds() {
+        return frozenSeconds;
     }
 
     public void addKnockbackVelocity(float velocityX, float velocityY) {
