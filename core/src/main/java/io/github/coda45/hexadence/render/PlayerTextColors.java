@@ -8,6 +8,11 @@ import io.github.coda45.hexadence.entity.PlayerColor;
 // Each matches that player's robe color but stays readable.
 public final class PlayerTextColors {
 
+    // The Maverick is not a player, but it is named in the same places. No
+    // player color is close to it.
+    public static final String MAVERICK_NAME = "MAVERICK";
+    public static final Color MAVERICK = Color.VIOLET;
+
     private PlayerTextColors() {
     }
 

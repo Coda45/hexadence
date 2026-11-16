@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import io.github.coda45.hexadence.entity.Maverick;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
@@ -104,6 +105,15 @@ public final class SnapshotFactory {
             ));
         }
 
+        Maverick maverick = world.getMaverick();
+        WorldSnapshot.MaverickState maverickState = maverick == null
+            ? null
+            : new WorldSnapshot.MaverickState(
+                maverick.getPower(),
+                maverick.getAngle(),
+                maverick.getSecondsUntilCast()
+            );
+
         return new WorldSnapshot(
             result.tick(),
             matchSecondsRemaining,
@@ -111,7 +121,8 @@ public final class SnapshotFactory {
             players,
             dummies,
             projectiles,
-            zones
+            zones,
+            maverickState
         );
     }
 }

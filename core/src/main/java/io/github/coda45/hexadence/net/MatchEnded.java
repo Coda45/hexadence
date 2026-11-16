@@ -4,14 +4,20 @@ import java.util.List;
 import java.util.Objects;
 
 import io.github.coda45.hexadence.entity.PlayerColor;
+import io.github.coda45.hexadence.power.Power;
 
 // Server to every client in a room: the match timer ran out. Carries each
-// player's final stats for the results screen.
+// player's final stats for the results screen, and the Maverick's if it
+// appeared.
 //
 // Right after this the room is back in its lobby (players can draft again
 // and the host can start a rematch), unless the host has left, in which case
 // RoomClosed follows and the room is gone.
-public record MatchEnded(List<PlayerResult> results) {
+public record MatchEnded(
+    List<PlayerResult> results,
+    // Null when the match had no Maverick.
+    MaverickResult maverick
+) {
 
     public MatchEnded {
         results = List.copyOf(results);
@@ -27,5 +33,13 @@ public record MatchEnded(List<PlayerResult> results) {
         public PlayerResult {
             Objects.requireNonNull(color);
         }
+    }
+
+    // The Maverick cannot die, so it has no deaths.
+    public record MaverickResult(
+        Power power,
+        int kills,
+        float damageDealt
+    ) {
     }
 }

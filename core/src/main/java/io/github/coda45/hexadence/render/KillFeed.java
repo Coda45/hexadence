@@ -50,7 +50,13 @@ final class KillFeed {
 
         Entry entry;
 
-        if (event.hasKiller()) {
+        if (event.killedByMaverick()) {
+            entry = new Entry(
+                new Part(PlayerTextColors.MAVERICK_NAME, PlayerTextColors.MAVERICK),
+                new Part(" defeated ", ACTION_COLOR),
+                victim
+            );
+        } else if (event.hasKiller()) {
             entry = new Entry(
                 name(event.killerPlayerId(), players, localPlayerId),
                 new Part(" defeated ", ACTION_COLOR),

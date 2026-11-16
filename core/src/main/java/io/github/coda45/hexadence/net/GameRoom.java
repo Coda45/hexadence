@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import io.github.coda45.hexadence.entity.Maverick;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.power.Loadout;
@@ -42,6 +43,9 @@ final class GameRoom {
     static final float DEFAULT_MATCH_SECONDS = 180f;
     // How long play continues after the clock runs out.
     static final float DEFAULT_ENDING_SECONDS = 3f;
+    // The Maverick appears when this much time is left on the clock. A
+    // shorter match has it from the start.
+    static final float MAVERICK_SECONDS = 30f;
 
     private final String code;
     private final String mapId;
@@ -49,6 +53,7 @@ final class GameRoom {
     private final int capacity;
     private final int matchTicks;
     private final int endingTicks;
+    private final int maverickTicks;
 
     private final Map<Integer, Channel> channels = new LinkedHashMap<>();
     private final Map<Integer, GameServer.PendingCommand> pending = new LinkedHashMap<>();
@@ -85,6 +90,7 @@ final class GameRoom {
         this.world = new ArenaWorld(definition);
         this.matchTicks = Math.max(1, Math.round(matchSeconds / ArenaWorld.STEP));
         this.endingTicks = Math.max(1, Math.round(endingSeconds / ArenaWorld.STEP));
+        this.maverickTicks = Math.round(MAVERICK_SECONDS / ArenaWorld.STEP);
 
         // ArenaWorld always creates player 0 for single-player. A room has
         // no local player; every player here is a connected client.
@@ -280,6 +286,9 @@ final class GameRoom {
 
             if (ticksRemaining <= 0) {
                 beginEnding();
+            } else if (ticksRemaining <= maverickTicks) {
+                // Does nothing once the Maverick is there.
+                world.spawnMaverick();
             }
         }
 
@@ -336,6 +345,7 @@ final class GameRoom {
         ending = true;
         endingTicksRemaining = endingTicks;
         frozenResults = currentResults();
+        // Also stops the Maverick casting.
         world.setStatsFrozen(true);
         log("Clock ran out");
     }
@@ -360,7 +370,18 @@ final class GameRoom {
 
     private void endMatch() {
         ending = false;
-        broadcast(new MatchEnded(frozenResults));
+
+        // Its stats froze with the players'. Null if it never appeared.
+        Maverick maverick = world.getMaverick();
+        MatchEnded.MaverickResult maverickResult = maverick == null
+            ? null
+            : new MatchEnded.MaverickResult(
+                maverick.getPower(),
+                maverick.getKills(),
+                maverick.getDamageDealt()
+            );
+
+        broadcast(new MatchEnded(frozenResults, maverickResult));
         log("Match ended");
 
         // Without the host nobody can start a rematch.
@@ -433,6 +454,10 @@ final class GameRoom {
 
     State state() {
         return state;
+    }
+
+    ArenaWorld world() {
+        return world;
     }
 
     int playerCount() {

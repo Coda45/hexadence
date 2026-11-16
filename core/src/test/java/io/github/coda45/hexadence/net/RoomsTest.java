@@ -418,6 +418,38 @@ class RoomsTest {
         client.close();
     }
 
+    @Test
+    void clientsSeeTheMaverickAndItsResult() {
+        // Shorter than 30 s, so the Maverick is there from the first tick.
+        server.setMatchSeconds(1f);
+
+        LobbyConnection host = createRoom();
+        lockIn(host);
+        await(host::everyoneLocked);
+        host.requestStart();
+        awaitStatus(host, Status.STARTED);
+
+        NetClient client = host.handOff().client();
+
+        await(() -> {
+            WorldSnapshot snapshot = client.getLatestSnapshot();
+            return snapshot != null && snapshot.maverick() != null;
+        });
+        // Nobody cast a zone from the eye, so it casts the Fire default.
+        assertEquals(
+            Powers.EMBER_CIRCLE,
+            client.getLatestSnapshot().maverick().power()
+        );
+
+        await(() -> client.getMatchResults() != null);
+        assertEquals(
+            new MatchEnded.MaverickResult(Powers.EMBER_CIRCLE, 0, 0f),
+            client.getMatchResults().maverick()
+        );
+
+        client.close();
+    }
+
     // Locks everyone in and starts the match from the host's connection.
     private static void startMatch(LobbyConnection host, LobbyConnection joiner) {
         lockIn(host);

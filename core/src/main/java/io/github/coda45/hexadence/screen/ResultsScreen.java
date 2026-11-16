@@ -114,18 +114,15 @@ public class ResultsScreen implements Screen {
         addCell(stats, "DAMAGE", headerText, STAT_COLUMN_WIDTH, Align.center);
         stats.row().padTop(4);
 
-        for (MatchEnded.PlayerResult result : ranked) {
-            boolean you = result.playerId() == localPlayerId;
-            String name = result.color().name() + (you ? " (YOU)" : "");
-            Label.LabelStyle nameText =
-                new Label.LabelStyle(smallFont, PlayerTextColors.of(result.color()));
+        for (Row row : rows(results, localPlayerId)) {
+            Label.LabelStyle nameText = new Label.LabelStyle(smallFont, row.color());
 
-            addCell(stats, name, nameText, NAME_COLUMN_WIDTH, Align.left);
-            addCell(stats, String.valueOf(result.kills()), whiteText, STAT_COLUMN_WIDTH, Align.center);
-            addCell(stats, String.valueOf(result.deaths()), whiteText, STAT_COLUMN_WIDTH, Align.center);
+            addCell(stats, row.name(), nameText, NAME_COLUMN_WIDTH, Align.left);
+            addCell(stats, String.valueOf(row.kills()), whiteText, STAT_COLUMN_WIDTH, Align.center);
+            addCell(stats, row.deathsText(), whiteText, STAT_COLUMN_WIDTH, Align.center);
             addCell(
                 stats,
-                String.valueOf(Math.round(result.damageDealt())),
+                String.valueOf(Math.round(row.damageDealt())),
                 whiteText,
                 STAT_COLUMN_WIDTH,
                 Align.center
@@ -180,6 +177,59 @@ public class ResultsScreen implements Screen {
         return ranked;
     }
 
+    // One line of the stats table. The Maverick cannot die, so it has no
+    // deaths to show and ranks as having none.
+    private record Row(
+        String name,
+        Color color,
+        int kills,
+        int deaths,
+        String deathsText,
+        float damageDealt
+    ) {
+    }
+
+    // The players and the Maverick, if any, in the same order as rank().
+    // A player ranks above the Maverick when they are level.
+    private static List<Row> rows(MatchEnded results, int localPlayerId) {
+        List<Row> rows = new ArrayList<>();
+
+        for (MatchEnded.PlayerResult result : results.results()) {
+            boolean you = result.playerId() == localPlayerId;
+
+            rows.add(new Row(
+                result.color().name() + (you ? " (YOU)" : ""),
+                PlayerTextColors.of(result.color()),
+                result.kills(),
+                result.deaths(),
+                String.valueOf(result.deaths()),
+                result.damageDealt()
+            ));
+        }
+
+        MatchEnded.MaverickResult maverick = results.maverick();
+
+        if (maverick != null) {
+            rows.add(new Row(
+                PlayerTextColors.MAVERICK_NAME,
+                PlayerTextColors.MAVERICK,
+                maverick.kills(),
+                0,
+                "-",
+                maverick.damageDealt()
+            ));
+        }
+
+        rows.sort(
+            Comparator.comparingInt(Row::kills).reversed()
+                .thenComparingInt(Row::deaths)
+                .thenComparing(Comparator.comparingDouble(Row::damageDealt).reversed())
+        );
+
+        return rows;
+    }
+
+    // Only players can win, so the Maverick's row is not considered here.
     private static String banner(List<MatchEnded.PlayerResult> ranked, int localPlayerId) {
         if (ranked.isEmpty()) {
             return "";

@@ -650,7 +650,8 @@ class ArenaWorldTest {
                 1.25f,
                 inferno.getHealth(),
                 Zone.NO_PLAYER
-            ))
+            )),
+            null
         ));
 
         Zone restored = world.getZones().get(0);

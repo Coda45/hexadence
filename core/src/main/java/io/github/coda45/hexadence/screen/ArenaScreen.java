@@ -354,6 +354,9 @@ public class ArenaScreen implements Screen {
             lastAppliedTick = snapshot.tick();
             hudRenderer.setMatchTimer(snapshot.matchSecondsRemaining());
             hudRenderer.setMatchEndProgress(snapshot.matchEndProgress());
+            hudRenderer.setMaverick(
+                snapshot.maverick() == null ? null : snapshot.maverick().power()
+            );
         }
 
         frameEvents.addAll(

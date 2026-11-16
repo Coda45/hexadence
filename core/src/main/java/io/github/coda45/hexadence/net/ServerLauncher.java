@@ -18,6 +18,8 @@ import io.github.coda45.hexadence.world.TmxArenaLoader;
 //   map    -Dhexadence.map=maps/dungeon_map.tmx
 //   assets -Dhexadence.assets=path/to/assets, only needed when the map is
 //          not bundled in the jar
+//   matchSeconds -Dhexadence.matchSeconds=40, for testing the end of a
+//          match (the Maverick appears with 30 s left) without waiting
 //
 // The map ID must match the one clients use, which is the map's path, so
 // clients and server must run the same build of the game.
@@ -37,6 +39,14 @@ public final class ServerLauncher {
         );
 
         GameServer server = new GameServer(definition, mapPath, port);
+
+        String matchSeconds = System.getProperty("hexadence.matchSeconds");
+
+        if (matchSeconds != null && !matchSeconds.isBlank()) {
+            server.setMatchSeconds(Float.parseFloat(matchSeconds.trim()));
+            System.out.println("Match length: " + matchSeconds.trim() + " s");
+        }
+
         server.start();
         System.out.println("Map: " + mapPath);
 
