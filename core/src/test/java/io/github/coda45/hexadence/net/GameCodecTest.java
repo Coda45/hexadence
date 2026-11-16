@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
+import io.github.coda45.hexadence.entity.Maverick;
 import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
@@ -168,7 +169,8 @@ class GameCodecTest {
                     17f,
                     4
                 )
-            )
+            ),
+            new WorldSnapshot.MaverickState(Powers.NULL_ZONE, 2.5f, 1.75f)
         );
 
         assertEquals(expected, roundTrip(expected));
@@ -190,11 +192,38 @@ class GameCodecTest {
     }
 
     @Test
+    void roundTripsKillByTheMaverick() {
+        PlayerKilledEvent expected =
+            new PlayerKilledEvent(3, Maverick.SOURCE_ID);
+
+        PlayerKilledEvent actual = (PlayerKilledEvent) roundTrip(expected);
+
+        assertEquals(expected, actual);
+        assertTrue(actual.killedByMaverick());
+    }
+
+    @Test
+    void roundTripsMatchResultsWithTheMaverick() {
+        MatchEnded expected = new MatchEnded(
+            List.of(
+                new MatchEnded.PlayerResult(1, PlayerColor.CYAN, 7, 2, 412.5f),
+                new MatchEnded.PlayerResult(4, PlayerColor.GOLD, 0, 9, 18f)
+            ),
+            new MatchEnded.MaverickResult(Powers.EMBER_CIRCLE, 3, 250.5f)
+        );
+
+        assertEquals(expected, roundTrip(expected));
+    }
+
+    @Test
     void roundTripsMatchResults() {
-        MatchEnded expected = new MatchEnded(List.of(
-            new MatchEnded.PlayerResult(1, PlayerColor.CYAN, 7, 2, 412.5f),
-            new MatchEnded.PlayerResult(4, PlayerColor.GOLD, 0, 9, 18f)
-        ));
+        MatchEnded expected = new MatchEnded(
+            List.of(
+                new MatchEnded.PlayerResult(1, PlayerColor.CYAN, 7, 2, 412.5f),
+                new MatchEnded.PlayerResult(4, PlayerColor.GOLD, 0, 9, 18f)
+            ),
+            null
+        );
 
         assertEquals(expected, roundTrip(expected));
     }
@@ -206,7 +235,7 @@ class GameCodecTest {
                 new WorldSnapshot.ProjectileState(1, power, 2, 3f, 4f, 1f, 0f);
 
             WorldSnapshot snapshot = new WorldSnapshot(
-                1L, WorldSnapshot.NO_TIMER, WorldSnapshot.NOT_ENDING, List.of(), List.of(), List.of(expected), List.of()
+                1L, WorldSnapshot.NO_TIMER, WorldSnapshot.NOT_ENDING, List.of(), List.of(), List.of(expected), List.of(), null
             );
 
             assertEquals(snapshot, roundTrip(snapshot), power.name());
@@ -222,7 +251,7 @@ class GameCodecTest {
                 );
 
             WorldSnapshot snapshot = new WorldSnapshot(
-                1L, WorldSnapshot.NO_TIMER, WorldSnapshot.NOT_ENDING, List.of(), List.of(), List.of(), List.of(expected)
+                1L, WorldSnapshot.NO_TIMER, WorldSnapshot.NOT_ENDING, List.of(), List.of(), List.of(), List.of(expected), null
             );
 
             assertEquals(snapshot, roundTrip(snapshot), kind.name());

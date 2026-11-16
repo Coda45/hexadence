@@ -1,5 +1,8 @@
 package io.github.coda45.hexadence.world;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 // Tile collision in world units, backed by a nonempty rectangular grid indexed [x][y].
 public class ArenaCollision implements WorldCollider {
 
@@ -24,6 +27,50 @@ public class ArenaCollision implements WorldCollider {
         }
 
         return blockedHeights[tileX][tileY];
+    }
+
+    // Marks every blocked tile that is not joined to the edge of the map,
+    // even diagonally: the pillars. Half-blocked tiles count as blocked.
+    public boolean[][] findPillarTiles() {
+        int width = blockedHeights.length;
+        int height = blockedHeights[0].length;
+        boolean[][] pillar = new boolean[width][height];
+        Deque<int[]> open = new ArrayDeque<>();
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                pillar[x][y] = blockedHeights[x][y] > 0f;
+
+                if (
+                    pillar[x][y]
+                    && (x == 0 || y == 0 || x == width - 1 || y == height - 1)
+                ) {
+                    open.push(new int[] { x, y });
+                }
+            }
+        }
+
+        // Unmark each of those and every blocked tile reachable from it.
+        while (!open.isEmpty()) {
+            int[] tile = open.pop();
+
+            for (int x = tile[0] - 1; x <= tile[0] + 1; x++) {
+                for (int y = tile[1] - 1; y <= tile[1] + 1; y++) {
+                    if (
+                        x >= 0
+                        && y >= 0
+                        && x < width
+                        && y < height
+                        && pillar[x][y]
+                    ) {
+                        pillar[x][y] = false;
+                        open.push(new int[] { x, y });
+                    }
+                }
+            }
+        }
+
+        return pillar;
     }
 
     // Tests every tile covered by a rectangular footprint centered at (x, y).

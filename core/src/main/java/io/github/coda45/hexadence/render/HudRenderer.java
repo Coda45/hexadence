@@ -44,6 +44,10 @@ public class HudRenderer {
     private static final float BANNER_POP_PROGRESS = 0.1f;
     private static final float FADE_START_PROGRESS = 0.15f;
     private static final float BANNER_SCALE = 3f;
+    // The banner announcing the Maverick, under the match timer.
+    private static final float MAVERICK_BANNER_SECONDS = 4f;
+    private static final float MAVERICK_BANNER_FADE_SECONDS = 0.4f;
+    private static final float MAVERICK_BANNER_Y = HUD_HEIGHT - 48f;
 
     // Key shown on each loadout slot's icon.
     private static final String[] SLOT_BINDINGS = { "LMB", "RMB", "Q" };
@@ -66,6 +70,10 @@ public class HudRenderer {
     // 0 to 1 once the clock has run out; negative before that.
     private float matchEndProgress = -1f;
     private final ScreenFade screenFade = new ScreenFade();
+    // What the Maverick casts, or null while there is none.
+    private Power maverickPower;
+    // Counts up while the arrival banner is showing.
+    private float maverickBannerAge = MAVERICK_BANNER_SECONDS;
 
     public HudRenderer() {
         camera = new OrthographicCamera();
@@ -102,6 +110,16 @@ public class HudRenderer {
     // fades out.
     public void setMatchEndProgress(float progress) {
         matchEndProgress = progress;
+    }
+
+    // The power the Maverick casts, or null while there is none. Its
+    // arrival starts the banner.
+    public void setMaverick(Power power) {
+        if (power != null && maverickPower == null) {
+            maverickBannerAge = 0f;
+        }
+
+        maverickPower = power;
     }
 
     // GAME OVER and the fade to black, over everything else. Call last in
@@ -155,6 +173,7 @@ public class HudRenderer {
 
     public void render(Player player, float deltaSeconds) {
         killFeed.update(deltaSeconds);
+        maverickBannerAge += deltaSeconds;
 
         viewport.apply();
 
@@ -172,6 +191,7 @@ public class HudRenderer {
         drawHealth(player);
         drawSpawnShield(player);
         drawMatchTimer();
+        drawMaverickBanner();
 
         if (!player.isAlive()) {
             font.draw(
@@ -278,6 +298,44 @@ public class HudRenderer {
         layout.setText(font, text);
         font.draw(batch, layout, (HUD_WIDTH - layout.width) / 2f, HUD_HEIGHT - 10f);
         font.getData().setScale(1f);
+        font.setColor(Color.WHITE);
+    }
+
+    // Two lines under the timer for a few seconds after the Maverick
+    // arrives: that it is here, and what it rains. Small and high up, so it
+    // does not cover the fight.
+    private void drawMaverickBanner() {
+        if (
+            maverickPower == null
+            || maverickBannerAge >= MAVERICK_BANNER_SECONDS
+            || matchEndProgress >= 0f
+        ) {
+            return;
+        }
+
+        float alpha = Math.min(
+            1f,
+            Math.min(
+                maverickBannerAge,
+                MAVERICK_BANNER_SECONDS - maverickBannerAge
+            ) / MAVERICK_BANNER_FADE_SECONDS
+        );
+        Color color = PlayerTextColors.MAVERICK;
+
+        font.getData().setScale(1.5f);
+        font.setColor(color.r, color.g, color.b, alpha);
+        layout.setText(font, "THE MAVERICK HAS ARRIVED");
+        font.draw(batch, layout, (HUD_WIDTH - layout.width) / 2f, MAVERICK_BANNER_Y);
+
+        font.getData().setScale(1f);
+        font.setColor(1f, 1f, 1f, alpha);
+        layout.setText(font, "RAINING " + maverickPower.name().toUpperCase());
+        font.draw(
+            batch,
+            layout,
+            (HUD_WIDTH - layout.width) / 2f,
+            MAVERICK_BANNER_Y - 24f
+        );
         font.setColor(Color.WHITE);
     }
 

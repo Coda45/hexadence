@@ -130,7 +130,8 @@ public class GameServer {
         }
     }
 
-    // Tests use short matches. Affects rooms created after the call.
+    // Tests and -Dhexadence.matchSeconds use short matches. Affects rooms
+    // created after the call.
     void setMatchSeconds(float seconds) {
         matchSeconds = seconds;
     }

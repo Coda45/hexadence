@@ -17,6 +17,7 @@ import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.MathUtils;
 
+import io.github.coda45.hexadence.entity.Maverick;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.Projectile;
 import io.github.coda45.hexadence.entity.TargetDummy;
@@ -49,6 +50,7 @@ public class WorldRenderer {
     private final Texture pixelTexture;
     // Soft bubble drawn around a player whose spawn shield is up.
     private final Texture shieldTexture;
+    private final Texture maverickTexture;
     private final ShaderProgram whiteFlashShader;
     private final ShaderProgram redFlashShader;
     private final int[] groundLayers;
@@ -117,6 +119,7 @@ public class WorldRenderer {
         pixmap.dispose();
 
         shieldTexture = createShieldTexture();
+        maverickTexture = new Texture("sprites/maverick.png");
 
         whiteFlashShader = createDamageFlashShader(1f, 1f, 1f);
         redFlashShader = createDamageFlashShader(1f, 0.08f, 0.03f);
@@ -326,6 +329,10 @@ public class WorldRenderer {
                 renderSpawnShield(player);
             }
         }   
+
+        if (world.getMaverick() != null) {
+            renderMaverick(world.getMaverick());
+        }
 
         for (Projectile projectile : world.getProjectiles()) {
             TextureRegion projectileRegion =
@@ -1142,6 +1149,62 @@ public class WorldRenderer {
         batch.setColor(Color.WHITE);
     }
 
+    private static final float MAVERICK_GLOW_RADIUS = 0.8f;
+    // The glow swells over this long before each cast, as a warning.
+    private static final float MAVERICK_WINDUP_SECONDS = 0.5f;
+
+    // An orange and blue horse, centered on the Maverick and facing the way
+    // it is running. The glow behind it is the color of the zone it rains.
+    private void renderMaverick(Maverick maverick) {
+        int tint = maverick.getPower().zoneKind().tint();
+        float windup = 1f - MathUtils.clamp(
+            maverick.getSecondsUntilCast() / MAVERICK_WINDUP_SECONDS,
+            0f,
+            1f
+        );
+        float radius = MAVERICK_GLOW_RADIUS * (
+            1f
+            + 0.06f * MathUtils.sin(projectileAnimationTime * 4f)
+            + 0.3f * windup
+        );
+
+        // The zone's own color, whatever its opacity, kept soft enough that
+        // the horse stands out against it.
+        batch.setColor(
+            ((tint >>> 24) & 0xFF) / 255f,
+            ((tint >>> 16) & 0xFF) / 255f,
+            ((tint >>> 8) & 0xFF) / 255f,
+            0.6f + 0.4f * windup
+        );
+        batch.draw(
+            shieldTexture,
+            maverick.getX() - radius,
+            maverick.getY() - radius,
+            radius * 2f,
+            radius * 2f
+        );
+
+        float width = maverickTexture.getWidth() / ArenaMap.TILE_SIZE;
+        float height = maverickTexture.getHeight() / ArenaMap.TILE_SIZE;
+
+        batch.setColor(Color.WHITE);
+        batch.draw(
+            maverickTexture,
+            maverick.getX() - width / 2f,
+            maverick.getY() - height / 2f,
+            width,
+            height,
+            0,
+            0,
+            maverickTexture.getWidth(),
+            maverickTexture.getHeight(),
+            // The art faces right. It circles counterclockwise, so it runs
+            // left along the top half of its circle.
+            maverick.getDirectionY() > 0f,
+            false
+        );
+    }
+
     private void renderPlayerHealthBar(
         Player player,
         float spriteHeight
@@ -1284,6 +1347,7 @@ public class WorldRenderer {
         
         pixelTexture.dispose();
         shieldTexture.dispose();
+        maverickTexture.dispose();
     }
 
     

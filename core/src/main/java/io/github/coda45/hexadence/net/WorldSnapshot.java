@@ -19,7 +19,9 @@ public record WorldSnapshot(
     List<PlayerState> players,
     List<DummyState> dummies,
     List<ProjectileState> projectiles,
-    List<ZoneState> zones
+    List<ZoneState> zones,
+    // Null until the Maverick appears late in the match.
+    MaverickState maverick
 ) {
 
     public static final float NO_TIMER = -1f;
@@ -106,6 +108,17 @@ public record WorldSnapshot(
         float remainingSeconds,
         float health,
         int damageOwnerPlayerId
+    ) {
+    }
+
+    // The server moves the Maverick and runs its cast timer; clients only
+    // draw what arrives here.
+    public record MaverickState(
+        // The zone power it was given when it appeared.
+        Power power,
+        // Where it is on its circle; see Maverick.
+        float angle,
+        float secondsUntilCast
     ) {
     }
 }

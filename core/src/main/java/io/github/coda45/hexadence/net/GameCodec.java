@@ -52,7 +52,8 @@ public final class GameCodec {
     // 18: player snapshots carry freeze and fire-damage presentation state.
     // 19: zone snapshots carry remaining lifetime for authoritative
     //     expanding-pulse presentation.
-    public static final int PROTOCOL_VERSION = 19;
+    // 20: the Maverick (its state in snapshots, its result in MatchEnded).
+    public static final int PROTOCOL_VERSION = 20;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -340,6 +341,15 @@ public final class GameCodec {
             out.writeFloat(z.health());
             out.writeInt(z.damageOwnerPlayerId());
         }
+
+        WorldSnapshot.MaverickState maverick = snapshot.maverick();
+
+        out.writeBoolean(maverick != null);
+        if (maverick != null) {
+            writePower(out, maverick.power());
+            out.writeFloat(maverick.angle());
+            out.writeFloat(maverick.secondsUntilCast());
+        }
     }
 
     private static WorldSnapshot readSnapshot(ByteBuf in) {
@@ -410,6 +420,14 @@ public final class GameCodec {
             ));
         }
 
+        WorldSnapshot.MaverickState maverick = in.readBoolean()
+            ? new WorldSnapshot.MaverickState(
+                readPower(in),
+                in.readFloat(),
+                in.readFloat()
+            )
+            : null;
+
         return new WorldSnapshot(
             tick,
             matchSecondsRemaining,
@@ -417,7 +435,8 @@ public final class GameCodec {
             players,
             dummies,
             projectiles,
-            zones
+            zones,
+            maverick
         );
     }
 
@@ -437,6 +456,15 @@ public final class GameCodec {
             out.writeInt(result.kills());
             out.writeInt(result.deaths());
             out.writeFloat(result.damageDealt());
+        }
+
+        MatchEnded.MaverickResult maverick = ended.maverick();
+
+        out.writeBoolean(maverick != null);
+        if (maverick != null) {
+            writePower(out, maverick.power());
+            out.writeInt(maverick.kills());
+            out.writeFloat(maverick.damageDealt());
         }
     }
 
@@ -459,7 +487,15 @@ public final class GameCodec {
             ));
         }
 
-        return new MatchEnded(results);
+        MatchEnded.MaverickResult maverick = in.readBoolean()
+            ? new MatchEnded.MaverickResult(
+                readPower(in),
+                in.readInt(),
+                in.readFloat()
+            )
+            : null;
+
+        return new MatchEnded(results, maverick);
     }
 
     private static void writeMapId(ByteBuf out, String mapId) {

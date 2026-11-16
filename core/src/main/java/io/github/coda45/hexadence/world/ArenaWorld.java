@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.coda45.hexadence.entity.Maverick;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.entity.PlayerColor;
 import io.github.coda45.hexadence.entity.Projectile;
@@ -21,6 +22,7 @@ import io.github.coda45.hexadence.power.Behavior;
 import io.github.coda45.hexadence.power.Element;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
+import io.github.coda45.hexadence.power.PowerForm;
 import io.github.coda45.hexadence.power.Powers;
 import io.github.coda45.hexadence.zone.Reactions;
 import io.github.coda45.hexadence.zone.ZoneKind;
@@ -40,6 +42,11 @@ public class ArenaWorld {
     private static final float VORTEX_ORBIT_SPEED = 8f;
 
     private final ArenaCollision collision;
+    private final StormEye stormEye;
+    // Zone powers cast from inside the eye this match.
+    private final ZoneCastTally eyeCasts = new ZoneCastTally();
+    // Null until it appears late in a match.
+    private Maverick maverick;
     private final List<SpawnPoint> playerSpawns;
     private final Map<Integer, SpawnPoint> assignedPlayerSpawns = new LinkedHashMap<>();
     // Keyed by player ID. The constructor creates local player 0.
@@ -76,6 +83,7 @@ public class ArenaWorld {
 
     public ArenaWorld(ArenaDefinition definition) {
         collision = definition.collision();
+        stormEye = StormEye.locate(collision);
         playerSpawns = definition.playerSpawns();
 
         addPlayerAtAvailableSpawn(0);
@@ -123,6 +131,7 @@ public class ArenaWorld {
             );
         }
 
+        updateMaverick();
         applyExpandingPulseEffects();
 
         // Move and remove projectiles through one iterator so list changes stay safe.
@@ -2254,6 +2263,22 @@ public class ArenaWorld {
             zone.restoreHealth(state.health());
             zones.add(zone);
         }
+
+        WorldSnapshot.MaverickState maverickState = snapshot.maverick();
+
+        maverick = null;
+
+        if (maverickState != null) {
+            maverick = new Maverick(
+                stormEye.centerX(),
+                stormEye.centerY(),
+                maverickState.power()
+            );
+            maverick.restoreState(
+                maverickState.angle(),
+                maverickState.secondsUntilCast()
+            );
+        }
     }
 
     private static Zone createZoneFromSnapshot(
@@ -2703,7 +2728,79 @@ public class ArenaWorld {
             player.startCooldown(slot);
             // Attacking gives up spawn protection.
             player.dropSpawnShield();
+
+            // Only zones cast by someone standing in the eye are counted.
+            if (
+                power.form() == PowerForm.ZONE
+                && stormEye.contains(
+                    player.getCollisionX(),
+                    player.getCollisionY()
+                )
+            ) {
+                eyeCasts.record(power);
+            }
         }
+    }
+
+    // Brings in the Maverick at the middle of the eye, casting whichever
+    // zone power was cast most from inside it. It stays until the next match.
+    public void spawnMaverick() {
+        if (maverick != null) {
+            return;
+        }
+
+        maverick = new Maverick(
+            stormEye.centerX(),
+            stormEye.centerY(),
+            eyeCasts.select()
+        );
+    }
+
+    // The Maverick, or null while there is none.
+    public Maverick getMaverick() {
+        return maverick;
+    }
+
+    private void updateMaverick() {
+        if (maverick == null) {
+            return;
+        }
+
+        maverick.update(STEP);
+
+        // Once the clock has run out it keeps circling but casts nothing.
+        if (statsFrozen || !maverick.advanceCastTimer(STEP)) {
+            return;
+        }
+
+        Power power = maverick.getPower();
+        float directionX = maverick.getDirectionX();
+        float directionY = maverick.getDirectionY();
+
+        // Every power is placed directly, even one a player would throw, so
+        // that nothing but the zone itself can hit anyone.
+        placeZoneAtTargetOrTerrain(
+            power.zoneKind(),
+            maverick.getX(),
+            maverick.getY(),
+            new CastTarget(
+                directionX,
+                directionY,
+                Maverick.CAST_DISTANCE,
+                maverick.getX() + directionX * Maverick.CAST_DISTANCE,
+                maverick.getY() + directionY * Maverick.CAST_DISTANCE
+            ),
+            power.radius(),
+            Maverick.SOURCE_ID
+        );
+    }
+
+    public StormEye getStormEye() {
+        return stormEye;
+    }
+
+    public ZoneCastTally getEyeCasts() {
+        return eyeCasts;
     }
 
     // Rotates a normalized direction by an angle in radians, for spreading a
@@ -2762,9 +2859,19 @@ public class ArenaWorld {
             ? null
             : players.get(attackerPlayerId);
 
+        // The Maverick is not a player, so its zones credit its own tally.
+        boolean byMaverick =
+            attackerPlayerId == Maverick.SOURCE_ID && maverick != null;
+
         // Only damage actually taken counts, so overkill is not inflated.
-        if (attacker != null && !statsFrozen) {
-            attacker.recordDamageDealt(healthBefore - victim.getHealth());
+        if (!statsFrozen) {
+            float damageTaken = healthBefore - victim.getHealth();
+
+            if (attacker != null) {
+                attacker.recordDamageDealt(damageTaken);
+            } else if (byMaverick) {
+                maverick.recordDamageDealt(damageTaken);
+            }
         }
 
         if (victim.isAlive()) {
@@ -2779,6 +2886,8 @@ public class ArenaWorld {
 
             if (attacker != null) {
                 attacker.recordKill();
+            } else if (byMaverick) {
+                maverick.recordKill();
             }
         }
 
@@ -2787,7 +2896,9 @@ public class ArenaWorld {
         if (!statsFrozen) {
             deathEvents.add(new PlayerKilledEvent(
                 victimPlayerId,
-                attacker != null ? attackerPlayerId : PlayerKilledEvent.NO_KILLER
+                attacker != null || byMaverick
+                    ? attackerPlayerId
+                    : PlayerKilledEvent.NO_KILLER
             ));
         }
     }
@@ -2817,6 +2928,8 @@ public class ArenaWorld {
 
     public void resetForNewMatch() {
         statsFrozen = false;
+        eyeCasts.clear();
+        maverick = null;
         projectiles.clear();
         zones.clear();
         playerDotEffects.clear();
