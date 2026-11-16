@@ -107,6 +107,18 @@ public class PlayerInputController extends InputAdapter {
             ));
         }
 
+        // A zero-size window (minimized) makes unproject divide by zero. Never
+        // send a NaN aim or target: keep the last facing and drop the cast.
+        if (!Float.isFinite(aimX) || !Float.isFinite(aimY)) {
+            aimX = 0f;
+            aimY = 0f;
+        }
+
+        casts.removeIf(cast ->
+            !Float.isFinite(cast.targetOffsetX())
+            || !Float.isFinite(cast.targetOffsetY())
+        );
+
         // Consume once so catch-up steps don't repeat the same press. A held
         // binding may produce a new request with the current target next tick.
         slot1Pressed = false;
