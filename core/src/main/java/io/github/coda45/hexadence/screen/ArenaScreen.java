@@ -136,7 +136,7 @@ public class ArenaScreen implements Screen {
         while (accumulator >= ArenaWorld.STEP) {
 
             if (session == null) {
-                PlayerCommand command = menuOpen
+                PlayerCommand command = menuOpen || windowHasNoSize()
                     ? PlayerCommand.IDLE
                     : inputController.sample(
                     worldCamera.getViewport(),
@@ -330,11 +330,18 @@ public class ArenaScreen implements Screen {
             return;
         }
 
-        PlayerCommand command = menuOpen
+        PlayerCommand command = menuOpen || windowHasNoSize()
             ? PlayerCommand.IDLE
             : inputController.sample(worldCamera.getViewport(), player);
 
         session.client().send(command);
+    }
+
+    // A minimized window has a size of 0 x 0 on Windows. Turning the mouse
+    // into a world position then divides by zero and the aim comes out NaN,
+    // which the server drops. Stand still until the window is back.
+    private static boolean windowHasNoSize() {
+        return Gdx.graphics.getWidth() <= 0 || Gdx.graphics.getHeight() <= 0;
     }
 
     private void applyHostState(
