@@ -297,6 +297,7 @@ public final class GameCodec {
             out.writeInt(p.kills());
             out.writeInt(p.deaths());
             out.writeFloat(p.spawnShieldRemaining());
+            out.writeFloat(p.frozenSeconds());
 
             out.writeByte(p.slots().size());
             for (WorldSnapshot.SlotState slot : p.slots()) {
@@ -356,6 +357,7 @@ public final class GameCodec {
                 in.readFloat(),
                 in.readInt(),
                 in.readInt(),
+                in.readFloat(),
                 in.readFloat(),
                 readSlots(in)
             ));

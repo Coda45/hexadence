@@ -129,6 +129,7 @@ class GameCodecTest {
                     3,
                     2,
                     1.25f,
+                    0f,
                     List.of(
                         new WorldSnapshot.SlotState(Powers.FIREBALL, 0.1f),
                         new WorldSnapshot.SlotState(Powers.WATER_PUDDLE, 0.2f),

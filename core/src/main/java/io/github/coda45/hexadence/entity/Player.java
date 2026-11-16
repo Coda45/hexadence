@@ -355,6 +355,7 @@ public class Player {
         int kills,
         int deaths,
         float spawnShieldRemaining,
+        float frozenseconds,
         PlayerColor color
     ) {
         this.x = x;
@@ -367,6 +368,7 @@ public class Player {
         this.kills = kills;
         this.deaths = deaths;
         this.spawnShieldRemaining = Math.max(0f, spawnShieldRemaining);
+        this.frozenSeconds = Math.max(0f, frozenSeconds);
         this.color = Objects.requireNonNull(color);
     }
 
