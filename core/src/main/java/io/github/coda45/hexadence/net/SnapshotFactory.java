@@ -59,6 +59,7 @@ public final class SnapshotFactory {
                 player.getDeaths(),
                 player.getSpawnShieldRemaining(),
                 player.getFrozenSeconds(),
+                player.getFireDamageSequence(),
                 slots
             ));
         }
@@ -97,6 +98,7 @@ public final class SnapshotFactory {
                 zone.getX(),
                 zone.getY(),
                 zone.getRadius(),
+                zone.getRemainingSeconds(),
                 zone.getHealth(),
                 zone.getDamageOwnerPlayerId()
             ));

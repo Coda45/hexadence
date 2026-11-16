@@ -30,6 +30,7 @@ public class GameTextures {
     private final Texture crystalWallSheet;
     private final Texture wearLinesSheet;
     private final Texture vortexSheet;
+    private final Texture hailstormSheet;
     private final Texture icePrison;
     private final Texture iceField;
 
@@ -60,6 +61,10 @@ public class GameTextures {
     private static final int STONE_WALL_FALLBACK_FRAME_COUNT = 6;
     private static final float STONE_WALL_FRAME_DURATION = 0.06f;
     private static final int WALL_WEAR_FRAME_COUNT = 3;
+    private static final int HAILSTORM_FRAME_WIDTH = 74;
+    private static final int HAILSTORM_FRAME_HEIGHT = 88;
+    private static final int HAILSTORM_FRAME_COUNT = 6;
+    private static final float HAILSTORM_FRAME_DURATION = 0.1f;
 
     private final Texture lightningSheet;
     private final List<Animation<TextureRegion>> lightningAnimations;
@@ -74,6 +79,7 @@ public class GameTextures {
     private final Animation<TextureRegion> crystalWallAnimation;
     private final TextureRegion[] wallWearFrames;
     private final Animation<TextureRegion> vortexAnimation;
+    private final Animation<TextureRegion> hailstormAnimation;
 
 
     // Directional sheet rows follow FacingDirection order, columns are frames.
@@ -161,6 +167,13 @@ public class GameTextures {
             new Color(0.45f, 0.8f, 1f, 0.8f)
         );
         vortexAnimation = createVortexAnimation(vortexSheet);
+        hailstormSheet = loadRequiredSheet(
+            "spells/hailstorm.png",
+            HAILSTORM_FRAME_WIDTH,
+            HAILSTORM_FRAME_HEIGHT,
+            HAILSTORM_FRAME_COUNT
+        );
+        hailstormAnimation = createHailstormAnimation(hailstormSheet);
 
         voidBolt = loadPixelArt("spells/void_rot.png");
         voidBoltRegion = new TextureRegion(voidBolt);
@@ -389,6 +402,20 @@ public class GameTextures {
         TextureRegion[][] split = TextureRegion.split(sheet, 48, 48);
 
         Animation<TextureRegion> animation = new Animation<>(0.1f, split[0]);
+        animation.setPlayMode(Animation.PlayMode.LOOP);
+        return animation;
+    }
+
+    private Animation<TextureRegion> createHailstormAnimation(Texture sheet) {
+        TextureRegion[][] split = TextureRegion.split(
+            sheet,
+            HAILSTORM_FRAME_WIDTH,
+            HAILSTORM_FRAME_HEIGHT
+        );
+        Animation<TextureRegion> animation = new Animation<>(
+            HAILSTORM_FRAME_DURATION,
+            split[0]
+        );
         animation.setPlayMode(Animation.PlayMode.LOOP);
         return animation;
     }
@@ -849,6 +876,10 @@ public class GameTextures {
         return vortexAnimation.getKeyFrame(stateTime);
     }
 
+    public TextureRegion getHailstormFrame(float stateTime) {
+        return hailstormAnimation.getKeyFrame(stateTime);
+    }
+
     public Texture getTargetDummy() {
         return targetDummy;
     }
@@ -912,6 +943,7 @@ public class GameTextures {
         crystalWallSheet.dispose();
         wearLinesSheet.dispose();
         vortexSheet.dispose();
+        hailstormSheet.dispose();
         lightningSheet.dispose();
         zoneCircle.dispose();
         zoneRing.dispose();

@@ -41,6 +41,7 @@ public class WorldRenderer {
     private static final int RING_FLAME_COUNT = 8;
     private static final float RING_FLAME_SIZE = 0.75f;
     private static final float RING_FLAME_ROTATION = -90f;
+    private static final float HAILSTORM_TARGET_DIAMETER_PIXELS = 56f;
 
     private final OrthogonalTiledMapRenderer mapRenderer;
     private final SpriteBatch batch;
@@ -49,6 +50,7 @@ public class WorldRenderer {
     // Soft bubble drawn around a player whose spawn shield is up.
     private final Texture shieldTexture;
     private final ShaderProgram whiteFlashShader;
+    private final ShaderProgram redFlashShader;
     private final int[] groundLayers;
     private final int[] lowerTerrainLayers;
     private final int[] foregroundLayers;
@@ -57,8 +59,11 @@ public class WorldRenderer {
     private final Map<Integer, Float> crystalWallAnimationTimes = new HashMap<>();
     private final Map<Integer, VoidTrailVisual> voidTrails = new HashMap<>();
     private final Map<Integer, Float> previousPlayerHealth = new HashMap<>();
+    private final Map<Integer, Long> previousFireDamageSequences =
+        new HashMap<>();
     private final Map<Integer, Float> previousDummyHealth = new HashMap<>();
     private final Map<Integer, Float> playerDamageFlashes = new HashMap<>();
+    private final Set<Integer> fireDamageFlashes = new HashSet<>();
     private final Map<Integer, Float> dummyDamageFlashes = new HashMap<>();
 
     private float projectileAnimationTime;
@@ -113,7 +118,8 @@ public class WorldRenderer {
 
         shieldTexture = createShieldTexture();
 
-        whiteFlashShader = createWhiteFlashShader();
+        whiteFlashShader = createDamageFlashShader(1f, 1f, 1f);
+        redFlashShader = createDamageFlashShader(1f, 0.08f, 0.03f);
     }
 
     // A white disc that is faint in the middle and bright at the rim, tinted
@@ -150,7 +156,11 @@ public class WorldRenderer {
         return texture;
     }
 
-    private static ShaderProgram createWhiteFlashShader() {
+    private static ShaderProgram createDamageFlashShader(
+        float red,
+        float green,
+        float blue
+    ) {
         String vertexShader =
             "attribute vec4 a_position;\n"
                 + "attribute vec4 a_color;\n"
@@ -174,7 +184,8 @@ public class WorldRenderer {
                 + "uniform sampler2D u_texture;\n"
                 + "void main() {\n"
                 + "  float alpha = texture2D(u_texture, v_texCoords).a * v_color.a;\n"
-                + "  gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);\n"
+                + "  gl_FragColor = vec4("
+                + red + ", " + green + ", " + blue + ", alpha);\n"
                 + "}\n";
 
         ShaderProgram shader = new ShaderProgram(vertexShader, fragmentShader);
@@ -197,8 +208,6 @@ public class WorldRenderer {
     ) {
         updateDamageFlashes(world, presentationDelta);
         consumeEvents(frameEvents);
-        
-
 
         boolean solarFlareBlinded =
             world.isPlayerOverlappingZoneKind(
@@ -295,6 +304,7 @@ public class WorldRenderer {
                 width,
                 height,
                 playerDamageFlashes.containsKey(playerId),
+                fireDamageFlashes.contains(playerId),
                 Color.WHITE
             );
 
@@ -501,24 +511,41 @@ public class WorldRenderer {
     ) {
         updateFlashTimers(playerDamageFlashes, deltaSeconds);
         updateFlashTimers(dummyDamageFlashes, deltaSeconds);
+        fireDamageFlashes.retainAll(playerDamageFlashes.keySet());
 
         Set<Integer> livePlayerIds = new HashSet<>();
         for (Map.Entry<Integer, Player> entry : world.getPlayers().entrySet()) {
             int id = entry.getKey();
-            float health = entry.getValue().getHealth();
+            Player player = entry.getValue();
+            float health = player.getHealth();
             Float previous = previousPlayerHealth.put(id, health);
+            Long previousFireSequence = previousFireDamageSequences.put(
+                id,
+                player.getFireDamageSequence()
+            );
             livePlayerIds.add(id);
 
             if (
                 previous != null
                     && health < previous
-                    && !playerDamageFlashes.containsKey(id)
             ) {
                 playerDamageFlashes.put(id, DAMAGE_FLASH_DURATION);
+
+                if (
+                    previousFireSequence != null
+                        && player.getFireDamageSequence()
+                            != previousFireSequence
+                ) {
+                    fireDamageFlashes.add(id);
+                } else {
+                    fireDamageFlashes.remove(id);
+                }
             }
         }
         previousPlayerHealth.keySet().retainAll(livePlayerIds);
+        previousFireDamageSequences.keySet().retainAll(livePlayerIds);
         playerDamageFlashes.keySet().retainAll(livePlayerIds);
+        fireDamageFlashes.retainAll(livePlayerIds);
 
         Set<Integer> liveDummyIds = new HashSet<>();
         for (TargetDummy dummy : world.getDummies()) {
@@ -793,9 +820,10 @@ public class WorldRenderer {
     }
 
     private void renderZone(Zone zone) {
-        float diameter = zone.getRadius() * 2f;
-        float left = zone.getX() - zone.getRadius();
-        float bottom = zone.getY() - zone.getRadius();
+        float displayRadius = zone.getCurrentRadius();
+        float diameter = displayRadius * 2f;
+        float left = zone.getX() - displayRadius;
+        float bottom = zone.getY() - displayRadius;
 
         // The zone kind's own color, from its definition in ZoneKinds.
         int tint = zone.getKind().tint();
@@ -825,6 +853,12 @@ public class WorldRenderer {
             batch.draw(frame, left, bottom, diameter, diameter);
             return;
         }
+
+        if (zone.getKind() == ZoneKinds.HAILSTORM) {
+            renderHailstorm(diameter, left, bottom);
+            return;
+        }
+
         if (zone.getKind() == ZoneKinds.SOLAR_FLARE) {
             renderSolarFlare(zone);
             batch.setColor(Color.WHITE);
@@ -907,6 +941,25 @@ public class WorldRenderer {
         if (zone.getKind().innerRadius() > 0f) {
             renderRingFlames(zone);
         }
+    }
+
+    private void renderHailstorm(
+        float targetDiameter,
+        float targetLeft,
+        float targetBottom
+    ) {
+        TextureRegion frame = textures.getHailstormFrame(
+            projectileAnimationTime
+        );
+        float scale = targetDiameter / HAILSTORM_TARGET_DIAMETER_PIXELS;
+        float width = frame.getRegionWidth() * scale;
+        float height = frame.getRegionHeight() * scale;
+
+        // The gameplay target is the 56x56 circle at the frame's bottom-left.
+        // Keep that circle centered on the zone while the rain extends above
+        // and to its right.
+        batch.setColor(Color.WHITE);
+        batch.draw(frame, targetLeft, targetBottom, width, height);
     }
 
     private void renderSolarFlare(Zone zone) {
@@ -1133,11 +1186,12 @@ public class WorldRenderer {
         float width,
         float height,
         boolean flashing,
+        boolean fireFlashing,
         Color normalTint
     ) {
         batch.setColor(flashing ? Color.WHITE : normalTint);
         if (flashing) {
-            batch.setShader(whiteFlashShader);
+            batch.setShader(fireFlashing ? redFlashShader : whiteFlashShader);
         }
         batch.draw(sprite, left, bottom, width, height);
         if (flashing) {
@@ -1226,6 +1280,7 @@ public class WorldRenderer {
         batch.dispose();
         textures.dispose();
         whiteFlashShader.dispose();
+        redFlashShader.dispose();
         
         pixelTexture.dispose();
         shieldTexture.dispose();

@@ -145,17 +145,28 @@ public class PlayerInputController extends InputAdapter {
         return new CastRequest(slot, target.x, target.y);
     }
 
-    private Vector2 targetOffset(
+    Vector2 targetOffset(
         Viewport viewport,
         Player player,
         int screenX,
         int screenY
     ) {
+        if (
+            viewport.getScreenWidth() <= 0
+                || viewport.getScreenHeight() <= 0
+        ) {
+            return mouseWorld.set(player.getAimX(), player.getAimY());
+        }
+
         mouseWorld.set(screenX, screenY);
 
         // Account for the camera and viewport before comparing mouse and player positions.
         viewport.unproject(mouseWorld);
         mouseWorld.sub(player.getCastX(), player.getCastY());
+
+        if (!Float.isFinite(mouseWorld.x) || !Float.isFinite(mouseWorld.y)) {
+            mouseWorld.set(player.getAimX(), player.getAimY());
+        }
 
         return mouseWorld;
     }

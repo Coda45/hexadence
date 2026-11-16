@@ -54,6 +54,7 @@ public final class ContentFingerprint {
             text.append("zone ").append(z.id()).append(' ').append(z.name())
                 .append(' ').append(z.origin()).append(' ').append(z.element())
                 .append(' ').append(z.weapon()).append(' ').append(z.radius())
+                .append(" initialRadius=").append(z.initialRadius())
                 .append(" innerRadius=").append(z.innerRadius())
                 .append(' ').append(z.duration()).append(' ').append(z.damagePerSecond())
                 .append(' ').append(z.speedMultiplier()).append(' ').append(z.coversPlayers())
@@ -67,9 +68,14 @@ public final class ContentFingerprint {
                 .append(" projectileGravityStep=")
                     .append(z.projectileGravityAccelerationStep())
                 .append(" playerGravityStep=").append(z.playerGravitySpeedStep())
+                .append(" playerGravityStart=")
+                    .append(z.playerGravityStartMultiplier())
                 .append(" explosionRadius=").append(z.expirationExplosionRadius())
                 .append(" explosionDamage=").append(z.expirationExplosionDamage())
                 .append(" driftSpeed=").append(z.driftSpeed())
+                .append(" contactDamage=").append(z.contactDamage())
+                .append(" contactImpulse=").append(z.contactImpulse())
+                .append(" clearsProjectiles=").append(z.clearsProjectiles())
                 .append(' ').append(z.tint())
                 .append('\n');
         }

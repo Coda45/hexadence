@@ -318,7 +318,7 @@ class ZoneEffectsTest {
         ArenaWorld playerWorld = world();
         Player player = playerWorld.getPlayer();
         float startX = player.getX();
-        addZone(
+        Zone playerSingularity = addZone(
             playerWorld,
             1,
             ZoneKinds.SINGULARITY,
@@ -326,21 +326,30 @@ class ZoneEffectsTest {
             player.getCollisionY()
         );
 
-        playerWorld.step(new PlayerCommand(
-            -1f, 0f, -1f, 0f, false, false, false
-        ));
+        playerWorld.step(PlayerCommand.IDLE);
+        float earlyPullDistance = player.getX() - startX;
 
-        assertTrue(
-            player.getX() > startX,
-            "The 1-2 tile gravity band must overpower movement away from the center"
-        );
+        // Age the same singularity while keeping the player at a comparable
+        // distance, so proximity does not hide the lifetime ramp.
+        for (int i = 0; i < 145; i++) {
+            player.setPosition(startX, player.getY());
+            playerWorld.step(PlayerCommand.IDLE);
+        }
+
+        player.setPosition(startX, player.getY());
+        playerWorld.step(PlayerCommand.IDLE);
+        float latePullDistance = player.getX() - startX;
+
+        assertTrue(earlyPullDistance > 0f);
+        assertTrue(latePullDistance > earlyPullDistance * 5f);
+        assertTrue(playerSingularity.getLifetimeProgress() > 0.8f);
     }
 
     @Test
     void singularityExplodesForThirtyDamageAtTheEndOfItsLifetime() {
         ArenaWorld world = new ArenaWorld(new ArenaDefinition(
             new ArenaCollision(new float[20][12]),
-            new SpawnPoint(2f, 2f),
+            new SpawnPoint(10f, 2f),
             List.of(
                 new SpawnPoint(4f, 2.24f),
                 new SpawnPoint(8f, 2.24f)
@@ -353,7 +362,11 @@ class ZoneEffectsTest {
         }
 
         assertTrue(world.getZones().isEmpty());
-        assertEquals(70f, world.getPlayer().getHealth(), EPSILON);
+        assertTrue(
+            ZoneKinds.SINGULARITY.expirationExplosionRadius()
+                < ZoneKinds.SINGULARITY.radius()
+        );
+        assertEquals(100f, world.getPlayer().getHealth(), EPSILON);
         assertEquals(70f, world.getDummies().get(0).getHealth(), EPSILON);
         assertEquals(100f, world.getDummies().get(1).getHealth(), EPSILON);
     }
@@ -494,6 +507,62 @@ class ZoneEffectsTest {
         stepIdle(world, 8);
 
         assertTrue(world.getZones().isEmpty());
+    }
+
+    @Test
+    void radiantWaveExpandsDamagesRepelsAndClearsProjectilesOnce() {
+        ArenaWorld world = new ArenaWorld(new ArenaDefinition(
+            new ArenaCollision(new float[20][12]),
+            List.of(
+                new SpawnPoint(1f, 2f),
+                new SpawnPoint(5.5f, 2f)
+            ),
+            List.of(new SpawnPoint(5.5f, 2.24f))
+        ));
+        int targetId = world.addPlayer();
+        Player owner = world.getPlayer();
+        Player target = world.getPlayers().get(targetId);
+        TargetDummy dummy = world.getDummies().get(0);
+        Zone wave = Zone.create(
+            30,
+            ZoneKinds.RADIANT_WAVE,
+            4f,
+            2.24f,
+            0
+        );
+        world.getZones().add(wave);
+        Projectile nearbyProjectile = new Projectile(
+            300,
+            4.5f,
+            2.24f,
+            1f,
+            0f,
+            Powers.FIREBALL.range(),
+            Powers.FIREBALL,
+            targetId
+        );
+        world.getProjectiles().add(nearbyProjectile);
+
+        assertEquals(0.8f, wave.getCurrentRadius(), EPSILON);
+        world.step(PlayerCommand.IDLE);
+
+        assertFalse(world.getProjectiles().contains(nearbyProjectile));
+        assertEquals(target.getMaxHealth(), target.getHealth(), EPSILON);
+        assertEquals(dummy.getMaxHealth(), dummy.getHealth(), EPSILON);
+
+        stepIdle(world, 20);
+
+        assertTrue(wave.getCurrentRadius() > 1.2f);
+        assertEquals(target.getMaxHealth() - 10f, target.getHealth(), EPSILON);
+        assertEquals(dummy.getMaxHealth() - 10f, dummy.getHealth(), EPSILON);
+        assertTrue(target.getX() > 5.5f);
+        assertEquals(owner.getMaxHealth(), owner.getHealth(), EPSILON);
+        assertEquals(10f, owner.getDamageDealt(), EPSILON);
+
+        stepIdle(world, 20);
+
+        assertEquals(target.getMaxHealth() - 10f, target.getHealth(), EPSILON);
+        assertEquals(dummy.getMaxHealth() - 10f, dummy.getHealth(), EPSILON);
     }
 
     @Test

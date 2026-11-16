@@ -545,6 +545,38 @@ class ArenaWorldTest {
     }
 
     @Test
+    void beamOfLightTransformsNullZoneIntoRadiantWave() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(new SpawnPoint(5f, 1.75f))
+        );
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.BEAM_OF_LIGHT,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+        world.getZones().add(Zone.create(
+            123,
+            ZoneKinds.NULL_ZONE,
+            3f,
+            1.75f,
+            Zone.NO_PLAYER
+        ));
+
+        world.step(fireRight());
+
+        assertTrue(world.getZones().stream().anyMatch(
+            zone -> zone.getKind() == ZoneKinds.RADIANT_WAVE
+        ));
+        assertEquals(
+            world.getDummies().get(0).getMaxHealth(),
+            world.getDummies().get(0).getHealth(),
+            EPSILON,
+            "The beam reaction should occur before the beam can hit the dummy"
+        );
+    }
+
+    @Test
     void infernoDriftsInTheLightningsDirectionAfterItIsCreated() {
         ArenaWorld world = createEmptyWorld(
             new SpawnPoint(1f, 1f),
@@ -615,6 +647,7 @@ class ArenaWorldTest {
                 4.5f,
                 2.25f,
                 inferno.getRadius(),
+                1.25f,
                 inferno.getHealth(),
                 Zone.NO_PLAYER
             ))
@@ -624,6 +657,7 @@ class ArenaWorldTest {
         assertEquals(inferno, restored);
         assertEquals(4.5f, restored.getX(), EPSILON);
         assertEquals(2.25f, restored.getY(), EPSILON);
+        assertEquals(1.25f, restored.getRemainingSeconds(), EPSILON);
     }
 
     @Test
@@ -916,6 +950,98 @@ class ArenaWorldTest {
             dummy.getHealth(),
             EPSILON,
             "Damage over time should stop once its duration ends"
+        );
+    }
+
+    @Test
+    void fireballBurnsAPlayerAndIgnitesTheirOverlappingZone() {
+        ArenaWorld world = createEmptyWorld(
+            List.of(
+                new SpawnPoint(1f, 1f),
+                new SpawnPoint(3f, 1f)
+            ),
+            List.of()
+        );
+        Player target = world.getPlayers().get(world.addPlayer());
+
+        world.step(fireRight());
+        for (int i = 0; i < 30 && target.getHealth() == target.getMaxHealth(); i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            target.getMaxHealth() - Powers.FIREBALL.damage(),
+            target.getHealth(),
+            EPSILON
+        );
+        assertEquals(1L, target.getFireDamageSequence());
+
+        Zone puddle = Zone.create(
+            99,
+            ZoneKinds.PUDDLE,
+            target.getCollisionX(),
+            target.getCollisionY(),
+            Zone.NO_PLAYER
+        );
+        world.getZones().add(puddle);
+        world.step(PlayerCommand.IDLE);
+
+        assertFalse(world.getZones().contains(puddle));
+        assertTrue(
+            world.getZones().stream()
+                .anyMatch(zone -> zone.getKind() == ZoneKinds.STEAM),
+            "A burning player should apply Fireball's reaction to an overlapping puddle"
+        );
+
+        float healthAfterHit = target.getHealth();
+        for (int i = 0; i < 120; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            healthAfterHit
+                - Powers.FIREBALL.dotDamagePerTick() * 4f,
+            target.getHealth(),
+            EPSILON
+        );
+        assertEquals(5L, target.getFireDamageSequence());
+
+        float healthAfterBurn = target.getHealth();
+        for (int i = 0; i < 60; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+        assertEquals(healthAfterBurn, target.getHealth(), EPSILON);
+    }
+
+    @Test
+    void fireballAndVoidRotDamageOverTimeCanRunTogether() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(new SpawnPoint(1.3f, 1.75f))
+        );
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.FIREBALL,
+            Powers.VOID_ROT,
+            Powers.LIGHTNING_BOLT
+        )));
+        TargetDummy dummy = world.getDummies().get(0);
+
+        world.step(fireRight());
+        world.step(new PlayerCommand(
+            0f, 0f, 1f, 0f, false, true, false
+        ));
+        for (int i = 0; i < 30; i++) {
+            world.step(PlayerCommand.IDLE);
+        }
+
+        assertEquals(
+            dummy.getMaxHealth()
+                - Powers.FIREBALL.damage()
+                - Powers.VOID_ROT.damage()
+                - Powers.FIREBALL.dotDamagePerTick()
+                - Powers.VOID_ROT.dotDamagePerTick(),
+            dummy.getHealth(),
+            EPSILON
         );
     }
 

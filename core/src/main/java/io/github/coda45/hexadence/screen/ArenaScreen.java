@@ -259,6 +259,14 @@ public class ArenaScreen implements Screen {
 
     @Override
     public void resize(int width, int height) {
+        // Windows may report a zero-sized framebuffer while minimized.
+        // Retain the last valid viewport instead of creating divisions by
+        // zero during mouse unprojection.
+        if (width <= 0 || height <= 0) {
+            resetFrameState();
+            return;
+        }
+
         worldCamera.resize(width, height);
         hudRenderer.resize(width, height);
         pauseMenu.resize(width, height);
