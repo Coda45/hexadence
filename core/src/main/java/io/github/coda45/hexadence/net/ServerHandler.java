@@ -16,6 +16,8 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     private final GameServer server;
     private GameRoom room;          // null until the handshake is accepted
     private int playerId = -1;
+    // Log an invalid command once per connection, not 60 times a second.
+    private boolean warnedInvalidCommand;
 
     public ServerHandler(GameServer server) {
         this.server = server;
@@ -34,12 +36,17 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // The decoder already turned the bytes into objects, so there is
         // nothing to release here.
         if (msg instanceof PlayerCommand command) {
+            // Drop a bad command but keep the player connected. A client
+            // whose window is minimized can send a NaN aim, and that should
+            // not cost the player their match.
             if (!PlayerCommandValidator.isValid(command)) {
-                System.err.println(
-                    "Rejected invalid command from "
-                        + ctx.channel().remoteAddress()
-                );
-                ctx.close();
+                if (!warnedInvalidCommand) {
+                    System.err.println(
+                        "Ignoring invalid command(s) from "
+                            + ctx.channel().remoteAddress()
+                    );
+                    warnedInvalidCommand = true;
+                }
                 return;
             }
 

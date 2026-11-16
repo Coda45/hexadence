@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.net.LobbyConnection.Status;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
@@ -281,6 +282,28 @@ class RoomsTest {
         client.selectLoadout(Loadout.DEFAULT, true);
         pause(300);
         assertEquals(BEAM_FIRST.slots(), slotPowers(client));
+
+        client.close();
+    }
+
+    @Test
+    void invalidCommandIsIgnoredWithoutDisconnecting() {
+        LobbyConnection host = createRoom();
+        lockIn(host);
+        await(host::everyoneLocked);
+
+        host.requestStart();
+        awaitStatus(host, Status.STARTED);
+
+        NetClient client = host.handOff().client();
+        await(client::isReady);
+
+        // What a minimized window used to send: a NaN aim.
+        client.send(new PlayerCommand(0f, 0f, Float.NaN, Float.NaN, List.of()));
+        pause(300);
+
+        assertTrue(client.isConnected());
+        assertFalse(client.isDisconnected());
 
         client.close();
     }
