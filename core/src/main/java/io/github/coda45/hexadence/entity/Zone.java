@@ -129,6 +129,13 @@ public class Zone {
         return remainingSeconds <= 0f;
     }
 
+    public float getLifetimeProgress() {
+        return Math.max(
+            0f,
+            Math.min(1f, 1f - remainingSeconds / kind.duration())
+        );
+    }
+
     public boolean isDestructible() {
         return kind.maxHealth() > 0f;
     }

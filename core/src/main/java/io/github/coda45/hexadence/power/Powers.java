@@ -17,7 +17,7 @@ import io.github.coda45.hexadence.zone.ZoneKinds;
 // with different definitions is turned away with "update your game").
 public final class Powers {
 
-    public static final float BEAM_OF_LIGHT_CRYSTAL_RANGE = 6f;
+    public static final float BEAM_OF_LIGHT_CRYSTAL_RANGE = 12f;
     public static final float BEAM_OF_LIGHT_CRYSTAL_DAMAGE_MULTIPLIER = 1.5f;
 
     // ---- Fire ----
@@ -31,6 +31,7 @@ public final class Powers {
         .speed(12f)          // PLACEHOLDER
         .range(8f)           // PLACEHOLDER
         .radius(0.12f)       // PLACEHOLDER
+        .damageOverTime(2f, 0.5f, 2f)
         .icon("ui/bg_fireball.png", "ui/rim_orange.png")
         .build();
         

@@ -56,6 +56,9 @@ public record WorldSnapshot(
         int deaths,
         // Seconds of spawn protection left; 0 when unprotected.
         float spawnShieldRemaining,
+        float frozenSeconds,
+        // Increments whenever authoritative fire damage lands.
+        long fireDamageSequence,
         List<SlotState> slots
     ) {
         public PlayerState {

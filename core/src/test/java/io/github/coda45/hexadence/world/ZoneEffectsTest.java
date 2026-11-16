@@ -318,7 +318,7 @@ class ZoneEffectsTest {
         ArenaWorld playerWorld = world();
         Player player = playerWorld.getPlayer();
         float startX = player.getX();
-        addZone(
+        Zone playerSingularity = addZone(
             playerWorld,
             1,
             ZoneKinds.SINGULARITY,
@@ -326,21 +326,30 @@ class ZoneEffectsTest {
             player.getCollisionY()
         );
 
-        playerWorld.step(new PlayerCommand(
-            -1f, 0f, -1f, 0f, false, false, false
-        ));
+        playerWorld.step(PlayerCommand.IDLE);
+        float earlyPullDistance = player.getX() - startX;
 
-        assertTrue(
-            player.getX() > startX,
-            "The 1-2 tile gravity band must overpower movement away from the center"
-        );
+        // Age the same singularity while keeping the player at a comparable
+        // distance, so proximity does not hide the lifetime ramp.
+        for (int i = 0; i < 145; i++) {
+            player.setPosition(startX, player.getY());
+            playerWorld.step(PlayerCommand.IDLE);
+        }
+
+        player.setPosition(startX, player.getY());
+        playerWorld.step(PlayerCommand.IDLE);
+        float latePullDistance = player.getX() - startX;
+
+        assertTrue(earlyPullDistance > 0f);
+        assertTrue(latePullDistance > earlyPullDistance * 5f);
+        assertTrue(playerSingularity.getLifetimeProgress() > 0.8f);
     }
 
     @Test
     void singularityExplodesForThirtyDamageAtTheEndOfItsLifetime() {
         ArenaWorld world = new ArenaWorld(new ArenaDefinition(
             new ArenaCollision(new float[20][12]),
-            new SpawnPoint(2f, 2f),
+            new SpawnPoint(10f, 2f),
             List.of(
                 new SpawnPoint(4f, 2.24f),
                 new SpawnPoint(8f, 2.24f)
@@ -353,7 +362,11 @@ class ZoneEffectsTest {
         }
 
         assertTrue(world.getZones().isEmpty());
-        assertEquals(70f, world.getPlayer().getHealth(), EPSILON);
+        assertTrue(
+            ZoneKinds.SINGULARITY.expirationExplosionRadius()
+                < ZoneKinds.SINGULARITY.radius()
+        );
+        assertEquals(100f, world.getPlayer().getHealth(), EPSILON);
         assertEquals(70f, world.getDummies().get(0).getHealth(), EPSILON);
         assertEquals(100f, world.getDummies().get(1).getHealth(), EPSILON);
     }

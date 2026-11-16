@@ -144,7 +144,8 @@ public final class ZoneKinds {
         .radius(1.2f)               // PLACEHOLDER
         .duration(3f)               // PLACEHOLDER
         .gravity(5f, 5, 12f, 1.5f)
-        .expirationExplosion(3f, 30f)
+        .rampPlayerGravityFrom(0.1f)
+        .expirationExplosion(1f, 30f)
         .tint(0x4D1A66CC)
         .build();
 

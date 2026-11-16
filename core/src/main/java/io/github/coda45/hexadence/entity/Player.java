@@ -19,6 +19,7 @@ public class Player {
     private float knockbackVelocityX;
     private float knockbackVelocityY;
     private float frozenSeconds;
+    private long fireDamageSequence;
 
     private static final float MAX_HEALTH = 100f;
     // At or below this much health, health bars turn red.
@@ -101,6 +102,14 @@ public class Player {
 
     public float getFrozenSeconds() {
         return frozenSeconds;
+    }
+
+    public void recordFireDamage() {
+        fireDamageSequence++;
+    }
+
+    public long getFireDamageSequence() {
+        return fireDamageSequence;
     }
 
     public void addKnockbackVelocity(float velocityX, float velocityY) {
@@ -337,6 +346,7 @@ public class Player {
         deaths = 0;
         damageDealt = 0f;
         spawnShieldRemaining = 0f;
+        fireDamageSequence = 0L;
         aimX = 1f;
         aimY = 0f;
         setPosition(spawnX, spawnY);
@@ -355,6 +365,8 @@ public class Player {
         int kills,
         int deaths,
         float spawnShieldRemaining,
+        float frozenSeconds,
+        long fireDamageSequence,
         PlayerColor color
     ) {
         this.x = x;
@@ -367,6 +379,8 @@ public class Player {
         this.kills = kills;
         this.deaths = deaths;
         this.spawnShieldRemaining = Math.max(0f, spawnShieldRemaining);
+        this.frozenSeconds = Math.max(0f, frozenSeconds);
+        this.fireDamageSequence = fireDamageSequence;
         this.color = Objects.requireNonNull(color);
     }
 

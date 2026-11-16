@@ -18,6 +18,7 @@ import io.github.coda45.hexadence.input.CastRequest;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.net.WorldSnapshot;
 import io.github.coda45.hexadence.power.Behavior;
+import io.github.coda45.hexadence.power.Element;
 import io.github.coda45.hexadence.power.Loadout;
 import io.github.coda45.hexadence.power.Power;
 import io.github.coda45.hexadence.power.Powers;
@@ -47,8 +48,10 @@ public class ArenaWorld {
     private final List<TargetDummy> dummies = new ArrayList<>();
     private final List<Zone> zones = new ArrayList<>();
     // Damage-over-time started by a hit, independent of standing in a zone.
-    private final Map<Integer, DotEffect> playerDotEffects = new LinkedHashMap<>();
-    private final Map<TargetDummy, DotEffect> dummyDotEffects = new LinkedHashMap<>();
+    private final Map<PlayerDotKey, DotEffect> playerDotEffects =
+        new LinkedHashMap<>();
+    private final Map<DummyDotKey, DotEffect> dummyDotEffects =
+        new LinkedHashMap<>();
     private final Map<ChannelKey, ActiveChannel> activeChannels = new LinkedHashMap<>();
     private final Map<Integer, VortexOrbit> vortexOrbits = new LinkedHashMap<>();
     // A traveling Vortex and the stationary zone it creates share one source
@@ -531,7 +534,12 @@ public class ArenaWorld {
                 continue;
             }
 
-            float pullSpeed = zone.getKind().playerGravitySpeedStep() * level;
+            float startMultiplier =
+                zone.getKind().playerGravityStartMultiplier();
+            float pullRamp = startMultiplier
+                + (1f - startMultiplier) * zone.getLifetimeProgress();
+            float pullSpeed =
+                zone.getKind().playerGravitySpeedStep() * level * pullRamp;
             pullX += dx / distance * pullSpeed;
             pullY += dy / distance * pullSpeed;
         }
@@ -617,7 +625,7 @@ public class ArenaWorld {
     public void removePlayer(int id) {
         players.remove(id);
         assignedPlayerSpawns.remove(id);
-        playerDotEffects.remove(id);
+        removePlayerDotEffects(id);
         activeChannels.keySet().removeIf(key -> key.playerId() == id);
     }
 
@@ -1575,7 +1583,8 @@ public class ArenaWorld {
                     damagePlayer(
                         entry.getKey(),
                         zone.getKind().damagePerSecond() * STEP,
-                        zone.getDamageOwnerPlayerId()
+                        zone.getDamageOwnerPlayerId(),
+                        isFireZone(zone.getKind())
                     );
                 }
             }
@@ -1594,37 +1603,82 @@ public class ArenaWorld {
         }
     }
 
+    private void igniteOverlappingZone(
+        Player burningPlayer,
+        int fireballOwnerPlayerId
+    ) {
+        for (int i = zones.size() - 1; i >= 0; i--) {
+            Zone zone = zones.get(i);
+            Reactions.Reaction reaction = Reactions.find(
+                Powers.FIREBALL,
+                zone.getKind()
+            );
+
+            if (
+                reaction != null
+                    && zoneOverlapsPlayer(zone, burningPlayer)
+            ) {
+                applyReaction(
+                    zone,
+                    reaction,
+                    fireballOwnerPlayerId,
+                    burningPlayer.getAimX(),
+                    burningPlayer.getAimY()
+                );
+                return;
+            }
+        }
+    }
+
+    private static boolean isFireZone(ZoneKind kind) {
+        return kind == ZoneKinds.EMBER_CIRCLE
+            || kind == ZoneKinds.HOT_COALS
+            || kind == ZoneKinds.INFERNO
+            || kind == ZoneKinds.SOLAR_FLARE;
+    }
+
     // Ticks every active damage-over-time effect and removes it once expired.
     private void applyDotEffects() {
-        Iterator<Map.Entry<Integer, DotEffect>> playerIterator =
-            playerDotEffects.entrySet().iterator();
-
-        while (playerIterator.hasNext()) {
-            Map.Entry<Integer, DotEffect> entry = playerIterator.next();
+        for (
+            Map.Entry<PlayerDotKey, DotEffect> entry
+                : List.copyOf(playerDotEffects.entrySet())
+        ) {
+            PlayerDotKey key = entry.getKey();
             DotEffect effect = entry.getValue();
+            Player target = players.get(key.playerId());
+
+            if (target == null || !target.isAlive()) {
+                playerDotEffects.remove(key, effect);
+                continue;
+            }
+
+            if (key.power() == Powers.FIREBALL) {
+                igniteOverlappingZone(target, effect.attackerPlayerId());
+            }
 
             if (effect.update(STEP)) {
                 damagePlayer(
-                    entry.getKey(),
+                    key.playerId(),
                     effect.damagePerTick(),
-                    effect.attackerPlayerId()
+                    effect.attackerPlayerId(),
+                    key.power().element() == Element.FIRE
                 );
             }
 
             if (effect.hasExpired()) {
-                playerIterator.remove();
+                playerDotEffects.remove(key, effect);
             }
         }
 
-        Iterator<Map.Entry<TargetDummy, DotEffect>> dummyIterator =
+        Iterator<Map.Entry<DummyDotKey, DotEffect>> dummyIterator =
             dummyDotEffects.entrySet().iterator();
 
         while (dummyIterator.hasNext()) {
-            Map.Entry<TargetDummy, DotEffect> entry = dummyIterator.next();
+            Map.Entry<DummyDotKey, DotEffect> entry = dummyIterator.next();
             DotEffect effect = entry.getValue();
 
             if (effect.update(STEP)) {
-                entry.getKey().takeDamage(effect.damagePerTick());
+                entry.getKey().dummy().takeDamage(effect.damagePerTick());
             }
 
             if (effect.hasExpired()) {
@@ -1651,7 +1705,8 @@ public class ArenaWorld {
             return;
         }
 
-        DotEffect existing = playerDotEffects.get(targetPlayerId);
+        PlayerDotKey key = new PlayerDotKey(targetPlayerId, power);
+        DotEffect existing = playerDotEffects.get(key);
 
         if (existing != null) {
             existing.reapply(attackerPlayerId);
@@ -1659,7 +1714,7 @@ public class ArenaWorld {
         }
 
         playerDotEffects.put(
-            targetPlayerId,
+            key,
             new DotEffect(
                 power.dotDamagePerTick(),
                 power.dotTickSeconds(),
@@ -1679,7 +1734,8 @@ public class ArenaWorld {
             return;
         }
 
-        DotEffect existing = dummyDotEffects.get(dummy);
+        DummyDotKey key = new DummyDotKey(dummy, power);
+        DotEffect existing = dummyDotEffects.get(key);
 
         if (existing != null) {
             existing.reapply(attackerPlayerId);
@@ -1687,7 +1743,7 @@ public class ArenaWorld {
         }
 
         dummyDotEffects.put(
-            dummy,
+            key,
             new DotEffect(
                 power.dotDamagePerTick(),
                 power.dotTickSeconds(),
@@ -1855,7 +1911,7 @@ public class ArenaWorld {
 
             if (!player.hasRespawnPending()) {
                 player.beginRespawn(PLAYER_RESPAWN_DELAY);
-                playerDotEffects.remove(playerId);
+                removePlayerDotEffects(playerId);
             }
 
             SpawnPoint spawn = assignedPlayerSpawns.get(playerId);
@@ -1882,7 +1938,7 @@ public class ArenaWorld {
                 && !dummy.hasRespawnPending()
             ) {
                 dummy.beginRespawn(DUMMY_RESPAWN_DELAY);
-                dummyDotEffects.remove(dummy);
+                removeDummyDotEffects(dummy);
                 continue;
             }
 
@@ -1922,6 +1978,8 @@ public class ArenaWorld {
                 state.kills(),
                 state.deaths(),
                 state.spawnShieldRemaining(),
+                state.frozenSeconds(),
+                state.fireDamageSequence(),
                 state.color()
             );
 
@@ -2322,7 +2380,8 @@ public class ArenaWorld {
             damagePlayer(
                 targetPlayerId,
                 damage,
-                projectile.getOwnerPlayerId()
+                projectile.getOwnerPlayerId(),
+                projectile.getPower().element() == Element.FIRE
             );
 
             applyDotIfAny(
@@ -2507,6 +2566,15 @@ public class ArenaWorld {
         float amount,
         int attackerPlayerId
     ) {
+        damagePlayer(victimPlayerId, amount, attackerPlayerId, false);
+    }
+
+    private void damagePlayer(
+        int victimPlayerId,
+        float amount,
+        int attackerPlayerId,
+        boolean fireDamage
+    ) {
         Player victim = players.get(victimPlayerId);
 
         if (victim == null || !victim.isAlive()) {
@@ -2520,6 +2588,10 @@ public class ArenaWorld {
 
         float healthBefore = victim.getHealth();
         victim.takeDamage(amount);
+
+        if (fireDamage && victim.getHealth() < healthBefore) {
+            victim.recordFireDamage();
+        }
 
         Player attacker = attackerPlayerId == victimPlayerId
             ? null
@@ -2535,6 +2607,7 @@ public class ArenaWorld {
         }
 
         victim.beginRespawn(PLAYER_RESPAWN_DELAY);
+        removePlayerDotEffects(victimPlayerId);
 
         if (!statsFrozen) {
             victim.recordDeath();
@@ -2552,6 +2625,18 @@ public class ArenaWorld {
                 attacker != null ? attackerPlayerId : PlayerKilledEvent.NO_KILLER
             ));
         }
+    }
+
+    private void removePlayerDotEffects(int playerId) {
+        playerDotEffects.keySet().removeIf(
+            key -> key.playerId() == playerId
+        );
+    }
+
+    private void removeDummyDotEffects(TargetDummy dummy) {
+        dummyDotEffects.keySet().removeIf(
+            key -> key.dummy() == dummy
+        );
     }
 
     // Clears the arena for a rematch with the same players: every projectile,
@@ -2602,6 +2687,12 @@ public class ArenaWorld {
     }
 
     private record ChannelKey(int playerId, int slot) {
+    }
+
+    private record PlayerDotKey(int playerId, Power power) {
+    }
+
+    private record DummyDotKey(TargetDummy dummy, Power power) {
     }
 
     private record VortexPlayerContact(int sourceKey, int playerId) {

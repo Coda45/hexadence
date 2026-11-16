@@ -179,6 +179,7 @@ public class ArenaScreen implements Screen {
 
         renderer.render(
             world,
+            localPlayer(),
             worldCamera,
             presentationDelta,
             frameEvents

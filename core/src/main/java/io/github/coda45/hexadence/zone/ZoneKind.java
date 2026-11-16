@@ -36,6 +36,7 @@ public final class ZoneKind {
     private final int gravityLevels;
     private final float projectileGravityAccelerationStep;
     private final float playerGravitySpeedStep;
+    private final float playerGravityStartMultiplier;
     private final float expirationExplosionRadius;
     private final float expirationExplosionDamage;
     private final float driftSpeed;
@@ -64,6 +65,7 @@ public final class ZoneKind {
         this.gravityLevels = b.gravityLevels;
         this.projectileGravityAccelerationStep = b.projectileGravityAccelerationStep;
         this.playerGravitySpeedStep = b.playerGravitySpeedStep;
+        this.playerGravityStartMultiplier = b.playerGravityStartMultiplier;
         this.expirationExplosionRadius = b.expirationExplosionRadius;
         this.expirationExplosionDamage = b.expirationExplosionDamage;
         this.driftSpeed = b.driftSpeed;
@@ -113,6 +115,9 @@ public final class ZoneKind {
         return projectileGravityAccelerationStep;
     }
     public float playerGravitySpeedStep() { return playerGravitySpeedStep; }
+    public float playerGravityStartMultiplier() {
+        return playerGravityStartMultiplier;
+    }
     public float expirationExplosionRadius() { return expirationExplosionRadius; }
     public float expirationExplosionDamage() { return expirationExplosionDamage; }
     // Tiles per second a derived zone drifts, in the direction of the hit
@@ -166,6 +171,7 @@ public final class ZoneKind {
         private int gravityLevels;
         private float projectileGravityAccelerationStep;
         private float playerGravitySpeedStep;
+        private float playerGravityStartMultiplier = 1f;
         private float expirationExplosionRadius;
         private float expirationExplosionDamage;
         private float driftSpeed;
@@ -207,6 +213,10 @@ public final class ZoneKind {
             this.gravityLevels = levels;
             this.projectileGravityAccelerationStep = projectileAccelerationStep;
             this.playerGravitySpeedStep = playerSpeedStep;
+            return this;
+        }
+        public Builder rampPlayerGravityFrom(float startMultiplier) {
+            this.playerGravityStartMultiplier = startMultiplier;
             return this;
         }
         public Builder expirationExplosion(float radius, float damage) {
@@ -254,6 +264,15 @@ public final class ZoneKind {
             require(
                 gravityRadius == 0f || playerGravitySpeedStep > 0f,
                 "gravity needs player pull speed"
+            );
+            require(
+                playerGravityStartMultiplier > 0f
+                    && playerGravityStartMultiplier <= 1f,
+                "player gravity start multiplier must be above 0 and at most 1"
+            );
+            require(
+                gravityRadius > 0f || playerGravityStartMultiplier == 1f,
+                "only a gravity zone can ramp player pull"
             );
             require(
                 expirationExplosionRadius >= 0f,

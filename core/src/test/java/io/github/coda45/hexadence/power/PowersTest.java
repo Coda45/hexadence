@@ -61,6 +61,15 @@ class PowersTest {
     }
 
     @Test
+    void codyPowerTuningMatchesTheImplementedDesign() {
+        assertEquals(2f, Powers.FIREBALL.dotDamagePerTick(), 0.0001f);
+        assertEquals(0.5f, Powers.FIREBALL.dotTickSeconds(), 0.0001f);
+        assertEquals(2f, Powers.FIREBALL.dotDurationSeconds(), 0.0001f);
+        assertEquals(1, Powers.FIREBALL.dotMaxStacks());
+        assertEquals(12f, Powers.BEAM_OF_LIGHT_CRYSTAL_RANGE, 0.0001f);
+    }
+
+    @Test
     void defaultLoadoutUsesRegisteredPowers() {
         for (Power power : Loadout.DEFAULT.slots()) {
             assertTrue(Powers.ALL.contains(power), power + " is not in Powers.ALL");

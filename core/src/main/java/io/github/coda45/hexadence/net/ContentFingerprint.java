@@ -67,6 +67,8 @@ public final class ContentFingerprint {
                 .append(" projectileGravityStep=")
                     .append(z.projectileGravityAccelerationStep())
                 .append(" playerGravityStep=").append(z.playerGravitySpeedStep())
+                .append(" playerGravityStart=")
+                    .append(z.playerGravityStartMultiplier())
                 .append(" explosionRadius=").append(z.expirationExplosionRadius())
                 .append(" explosionDamage=").append(z.expirationExplosionDamage())
                 .append(" driftSpeed=").append(z.driftSpeed())
