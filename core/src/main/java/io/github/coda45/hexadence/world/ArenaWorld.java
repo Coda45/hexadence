@@ -1922,6 +1922,7 @@ public class ArenaWorld {
                 state.kills(),
                 state.deaths(),
                 state.spawnShieldRemaining(),
+                state.frozenSeconds(),
                 state.color()
             );
 

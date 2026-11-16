@@ -190,13 +190,14 @@ public class WorldRenderer {
 
     public void render(
         ArenaWorld world,
+        Player localPlayer,
         WorldCamera worldCamera,
         float presentationDelta,
         List<WorldEvent> frameEvents
     ) {
         updateDamageFlashes(world, presentationDelta);
         consumeEvents(frameEvents);
-        Player localPlayer = world.getPlayer();
+        
 
 
         boolean solarFlareBlinded =
