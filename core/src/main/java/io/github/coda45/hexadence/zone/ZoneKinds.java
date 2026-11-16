@@ -168,6 +168,18 @@ public final class ZoneKinds {
         .tint(0xFFFF66FF)
         .build();
 
+    // Light on Void: a brief expanding pulse that damages and repels each
+    // target once while erasing projectiles in the area it has reached.
+    public static final ZoneKind RADIANT_WAVE =
+        ZoneKind.derived(19, "Radiant Wave")
+        .radius(2.5f)
+        .innerRadius(2f)
+        .duration(1f)
+        .expandingPulse(0.8f, 10f, 12f, true)
+        .coversPlayers()
+        .tint(0xFFF7B8D9)
+        .build();
+
     // Stone on Void: the Null Zone gets crushed into a weaker gravity well
     // that also deals continuous damage.
     public static final ZoneKind COMPACTOR = ZoneKind.derived(16, "Compactor")
@@ -198,7 +210,8 @@ public final class ZoneKinds {
         DROUGHT,
         COMPACTOR,
         SOLAR_FLARE,
-        ICE_FIELD
+        ICE_FIELD,
+        RADIANT_WAVE
         );
 
     private static final Map<Integer, ZoneKind> BY_ID = indexById();

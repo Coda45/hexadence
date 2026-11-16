@@ -164,6 +164,7 @@ class GameCodecTest {
                     7f,
                     8f,
                     0.5f,
+                    2.5f,
                     17f,
                     4
                 )
@@ -217,7 +218,7 @@ class GameCodecTest {
         for (ZoneKind kind : ZoneKinds.ALL) {
             WorldSnapshot.ZoneState expected =
                 new WorldSnapshot.ZoneState(
-                    1, kind, 2f, 3f, kind.radius(), kind.maxHealth(), 4
+                    1, kind, 2f, 3f, kind.radius(), 1.5f, kind.maxHealth(), 4
                 );
 
             WorldSnapshot snapshot = new WorldSnapshot(

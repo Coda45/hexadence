@@ -95,7 +95,14 @@ public class NetClient {
     // Sends one tick of input. Safe to call from the render thread.
     public void send(PlayerCommand command) {
         if (isConnected()) {
-            channel.writeAndFlush(command);
+            // The server closes clients that send non-finite input. Keep a
+            // temporary local viewport/input failure from becoming a network
+            // disconnect; server-side validation remains authoritative.
+            channel.writeAndFlush(
+                PlayerCommandValidator.isValid(command)
+                    ? command
+                    : PlayerCommand.IDLE
+            );
         }
     }
 

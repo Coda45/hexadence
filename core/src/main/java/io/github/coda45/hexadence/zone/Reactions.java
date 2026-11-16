@@ -72,7 +72,7 @@ public final class Reactions {
         transform(FIRE, LIGHT, ZoneKinds.SOLAR_FLARE),
 
         transform(LIGHT, STONE, ZoneKinds.CRYSTAL_WALL),
-        // Light: second reaction not decided yet
+        transform(LIGHT, VOID,  ZoneKinds.RADIANT_WAVE),
         
         transform(VOID, WATER, ZoneKinds.ICE_FIELD),
         transform(VOID,  STORM, ZoneKinds.SINGULARITY)

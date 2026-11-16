@@ -103,6 +103,7 @@ public record WorldSnapshot(
         float x,
         float y,
         float radius,
+        float remainingSeconds,
         float health,
         int damageOwnerPlayerId
     ) {

@@ -820,9 +820,10 @@ public class WorldRenderer {
     }
 
     private void renderZone(Zone zone) {
-        float diameter = zone.getRadius() * 2f;
-        float left = zone.getX() - zone.getRadius();
-        float bottom = zone.getY() - zone.getRadius();
+        float displayRadius = zone.getCurrentRadius();
+        float diameter = displayRadius * 2f;
+        float left = zone.getX() - displayRadius;
+        float bottom = zone.getY() - displayRadius;
 
         // The zone kind's own color, from its definition in ZoneKinds.
         int tint = zone.getKind().tint();

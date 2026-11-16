@@ -98,6 +98,7 @@ public final class SnapshotFactory {
                 zone.getX(),
                 zone.getY(),
                 zone.getRadius(),
+                zone.getRemainingSeconds(),
                 zone.getHealth(),
                 zone.getDamageOwnerPlayerId()
             ));

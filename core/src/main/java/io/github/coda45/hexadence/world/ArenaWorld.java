@@ -60,6 +60,8 @@ public class ArenaWorld {
     private final Map<Integer, Integer> vortexZoneSourceKeys =
         new LinkedHashMap<>();
     private final Set<VortexPlayerContact> vortexPlayerContacts = new HashSet<>();
+    private final Set<PulsePlayerContact> pulsePlayerContacts = new HashSet<>();
+    private final Set<PulseDummyContact> pulseDummyContacts = new HashSet<>();
     // True once a match's clock has run out: fighting goes on, but kills,
     // deaths and damage no longer count toward the results.
     private boolean statsFrozen;
@@ -106,6 +108,7 @@ public class ArenaWorld {
                 applyExpirationExplosion(zone);
                 releaseVortexOrbitsFromSource(vortexSourceKey(zone));
                 vortexZoneSourceKeys.remove(zone.getId());
+                clearPulseContacts(zone.getId());
                 zoneIterator.remove();
             }
         }
@@ -119,6 +122,8 @@ public class ArenaWorld {
                 events
             );
         }
+
+        applyExpandingPulseEffects();
 
         // Move and remove projectiles through one iterator so list changes stay safe.
         Iterator<Projectile> projectileIterator =
@@ -626,6 +631,7 @@ public class ArenaWorld {
         players.remove(id);
         assignedPlayerSpawns.remove(id);
         removePlayerDotEffects(id);
+        pulsePlayerContacts.removeIf(contact -> contact.playerId() == id);
         activeChannels.keySet().removeIf(key -> key.playerId() == id);
     }
 
@@ -1266,6 +1272,155 @@ public class ArenaWorld {
         vortexPlayerContacts.retainAll(currentContacts);
     }
 
+    private void applyExpandingPulseEffects() {
+        List<Zone> pulses = new ArrayList<>();
+
+        for (Zone zone : zones) {
+            if (zone.getKind().isExpandingPulse()) {
+                pulses.add(zone);
+            }
+        }
+
+        if (pulses.isEmpty()) {
+            return;
+        }
+
+        Iterator<Projectile> projectileIterator = projectiles.iterator();
+
+        while (projectileIterator.hasNext()) {
+            Projectile projectile = projectileIterator.next();
+
+            if (!isClearedByPulse(projectile, pulses)) {
+                continue;
+            }
+
+            releaseVortexOrbitsFromSource(
+                projectileVortexSourceKey(projectile)
+            );
+            vortexOrbits.remove(projectile.getId());
+            projectileIterator.remove();
+        }
+
+        for (Zone pulse : pulses) {
+            applyPulseToPlayers(pulse);
+            applyPulseToDummies(pulse);
+        }
+    }
+
+    private boolean isClearedByPulse(
+        Projectile projectile,
+        List<Zone> pulses
+    ) {
+        for (Zone pulse : pulses) {
+            if (!pulse.getKind().clearsProjectiles()) {
+                continue;
+            }
+
+            float dx = projectile.getX() - pulse.getX();
+            float dy = projectile.getY() - pulse.getY();
+            float reach = pulse.getCurrentRadius()
+                + projectile.getPower().radius();
+
+            if (dx * dx + dy * dy <= reach * reach) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void applyPulseToPlayers(Zone pulse) {
+        ZoneKind kind = pulse.getKind();
+
+        for (Map.Entry<Integer, Player> entry : players.entrySet()) {
+            int playerId = entry.getKey();
+            Player player = entry.getValue();
+
+            if (
+                playerId == pulse.getDamageOwnerPlayerId()
+                    || !player.isAlive()
+                    || player.hasSpawnShield()
+                    || !circleOverlapsPlayer(
+                        pulse.getX(),
+                        pulse.getY(),
+                        pulse.getCurrentRadius(),
+                        player
+                    )
+            ) {
+                continue;
+            }
+
+            PulsePlayerContact contact = new PulsePlayerContact(
+                pulse.getId(),
+                playerId
+            );
+
+            if (!pulsePlayerContacts.add(contact)) {
+                continue;
+            }
+
+            damagePlayer(
+                playerId,
+                kind.contactDamage(),
+                pulse.getDamageOwnerPlayerId()
+            );
+
+            if (!player.isAlive() || kind.contactImpulse() <= 0f) {
+                continue;
+            }
+
+            float dx = player.getCollisionX() - pulse.getX();
+            float dy = player.getCollisionY() - pulse.getY();
+            float length = (float) Math.sqrt(dx * dx + dy * dy);
+            float directionX = length > 0.0001f
+                ? dx / length
+                : player.getAimX();
+            float directionY = length > 0.0001f
+                ? dy / length
+                : player.getAimY();
+            player.addKnockbackVelocity(
+                directionX * kind.contactImpulse(),
+                directionY * kind.contactImpulse()
+            );
+        }
+    }
+
+    private void applyPulseToDummies(Zone pulse) {
+        float damage = pulse.getKind().contactDamage();
+
+        if (damage <= 0f) {
+            return;
+        }
+
+        for (TargetDummy dummy : dummies) {
+            if (
+                !dummy.isAlive()
+                    || !circleOverlapsDummy(
+                        pulse.getX(),
+                        pulse.getY(),
+                        pulse.getCurrentRadius(),
+                        dummy
+                    )
+            ) {
+                continue;
+            }
+
+            PulseDummyContact contact = new PulseDummyContact(
+                pulse.getId(),
+                dummy.getId()
+            );
+
+            if (pulseDummyContacts.add(contact)) {
+                dummy.takeDamage(damage);
+            }
+        }
+    }
+
+    private void clearPulseContacts(int zoneId) {
+        pulsePlayerContacts.removeIf(contact -> contact.zoneId() == zoneId);
+        pulseDummyContacts.removeIf(contact -> contact.zoneId() == zoneId);
+    }
+
     private void applyVortexImpulse(
         VortexSource source,
         float impulseSpeed,
@@ -1320,6 +1475,7 @@ public class ArenaWorld {
     ) {
         releaseVortexOrbitsFromSource(vortexSourceKey(zone));
         vortexZoneSourceKeys.remove(zone.getId());
+        clearPulseContacts(zone.getId());
         zones.remove(zone);
 
         Zone transformed = Zone.create(
@@ -1757,8 +1913,12 @@ public class ArenaWorld {
     // The newest zone touching this player's feet, or null.
     private Zone topZoneOverlapping(Player player) {
         for (int i = zones.size() - 1; i >= 0; i--) {
-            if (zoneOverlapsPlayer(zones.get(i), player)) {
-                return zones.get(i);
+            Zone zone = zones.get(i);
+            if (
+                !zone.getKind().isExpandingPulse()
+                    && zoneOverlapsPlayer(zone, player)
+            ) {
+                return zone;
             }
         }
 
@@ -1767,8 +1927,12 @@ public class ArenaWorld {
 
     private Zone topZoneOverlapping(TargetDummy dummy) {
         for (int i = zones.size() - 1; i >= 0; i--) {
-            if (zoneOverlapsDummy(zones.get(i), dummy)) {
-                return zones.get(i);
+            Zone zone = zones.get(i);
+            if (
+                !zone.getKind().isExpandingPulse()
+                    && zoneOverlapsDummy(zone, dummy)
+            ) {
+                return zone;
             }
         }
 
@@ -2072,6 +2236,8 @@ public class ArenaWorld {
         zones.clear();
         vortexOrbits.clear();
         vortexZoneSourceKeys.clear();
+        pulsePlayerContacts.clear();
+        pulseDummyContacts.clear();
 
         for (WorldSnapshot.ZoneState state : snapshot.zones()) {
             Zone zone = previousZones.remove(state.id());
@@ -2084,13 +2250,12 @@ public class ArenaWorld {
                 state.damageOwnerPlayerId()
             );
             zone.restorePosition(state.x(), state.y());
+            zone.restoreRemainingSeconds(state.remainingSeconds());
             zone.restoreHealth(state.health());
             zones.add(zone);
         }
     }
 
-    // Clients never expire zones themselves; the server removes them from
-    // later snapshots. So the duration here only needs to be positive.
     private static Zone createZoneFromSnapshot(
         WorldSnapshot.ZoneState state
     ) {
@@ -2100,7 +2265,7 @@ public class ArenaWorld {
             state.x(),
             state.y(),
             state.radius(),
-            Float.MAX_VALUE,
+            state.remainingSeconds(),
             state.damageOwnerPlayerId()
         );
         zone.restoreHealth(state.health());
@@ -2660,6 +2825,8 @@ public class ArenaWorld {
         vortexOrbits.clear();
         vortexZoneSourceKeys.clear();
         vortexPlayerContacts.clear();
+        pulsePlayerContacts.clear();
+        pulseDummyContacts.clear();
         deathEvents.clear();
 
         for (Map.Entry<Integer, Player> entry : players.entrySet()) {
@@ -2696,6 +2863,12 @@ public class ArenaWorld {
     }
 
     private record VortexPlayerContact(int sourceKey, int playerId) {
+    }
+
+    private record PulsePlayerContact(int zoneId, int playerId) {
+    }
+
+    private record PulseDummyContact(int zoneId, int dummyId) {
     }
 
     private interface VortexSource {

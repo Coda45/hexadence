@@ -136,6 +136,15 @@ public class Zone {
         );
     }
 
+    public float getRemainingSeconds() {
+        return remainingSeconds;
+    }
+
+    public float getCurrentRadius() {
+        return kind.initialRadius()
+            + (radius - kind.initialRadius()) * getLifetimeProgress();
+    }
+
     public boolean isDestructible() {
         return kind.maxHealth() > 0f;
     }
@@ -163,6 +172,10 @@ public class Zone {
     public void restorePosition(float x, float y) {
         this.x = x;
         this.y = y;
+    }
+
+    public void restoreRemainingSeconds(float value) {
+        remainingSeconds = Math.max(0f, Math.min(kind.duration(), value));
     }
 
     public void restoreHealth(float value) {

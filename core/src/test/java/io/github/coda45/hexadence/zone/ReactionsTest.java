@@ -109,6 +109,16 @@ class ReactionsTest {
     }
 
     @Test
+    void lightTransformsNullZoneIntoRadiantWave() {
+        Reactions.Reaction wave = Reactions.find(
+            Powers.BEAM_OF_LIGHT,
+            ZoneKinds.NULL_ZONE
+        );
+        assertEquals(Reactions.Result.TRANSFORM, wave.result());
+        assertSame(ZoneKinds.RADIANT_WAVE, wave.into());
+    }
+
+    @Test
     void derivedZonesNeverReact() {
         for (ZoneKind kind : ZoneKinds.ALL) {
             if (kind.isDerived()) {

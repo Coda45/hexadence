@@ -22,6 +22,7 @@ public final class ZoneKind {
     private final Weapon weapon;
 
     private final float radius;
+    private final float initialRadius;
     private final float innerRadius;
     private final float duration;
 
@@ -40,6 +41,9 @@ public final class ZoneKind {
     private final float expirationExplosionRadius;
     private final float expirationExplosionDamage;
     private final float driftSpeed;
+    private final float contactDamage;
+    private final float contactImpulse;
+    private final boolean clearsProjectiles;
 
     private final boolean coversPlayers;
     private final int tint;
@@ -52,6 +56,9 @@ public final class ZoneKind {
         this.element = b.element;
         this.weapon = b.weapon;
         this.radius = b.radius;
+        this.initialRadius = Float.isNaN(b.initialRadius)
+            ? b.radius
+            : b.initialRadius;
         this.innerRadius = b.innerRadius;
         this.duration = b.duration;
         this.damagePerSecond = b.damagePerSecond;
@@ -69,6 +76,9 @@ public final class ZoneKind {
         this.expirationExplosionRadius = b.expirationExplosionRadius;
         this.expirationExplosionDamage = b.expirationExplosionDamage;
         this.driftSpeed = b.driftSpeed;
+        this.contactDamage = b.contactDamage;
+        this.contactImpulse = b.contactImpulse;
+        this.clearsProjectiles = b.clearsProjectiles;
         this.coversPlayers = b.coversPlayers;
         this.tint = b.tint;
         this.plannedEffect = b.plannedEffect;
@@ -92,6 +102,7 @@ public final class ZoneKind {
     public Weapon weapon() { return weapon; }
 
     public float radius() { return radius; }
+    public float initialRadius() { return initialRadius; }
     // Visual hollow center radius: 0 draws a solid disk; above 0 draws a
     // ring instead. Its effects (damage, slow) still cover the whole disk.
     public float innerRadius() { return innerRadius; }
@@ -123,6 +134,10 @@ public final class ZoneKind {
     // Tiles per second a derived zone drifts, in the direction of the hit
     // that created it, once it is placed. Zero means it stays put.
     public float driftSpeed() { return driftSpeed; }
+    public float contactDamage() { return contactDamage; }
+    public float contactImpulse() { return contactImpulse; }
+    public boolean clearsProjectiles() { return clearsProjectiles; }
+    public boolean isExpandingPulse() { return initialRadius < radius; }
 
     // Drawn over players instead of under them, like a cloud.
     public boolean coversPlayers() { return coversPlayers; }
@@ -158,6 +173,7 @@ public final class ZoneKind {
         private final Element element;
         private Weapon weapon = Weapon.STAFF;
         private float radius;
+        private float initialRadius = Float.NaN;
         private float innerRadius;
         private float duration;
         private float damagePerSecond;
@@ -175,6 +191,9 @@ public final class ZoneKind {
         private float expirationExplosionRadius;
         private float expirationExplosionDamage;
         private float driftSpeed;
+        private float contactDamage;
+        private float contactImpulse;
+        private boolean clearsProjectiles;
         private boolean coversPlayers;
         private int tint = 0xFFFFFF99;
         private String plannedEffect = "";
@@ -224,6 +243,18 @@ public final class ZoneKind {
             this.expirationExplosionDamage = damage;
             return this;
         }
+        public Builder expandingPulse(
+            float initialRadius,
+            float damage,
+            float impulse,
+            boolean clearsProjectiles
+        ) {
+            this.initialRadius = initialRadius;
+            this.contactDamage = damage;
+            this.contactImpulse = impulse;
+            this.clearsProjectiles = clearsProjectiles;
+            return this;
+        }
         public Builder drift(float tilesPerSecond) { this.driftSpeed = tilesPerSecond; return this; }
         public Builder coversPlayers() { this.coversPlayers = true; return this; }
         public Builder tint(int rgba) { this.tint = rgba; return this; }
@@ -236,6 +267,11 @@ public final class ZoneKind {
             require(!name.isBlank(), "name is required");
             require(weapon != null, "weapon is required");
             require(radius > 0f, "radius must be above 0");
+            require(
+                Float.isNaN(initialRadius)
+                    || (initialRadius > 0f && initialRadius < radius),
+                "expanding pulse radius must be above 0 and below its final radius"
+            );
             require(innerRadius >= 0f, "inner radius cannot be negative");
             require(innerRadius < radius, "inner radius must be less than radius");
             require(duration > 0f, "duration must be above 0");
@@ -288,6 +324,15 @@ public final class ZoneKind {
                 "expiration explosion needs both radius and damage"
             );
             require(driftSpeed >= 0f, "drift speed cannot be negative");
+            require(contactDamage >= 0f, "contact damage cannot be negative");
+            require(contactImpulse >= 0f, "contact impulse cannot be negative");
+            require(
+                !Float.isNaN(initialRadius)
+                    || (contactDamage == 0f
+                        && contactImpulse == 0f
+                        && !clearsProjectiles),
+                "contact pulse effects need an expanding pulse radius"
+            );
 
             if (origin == ZoneOrigin.BASE) {
                 require(element != null, "a base zone needs an element");

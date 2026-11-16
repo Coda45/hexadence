@@ -545,6 +545,38 @@ class ArenaWorldTest {
     }
 
     @Test
+    void beamOfLightTransformsNullZoneIntoRadiantWave() {
+        ArenaWorld world = createEmptyWorld(
+            new SpawnPoint(1f, 1f),
+            List.of(new SpawnPoint(5f, 1.75f))
+        );
+        world.getPlayer().setLoadout(new Loadout(List.of(
+            Powers.BEAM_OF_LIGHT,
+            Powers.WATER_PUDDLE,
+            Powers.LIGHTNING_BOLT
+        )));
+        world.getZones().add(Zone.create(
+            123,
+            ZoneKinds.NULL_ZONE,
+            3f,
+            1.75f,
+            Zone.NO_PLAYER
+        ));
+
+        world.step(fireRight());
+
+        assertTrue(world.getZones().stream().anyMatch(
+            zone -> zone.getKind() == ZoneKinds.RADIANT_WAVE
+        ));
+        assertEquals(
+            world.getDummies().get(0).getMaxHealth(),
+            world.getDummies().get(0).getHealth(),
+            EPSILON,
+            "The beam reaction should occur before the beam can hit the dummy"
+        );
+    }
+
+    @Test
     void infernoDriftsInTheLightningsDirectionAfterItIsCreated() {
         ArenaWorld world = createEmptyWorld(
             new SpawnPoint(1f, 1f),
@@ -615,6 +647,7 @@ class ArenaWorldTest {
                 4.5f,
                 2.25f,
                 inferno.getRadius(),
+                1.25f,
                 inferno.getHealth(),
                 Zone.NO_PLAYER
             ))
@@ -624,6 +657,7 @@ class ArenaWorldTest {
         assertEquals(inferno, restored);
         assertEquals(4.5f, restored.getX(), EPSILON);
         assertEquals(2.25f, restored.getY(), EPSILON);
+        assertEquals(1.25f, restored.getRemainingSeconds(), EPSILON);
     }
 
     @Test

@@ -49,8 +49,10 @@ public final class GameCodec {
     // 16: timed matches (timer in snapshots, MatchEnded with results),
     //     spawn shields in snapshots, and kill events for the kill feed.
     // 17: snapshots carry the match-ending progress (GAME OVER fade).
-    // 18: player snapshots identify authoritative fire-damage ticks.
-    public static final int PROTOCOL_VERSION = 18;
+    // 18: player snapshots carry freeze and fire-damage presentation state.
+    // 19: zone snapshots carry remaining lifetime for authoritative
+    //     expanding-pulse presentation.
+    public static final int PROTOCOL_VERSION = 19;
 
     private static final byte TYPE_COMMAND = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -334,6 +336,7 @@ public final class GameCodec {
             out.writeFloat(z.x());
             out.writeFloat(z.y());
             out.writeFloat(z.radius());
+            out.writeFloat(z.remainingSeconds());
             out.writeFloat(z.health());
             out.writeInt(z.damageOwnerPlayerId());
         }
@@ -398,6 +401,7 @@ public final class GameCodec {
             zones.add(new WorldSnapshot.ZoneState(
                 in.readInt(),
                 readZoneKind(in),
+                in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),
                 in.readFloat(),

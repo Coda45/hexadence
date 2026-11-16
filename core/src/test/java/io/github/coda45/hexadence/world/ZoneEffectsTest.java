@@ -510,6 +510,62 @@ class ZoneEffectsTest {
     }
 
     @Test
+    void radiantWaveExpandsDamagesRepelsAndClearsProjectilesOnce() {
+        ArenaWorld world = new ArenaWorld(new ArenaDefinition(
+            new ArenaCollision(new float[20][12]),
+            List.of(
+                new SpawnPoint(1f, 2f),
+                new SpawnPoint(5.5f, 2f)
+            ),
+            List.of(new SpawnPoint(5.5f, 2.24f))
+        ));
+        int targetId = world.addPlayer();
+        Player owner = world.getPlayer();
+        Player target = world.getPlayers().get(targetId);
+        TargetDummy dummy = world.getDummies().get(0);
+        Zone wave = Zone.create(
+            30,
+            ZoneKinds.RADIANT_WAVE,
+            4f,
+            2.24f,
+            0
+        );
+        world.getZones().add(wave);
+        Projectile nearbyProjectile = new Projectile(
+            300,
+            4.5f,
+            2.24f,
+            1f,
+            0f,
+            Powers.FIREBALL.range(),
+            Powers.FIREBALL,
+            targetId
+        );
+        world.getProjectiles().add(nearbyProjectile);
+
+        assertEquals(0.8f, wave.getCurrentRadius(), EPSILON);
+        world.step(PlayerCommand.IDLE);
+
+        assertFalse(world.getProjectiles().contains(nearbyProjectile));
+        assertEquals(target.getMaxHealth(), target.getHealth(), EPSILON);
+        assertEquals(dummy.getMaxHealth(), dummy.getHealth(), EPSILON);
+
+        stepIdle(world, 20);
+
+        assertTrue(wave.getCurrentRadius() > 1.2f);
+        assertEquals(target.getMaxHealth() - 10f, target.getHealth(), EPSILON);
+        assertEquals(dummy.getMaxHealth() - 10f, dummy.getHealth(), EPSILON);
+        assertTrue(target.getX() > 5.5f);
+        assertEquals(owner.getMaxHealth(), owner.getHealth(), EPSILON);
+        assertEquals(10f, owner.getDamageDealt(), EPSILON);
+
+        stepIdle(world, 20);
+
+        assertEquals(target.getMaxHealth() - 10f, target.getHealth(), EPSILON);
+        assertEquals(dummy.getMaxHealth() - 10f, dummy.getHealth(), EPSILON);
+    }
+
+    @Test
     void spawnShieldIgnoresSingularityPull() {
         ArenaWorld world = world();
         Player player = world.getPlayer();
