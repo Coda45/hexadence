@@ -355,7 +355,7 @@ public class Player {
         int kills,
         int deaths,
         float spawnShieldRemaining,
-        float frozenseconds,
+        float frozenSeconds,
         PlayerColor color
     ) {
         this.x = x;
