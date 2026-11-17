@@ -142,3 +142,15 @@ For example, `core:clean` removes `build` folder only from the `core` project.
   - Source: https://pixel-poem.itch.io/free-rpg-tileset
   - License: Custom license; free and commercial use and modification permitted. Redistribution/resale prohibited. Attribution optional.
   - Used for: Arena tiles
+
+- **FREE Pixel Combat SFX** - Helton Yan
+  - Source: https://heltonyan.itch.io/pixelcombat
+  - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+  - Used for: Spell casts, impacts, and persistent zone sound effects
+  - Modifications: Selected files were reorganized and converted to 48 kHz/16-bit PCM for libGDX compatibility.
+
+- **Basic Spell Impacts [Free/CC0]** - lentikula
+  - Source: https://lentikula.itch.io/freecc0-basic-spell-impacts-sfx
+  - License: [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/)
+  - Used for: Selected Fireball and Lightning sound effects
+  - Modifications: Selected files were converted to 16-bit PCM for libGDX compatibility.

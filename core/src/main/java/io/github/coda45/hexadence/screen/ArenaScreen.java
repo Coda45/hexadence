@@ -9,6 +9,7 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.utils.ScreenUtils;
 
 import io.github.coda45.hexadence.HexadenceGame;
+import io.github.coda45.hexadence.audio.SpellAudioSystem;
 import io.github.coda45.hexadence.entity.Player;
 import io.github.coda45.hexadence.input.PlayerCommand;
 import io.github.coda45.hexadence.input.PlayerInputController;
@@ -39,6 +40,7 @@ public class ArenaScreen implements Screen {
     private final WorldCamera worldCamera;
     private final WorldRenderer renderer;
     private final HudRenderer hudRenderer;
+    private final SpellAudioSystem spellAudioSystem;
     private final PauseMenu pauseMenu;
     private final SteamViewOverlay steamViewOverlay;
     private final boolean training;
@@ -86,6 +88,7 @@ public class ArenaScreen implements Screen {
 
         renderer = new WorldRenderer(arenaMap);
         hudRenderer = new HudRenderer();
+        spellAudioSystem = new SpellAudioSystem(game.audio());
         steamViewOverlay = new SteamViewOverlay();
         pauseMenu = new PauseMenu(
             training,
@@ -155,6 +158,8 @@ public class ArenaScreen implements Screen {
         if (session != null) {
             applyHostState(frameEvents);
         }
+
+        spellAudioSystem.update(world, frameEvents, presentationDelta);
 
         // Draw the latest completed step; positions are not interpolated between steps.
         Player player = localPlayer();
@@ -280,7 +285,9 @@ public class ArenaScreen implements Screen {
         }
 
         disposed = true;
+        game.audio().stopArenaMusic();
         pauseMenu.dispose();
+        spellAudioSystem.dispose();
         steamViewOverlay.dispose();
         hudRenderer.dispose();
         renderer.dispose();
@@ -290,6 +297,7 @@ public class ArenaScreen implements Screen {
     @Override
     public void show() {
         resetFrameState();
+        game.audio().playArenaMusic();
         Gdx.input.setInputProcessor(
             menuOpen ? pauseMenu.inputProcessor() : inputController
         );
@@ -298,6 +306,7 @@ public class ArenaScreen implements Screen {
     @Override
     public void hide() {
         resetFrameState();
+        game.audio().stopArenaMusic();
 
         if (session != null && !sessionHandedOff) {
             session.close();
